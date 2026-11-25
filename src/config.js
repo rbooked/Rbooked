@@ -25,7 +25,7 @@ module.exports = {
     webhookSecret: e.STRIPE_WEBHOOK_SECRET || '',
     priceId: e.STRIPE_PRICE_ID || '',
   },
-  plan: { priceCents: 2000, currency: 'usd', trialDays: 30, name: 'Rbooked for Restaurants' },
+  plan: { priceCents: 2995, currency: 'usd', trialDays: 14, name: 'Rbooked for Restaurants' },
   jobIntervalSeconds: Number(e.JOB_INTERVAL_SECONDS || 300),
   isProduction: e.NODE_ENV === 'production',
 };

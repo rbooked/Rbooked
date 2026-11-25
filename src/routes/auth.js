@@ -3,6 +3,7 @@ const express = require('express');
 const { one, run, tx } = require('../db');
 const auth = require('../auth');
 const { lookupZip } = require('../geo');
+const places = require('../../public/js/places');
 const email = require('../email');
 const config = require('../config');
 const { BookingError } = require('../reservations');
@@ -27,8 +28,12 @@ router.post('/signup', wrap(async (req, res) => {
   if (String(b.password).length < 8) throw new BookingError('Password must be at least 8 characters.');
   if (!/^\d{5}$/.test(String(b.zip).trim())) throw new BookingError('Enter a 5-digit ZIP code.');
   if (one('SELECT id FROM users WHERE email = ?', em)) throw new BookingError('An account with that email already exists. Please log in.');
-  let tz = String(b.timezone || 'America/New_York');
-  try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); } catch { tz = 'America/New_York'; }
+  const cuisine = places.cuisine(b.cuisine);
+  if (!cuisine) throw new BookingError('Pick your cuisine from the list.');
+  const st = String(b.state).trim().toUpperCase();
+  if (!places.STATE_CODES.has(st)) throw new BookingError('Pick your state from the list.');
+  b.state = st;
+  const tz = places.timezoneFor(String(b.zip).trim(), st); // automatic from the ZIP code
 
   const geo = await lookupZip(b.zip);
   const trialEnds = new Date(Date.now() + config.plan.trialDays * 86400000).toISOString();
@@ -36,7 +41,7 @@ router.post('/signup', wrap(async (req, res) => {
   const { restaurant, user } = tx(() => {
     const r = run(`INSERT INTO restaurants (slug, name, cuisine, phone, email, address, city, state, zip, lat, lng, timezone, description, trial_ends_at, subscription_status)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'trialing')`,
-    slugify(b.restaurant_name), String(b.restaurant_name).trim(), String(b.cuisine || ''), String(b.phone).trim(), em,
+    slugify(b.restaurant_name), String(b.restaurant_name).trim(), cuisine, String(b.phone).trim(), em,
     String(b.address).trim(), String(b.city).trim(), String(b.state).trim().toUpperCase().slice(0, 2), String(b.zip).trim(),
     geo ? geo.lat : null, geo ? geo.lng : null, tz, String(b.description || ''), trialEnds);
     const rid = r.lastInsertRowid;

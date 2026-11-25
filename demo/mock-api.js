@@ -54,7 +54,7 @@
     ['The Copper Kettle', 'Gastropub', 2, '97205', '725 SW 10th Ave', 'America/Los_Angeles', 'Pub classics, 24 taps, and a cozy fireplace.', '#a16207'],
     ['Smoke Signal BBQ', 'Barbecue', 2, '78701', '501 Congress Ave', 'America/Chicago', 'Central Texas brisket, ribs and sides.', '#7c2d12'],
     ['Pilsen Table', 'Latin American', 2, '60607', '1430 W Taylor St', 'America/Chicago', 'Neighborhood spot for arepas, ceviche and cocktails.', '#be185d'],
-    ['Sol y Sal', 'Spanish', 3, '33130', '1200 Brickell Ave', 'America/New_York', 'Tapas, paella for two, and a long sherry list.', '#b91c1c'],
+    ['Sol y Sal', 'Spanish & Tapas', 3, '33130', '1200 Brickell Ave', 'America/New_York', 'Tapas, paella for two, and a long sherry list.', '#b91c1c'],
     ['Silver Lake Noodle', 'Thai', 2, '90028', '6300 Sunset Blvd', 'America/Los_Angeles', 'Boat noodles, khao soi and late-night curries.', '#7e22ce'],
   ];
   const TAGS = { 'Ember & Rye': 'classy,romantic,cocktails,vegetarian', 'Little Saffron': 'vegan,vegetarian,halal,casual,family', 'Osteria Lume': 'romantic,classy,quiet,vegetarian',
@@ -168,7 +168,7 @@
     const left = new Date(r.trial_ends_at) - new Date();
     return {
       status: r.subscription_status === 'trialing' && left <= 0 ? 'expired' : r.subscription_status, bookable: isBookable(r), trialEndsAt: r.trial_ends_at,
-      trialDaysLeft: Math.max(0, Math.ceil(left / 86400000)), hasPaymentMethod: !!r.stripe_subscription_id, price: '$20/month', stripeEnabled: false, demoMode: true,
+      trialDaysLeft: Math.max(0, Math.ceil(left / 86400000)), hasPaymentMethod: !!r.stripe_subscription_id, price: '$29.95/month', stripeEnabled: false, demoMode: true,
     };
   }
   const memberIds = (c) => String(c.table_ids || '').split(',').map(Number).filter(Boolean);
@@ -366,6 +366,7 @@
     const term = String(q.q || '').trim().toLowerCase();
     if (term) list = list.filter(({ r }) => `${r.name} ${r.cuisine}`.toLowerCase().includes(term) || db.menu.some((m) => m.restaurant_id === r.id && m.available && `${m.name} ${m.section}`.toLowerCase().includes(term)));
     if (q.tag) list = list.filter(({ r }) => window.TBMatch.parseTags(dietTags(r)).includes(q.tag));
+    if (q.cuisine) list = list.filter(({ r }) => r.cuisine === q.cuisine);
     return {
       origin: origin ? { city: origin.city, state: origin.state } : null, party, time: want,
       results: list.map(({ r, miles: mi }) => {
@@ -385,7 +386,7 @@
     const party = partyOf(q); const want = wantTime(q);
     const prefs = window.TBMatch.parseTags(q.prefs); const price = Math.max(0, Math.min(4, Number(q.price) || 0));
     const { origin, list } = nearby(zip);
-    const ranked = window.TBMatch.rank(list.map(({ r, miles: mi }) => ({ restaurant: { ...r, tags: dietTags(r) }, miles: mi, slots: openTimes(r, dateFor(q.date, r), party) })), { prefs, price, time: want })
+    const ranked = window.TBMatch.rank(list.filter(({ r }) => !q.cuisine || r.cuisine === q.cuisine).map(({ r, miles: mi }) => ({ restaurant: { ...r, tags: dietTags(r) }, miles: mi, slots: openTimes(r, dateFor(q.date, r), party) })), { prefs, price, time: want })
       .slice(0, 5).map((m) => ({ ...m, restaurant: { ...pub(db.restaurants.find((x) => x.id === m.restaurant.id)), date: dateFor(q.date, m.restaurant) } }));
     return { origin: origin ? { city: origin.city, state: origin.state } : null, party, time: want, prefs, price, picks: ranked };
   });
@@ -439,17 +440,17 @@
     const r = {
       id: nextId(), slug: slugify(b.restaurant_name), name: String(b.restaurant_name).trim(), cuisine: b.cuisine || '', price_level: 2, description: '',
       phone: b.phone, email: em, address: b.address, city: b.city, state: String(b.state).toUpperCase().slice(0, 2), zip: b.zip,
-      lat: z ? z[0] : near ? near.lat : null, lng: z ? z[1] : near ? near.lng : null, timezone: b.timezone || 'America/New_York', image_url: '',
+      lat: z ? z[0] : near ? near.lat : null, lng: z ? z[1] : near ? near.lng : null, timezone: window.TBPlaces.timezoneFor(b.zip, b.state), image_url: '',
       max_party_size: 8, booking_window_days: 60, min_notice_minutes: 60, reminder_hours: 24, no_show_grace_minutes: 30, auto_no_show: 0, send_no_show_email: 1,
       cancellation_policy: 'Please cancel at least 2 hours before your reservation.', accent_color: '#c2410c',
-      trial_ends_at: new Date(Date.now() + 30 * 86400000).toISOString(), subscription_status: 'trialing', stripe_subscription_id: null, tags: '', featured: 0, turn_times: '2:90,4:120,6:180,99:210', website_url: '', logo_url: '', hours: '',
+      trial_ends_at: new Date(Date.now() + 14 * 86400000).toISOString(), subscription_status: 'trialing', stripe_subscription_id: null, tags: '', featured: 0, turn_times: '2:90,4:120,6:180,99:210', website_url: '', logo_url: '', hours: '',
     };
     db.restaurants.push(r);
     starterFloor(db, r, false, nextId);
     const u = { id: nextId(), restaurant_id: r.id, name: b.owner_name, email: em, password: b.password };
     db.users.push(u); db.session = u.id;
     db.emails.push({ id: nextId(), restaurant_id: r.id, to_addr: em, kind: 'welcome', status: 'outbox', created_at: nowSql(), subject: `Welcome to Rbooked, ${r.name}!`,
-      html: emailHtml(null, 'Your 30-day free trial has started', `<p>Hi ${esc(u.name)}, thanks for joining Rbooked.</p><p>Your free trial runs until <b>${new Date(r.trial_ends_at).toDateString()}</b>. After that it's just <b>$20/month</b>, cancel anytime.</p>`) });
+      html: emailHtml(null, 'Your 14-day free trial has started', `<p>Hi ${esc(u.name)}, thanks for joining Rbooked.</p><p>Your free trial runs until <b>${new Date(r.trial_ends_at).toDateString()}</b>. After that it's just <b>$29.95/month</b>, cancel anytime.</p>`) });
     return { ok: true, slug: r.slug };
   });
   on('POST', '/api/auth/login', (q, b) => {
@@ -468,6 +469,8 @@
   });
   on('PUT', '/api/admin/restaurant', (q, b) => {
     const { r } = me(); const f = pick(b, SETTINGS);
+    delete f.timezone;
+    if ((f.zip && f.zip !== r.zip) || (f.state && f.state !== r.state)) f.timezone = window.TBPlaces.timezoneFor(f.zip || r.zip, f.state || r.state);
     ['price_level', 'max_party_size', 'booking_window_days', 'min_notice_minutes', 'reminder_hours', 'no_show_grace_minutes'].forEach((k) => { if (f[k] !== undefined) f[k] = Math.max(0, Number(f[k]) || 0); });
     ['auto_no_show', 'send_no_show_email'].forEach((k) => { if (f[k] !== undefined) f[k] = f[k] ? 1 : 0; });
     if (f.website_url !== undefined) {

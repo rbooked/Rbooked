@@ -186,10 +186,10 @@ async function sendWelcome(restaurant, user) {
     to: user.email,
     kind: 'welcome',
     subject: `Welcome to Rbooked, ${restaurant.name}!`,
-    html: layout(null, 'Your 30-day free trial has started', `
+    html: layout(null, 'Your 14-day free trial has started', `
       <p>Hi ${esc(user.name)}, thanks for joining Rbooked.</p>
       <p>Your free trial runs until <b>${esc(new Date(restaurant.trial_ends_at).toDateString())}</b>.
-      After that it's just <b>$20/month</b>, cancel anytime.</p>
+      After that it's just <b>$29.95/month</b>, cancel anytime.</p>
       <p>Next steps: add your tables, set your services, and paste the booking widget on your website.</p>
       <p>${button(`${config.baseUrl}/admin/`, 'Open your dashboard')}</p>`),
   });
@@ -201,7 +201,7 @@ async function sendTrialEnding(restaurant, to, daysLeft) {
     subject: `Your Rbooked trial ends in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`,
     html: layout(null, 'Keep taking reservations', `
       <p>Your free trial for <b>${esc(restaurant.name)}</b> ends in ${daysLeft} day${daysLeft === 1 ? '' : 's'}.
-      Add a payment method to keep your restaurant bookable for $20/month.</p>
+      Add a payment method to keep your restaurant bookable for $29.95/month.</p>
       <p>${button(`${config.baseUrl}/admin/#billing`, 'Add payment method')}</p>`),
   });
 }

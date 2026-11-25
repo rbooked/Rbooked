@@ -38,7 +38,7 @@ function billingSummary(r) {
     trialEndsAt: r.trial_ends_at,
     trialDaysLeft: Math.max(0, Math.ceil(trialMsLeft / 86400000)),
     hasPaymentMethod: !!r.stripe_subscription_id,
-    price: '$20/month',
+    price: '$29.95/month',
     stripeEnabled: !!stripe(),
     demoMode: !stripe() && !off,
   };
@@ -62,7 +62,7 @@ async function createCheckout(r, user) {
       },
     };
   const subscription_data = { metadata: { restaurant_id: String(r.id) } };
-  // Keep whatever is left of the 30-day trial (Stripe requires trial_end >= 48h ahead).
+  // Keep whatever is left of the 14-day trial (Stripe requires trial_end >= 48h ahead).
   const trialEnd = Math.floor(new Date(r.trial_ends_at).getTime() / 1000);
   if (trialEnd > Date.now() / 1000 + 48 * 3600) subscription_data.trial_end = trialEnd;
 

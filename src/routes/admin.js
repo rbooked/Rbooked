@@ -8,6 +8,7 @@ const billing = require('../billing');
 const email = require('../email');
 const config = require('../config');
 const { lookupZip } = require('../geo');
+const places = require('../../public/js/places');
 const { nowInZone, zonedToUtc } = require('../time');
 const { wrap } = require('./public');
 
@@ -57,7 +58,20 @@ router.put('/restaurant', wrap(async (req, res) => {
   }
   if (f.hours !== undefined) { const h = f.hours ? parseHours(f.hours) : null; f.hours = h ? JSON.stringify(h) : ''; }
   if (f.turn_times !== undefined) f.turn_times = Array.isArray(f.turn_times) ? formatTurns(f.turn_times) : formatTurns(parseTurns(f.turn_times));
-  if (f.timezone) { try { new Intl.DateTimeFormat('en-US', { timeZone: f.timezone }); } catch { throw new BookingError('Unknown time zone.'); } }
+  if (f.cuisine !== undefined && f.cuisine !== req.restaurant.cuisine) {
+    f.cuisine = places.cuisine(f.cuisine);
+    if (!f.cuisine) throw new BookingError('Pick your cuisine from the list.');
+  }
+  if (f.state !== undefined) {
+    f.state = String(f.state).trim().toUpperCase();
+    if (!places.STATE_CODES.has(f.state)) throw new BookingError('Pick your state from the list.');
+  }
+  if (f.zip !== undefined && !/^\d{5}$/.test(String(f.zip).trim())) throw new BookingError('Enter a 5-digit ZIP code.');
+  // The time zone follows the ZIP code; it isn't picked by hand.
+  delete f.timezone;
+  if ((f.zip && f.zip !== req.restaurant.zip) || (f.state && f.state !== req.restaurant.state)) {
+    f.timezone = places.timezoneFor(f.zip || req.restaurant.zip, f.state || req.restaurant.state);
+  }
   if (f.zip && f.zip !== req.restaurant.zip) {
     const g = await lookupZip(f.zip);
     if (g) { f.lat = g.lat; f.lng = g.lng; }

@@ -5,17 +5,18 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/app.css">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%229%22 fill=%22%23c2410c%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2218%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Georgia%22%3ER%3C/text%3E%3C/svg%3E">
-<title>Rbooked for restaurants · 30 days free, then $20/month</title>
+<title>Rbooked for restaurants · 14 days free, then $29.95/month</title>
 </head>
 <body>
 <header class="site-header"><div class="container">
   <a class="logo" href="/"><span class="logo-mark">R</span>Rbooked</a>
-  <nav class="nav"><a href="/" class="hide-sm">Find a table</a><a href="/for-restaurants">For restaurants</a><a href="/login" id="nav-login">Restaurant login</a></nav>
+  <nav class="nav"><a href="/" class="hide-sm">Find a table</a><a href="/for-restaurants">For restaurants</a><a href="/login" id="nav-login"><span class="hide-xs">Restaurant login</span><span class="show-xs">Log in</span></a></nav>
 </div></header>
 <section class="hero" style="padding-bottom:64px">
   <div class="container">
-    <h1>Fill more tables. Pay $20 a month. That's it.</h1>
-    <p>Online reservations, a booking widget for your own website, floor plan and table management, and automatic guest emails. Try everything free for 30 days.</p>
+    <h1>Fill more tables. Pay $29.95 a month. That's it.</h1>
+    <p>Online reservations, a booking widget for your own website, floor plan and table management, and automatic guest emails. Try everything free for 14 days.</p>
+    <div class="perks"><span>✓ 14 days free</span><span>✓ Then $29.95/month</span><span>✓ Cancel anytime</span><span>✓ No credit card to sign up</span></div>
     <a class="btn lg" href="#signup" style="margin-top:18px;background:#fff;color:#7c2d12">Start your free trial</a>
   </div>
 </section>
@@ -37,25 +38,19 @@
     <div class="booking" style="padding:0;align-items:start">
       <div class="card">
         <h2 class="serif" style="font-size:26px">Create your restaurant account</h2>
-        <p class="muted">No card needed for the trial. We'll set up a starter floor plan and dinner service you can edit.</p>
+        <p class="muted">No credit card required to sign up. We'll set up a starter floor plan and dinner service you can edit.</p>
         <form id="signup-form" novalidate>
           <div class="field"><label for="s-rname">Restaurant name</label><input id="s-rname" name="restaurant_name" required></div>
           <div class="grid-2">
-            <div class="field"><label for="s-cuisine">Cuisine</label><input id="s-cuisine" name="cuisine" placeholder="e.g. Italian"></div>
+            <div class="field"><label for="s-cuisine">Cuisine</label><select id="s-cuisine" name="cuisine" required><option value="">Pick a cuisine…</option></select></div>
             <div class="field"><label for="s-phone">Restaurant phone</label><input id="s-phone" name="phone" type="tel" required></div>
           </div>
           <div class="field"><label for="s-addr">Street address</label><input id="s-addr" name="address" required></div>
           <div class="grid-3">
+            <div class="field"><label for="s-zip">ZIP</label><input id="s-zip" name="zip" inputmode="numeric" maxlength="5" autocomplete="postal-code" placeholder="e.g. 10011" required></div>
             <div class="field"><label for="s-city">City</label><input id="s-city" name="city" required></div>
-            <div class="field"><label for="s-state">State</label><input id="s-state" name="state" maxlength="2" placeholder="NY" required></div>
-            <div class="field"><label for="s-zip">ZIP</label><input id="s-zip" name="zip" inputmode="numeric" maxlength="5" required></div>
+            <div class="field"><label for="s-state">State</label><select id="s-state" name="state" required><option value="">State…</option></select></div>
           </div>
-          <div class="field"><label for="s-tz">Time zone</label>
-            <select id="s-tz" name="timezone">
-              <option value="America/New_York">Eastern</option><option value="America/Chicago">Central</option>
-              <option value="America/Denver">Mountain</option><option value="America/Phoenix">Arizona</option>
-              <option value="America/Los_Angeles">Pacific</option><option value="America/Anchorage">Alaska</option><option value="Pacific/Honolulu">Hawaii</option>
-            </select></div>
           <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
           <div class="field"><label for="s-name">Your name</label><input id="s-name" name="owner_name" autocomplete="name" required></div>
           <div class="grid-2">
@@ -63,14 +58,14 @@
             <div class="field"><label for="s-pw">Password (8+ characters)</label><input id="s-pw" name="password" type="password" autocomplete="new-password" minlength="8" required></div>
           </div>
           <div id="s-err"></div>
-          <button class="btn lg block" type="submit">Start 30-day free trial</button>
-          <p class="muted small" style="margin-top:10px">After your trial, $20/month. Cancel anytime.</p>
+          <button class="btn lg block" type="submit">Start 14-day free trial</button>
+          <p class="muted small" style="margin-top:10px">14 days free, then $29.95/month. Cancel anytime. No credit card required to sign up.</p>
         </form>
       </div>
       <div class="card price-card">
         <div class="muted">One simple plan</div>
-        <div class="price">$20<span style="font-size:20px" class="muted">/month</span></div>
-        <p><b>First 30 days free.</b></p>
+        <div class="price">$29.95<span style="font-size:20px" class="muted">/month</span></div>
+        <p><b>First 14 days free.</b><br><span class="muted small">No credit card required to sign up. Cancel anytime.</span></p>
         <ul style="text-align:left;line-height:2">
           <li>Unlimited reservations & covers</li><li>Listing in ZIP code search</li><li>Website booking widget</li>
           <li>Floor plan, tables & services</li><li>Email confirmations, reminders & no-show handling</li><li>Guest history</li>
@@ -81,13 +76,25 @@
 </main>
 <footer class="footer"><div class="container row"><span>© Rbooked</span><span class="spacer"></span><a href="/for-restaurants">List your restaurant</a><a href="/login">Restaurant login</a></div></footer>
 <script src="/js/common.js"></script>
+<script src="/js/places.js"></script>
 <script>
 (function () {
-  try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const sel = document.getElementById('s-tz');
-    if ([...sel.options].some((o) => o.value === tz)) sel.value = tz;
-  } catch { /* ignore */ }
+  document.getElementById('s-cuisine').insertAdjacentHTML('beforeend', TBPlaces.CUISINES.map((c) => `<option>${TB.esc(c)}</option>`).join(''));
+  const stSel = document.getElementById('s-state');
+  stSel.insertAdjacentHTML('beforeend', TBPlaces.STATES.map(([c, n]) => `<option value="${c}">${TB.esc(n)}</option>`).join(''));
+  // Typing the ZIP fills in the state (and the city, when we can look it up). The time zone is set from the ZIP.
+  const zipIn = document.getElementById('s-zip');
+  zipIn.addEventListener('input', async () => {
+    const z = zipIn.value.replace(/\D/g, '').slice(0, 5); zipIn.value = z;
+    if (z.length !== 5) return;
+    const st = TBPlaces.stateForZip(z); if (st) stSel.value = st;
+    try {
+      const r = await fetch(`https://api.zippopotam.us/us/${z}`); if (!r.ok) return;
+      const p = ((await r.json()).places || [])[0]; const city = document.getElementById('s-city');
+      if (p && !city.value) city.value = p['place name'];
+      if (p && p['state abbreviation']) stSel.value = p['state abbreviation'];
+    } catch { /* offline: keep what we have */ }
+  });
   document.getElementById('signup-form').onsubmit = async (e) => {
     e.preventDefault();
     const btn = e.target.querySelector('button[type=submit]');
@@ -97,7 +104,7 @@
       location.href = '/admin/#welcome';
     } catch (err) {
       document.getElementById('s-err').innerHTML = `<div class="alert error" style="margin-bottom:12px">${TB.esc(err.message)}</div>`;
-      btn.disabled = false; btn.textContent = 'Start 30-day free trial';
+      btn.disabled = false; btn.textContent = 'Start 14-day free trial';
     }
   };
 })();

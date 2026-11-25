@@ -8,15 +8,15 @@
 <title>Rbooked · Book a table near you</title>
 <meta name="description" content="Find restaurants near your ZIP code and book a table instantly, or let Rbooked pick one for you.">
 </head>
-<body>
+<body class="home">
 <header class="site-header"><div class="container">
   <a class="logo" href="/"><span class="logo-mark">R</span>Rbooked</a>
-  <nav class="nav"><a href="/" class="hide-sm">Find a table</a><a href="/for-restaurants">For restaurants</a><a href="/login" id="nav-login">Restaurant login</a></nav>
+  <nav class="nav"><a href="/" class="hide-sm">Find a table</a><a href="/for-restaurants">For restaurants</a><a href="/login" id="nav-login"><span class="hide-xs">Restaurant login</span><span class="show-xs">Log in</span></a></nav>
 </div></header>
 <section class="hero">
   <div class="container">
-    <h1>Find a table near you, tonight or any night.</h1>
-    <p>Search by ZIP code and book in seconds. Can't decide? Tell us your mood and we'll pick a place with a table open at your time.</p>
+    <h1>Find a table near you.</h1>
+    <p>Search by ZIP code and book in seconds, or let us pick for you.</p>
     <div class="mode-tabs" role="tablist" aria-label="How do you want to find a table?">
       <button type="button" role="tab" id="tab-search" aria-selected="true" data-mode="search">Search restaurants</button>
       <button type="button" role="tab" id="tab-pick" aria-selected="false" data-mode="pick">✨ Pick for me</button>
@@ -26,6 +26,7 @@
       <input id="date" name="date" type="date" aria-label="Date">
       <select id="time" name="time" aria-label="Time"></select>
       <select id="party" name="party" aria-label="Party size"></select>
+      <select id="cuisine" name="cuisine" aria-label="Cuisine"></select>
       <button class="btn lg" type="submit" id="go">Find a table</button>
       <div class="prefs hidden" id="prefs">
         <div class="pref-group"><span class="pref-label">Food</span><div class="chips" data-group="diet"></div></div>
@@ -43,23 +44,21 @@
   <div id="pick-result"></div>
   <div id="results"></div>
   <div id="empty" class="card hidden"></div>
-  <section class="section" id="featured-wrap">
-    <div class="row" style="align-items:baseline"><h2 class="serif" style="font-size:30px;margin:0">Featured restaurants</h2><span class="muted small" id="featured-where"></span></div>
+  <section class="section hidden" id="featured-wrap">
+    <div class="row" style="align-items:baseline"><h2 class="serif" style="font-size:26px;margin:0">Featured restaurants</h2><span class="muted small" id="featured-where"></span></div>
     <div class="featured" id="featured"><p class="muted">Loading…</p></div>
   </section>
-  <section class="section" id="how" style="padding-top:0">
-    <h2 class="serif" style="font-size:30px">How it works</h2>
-    <div class="features">
-      <div class="card feature"><h3>Search by ZIP</h3><p class="muted">See restaurants within 25 miles, sorted by distance, with real open times.</p></div>
-      <div class="card feature"><h3>Or let us pick</h3><p class="muted">Choose vegan, classy, romantic or more. We'll match you with a place that has a table at your time.</p></div>
-      <div class="card feature"><h3>Book in seconds</h3><p class="muted">Tap a time. Tables are held live, so what you see is what you get.</p></div>
-      <div class="card feature"><h3>Get it by email</h3><p class="muted">Instant confirmation, a calendar invite, and a reminder before you go. Cancel or change anytime.</p></div>
-    </div>
+  <section class="section steps" id="how">
+    <div class="step"><span class="step-n">1</span><div><h3>Search by ZIP</h3><p>Real open times at places near you.</p></div></div>
+    <div class="step"><span class="step-n">2</span><div><h3>Tap a time</h3><p>Your table is held live. No account needed.</p></div></div>
+    <div class="step"><span class="step-n">3</span><div><h3>Get it by email</h3><p>Confirmation, calendar invite and a reminder.</p></div></div>
   </section>
+  <section class="owner-cta"><div><b>Own a restaurant?</b> <span class="muted">Take reservations free for 14 days.</span></div><a class="btn secondary" href="/for-restaurants">List your restaurant</a></section>
 </main>
 <footer class="footer"><div class="container row"><span>© Rbooked</span><span class="spacer"></span><a href="/for-restaurants">List your restaurant</a><a href="/login">Restaurant login</a></div></footer>
 <script src="/js/common.js"></script>
 <script src="/js/matcher.js"></script>
+<script src="/js/places.js"></script>
 <script>
 (function () {
   const { api, esc } = TB;
@@ -70,6 +69,7 @@
   f.date.min = TB.today();
   f.time.innerHTML = TB.timeOptions(params.get('time') || '19:00');
   f.party.innerHTML = TB.partyOptions(params.get('party') || 2, 20);
+  f.cuisine.innerHTML = `<option value="">Any cuisine</option>${TBPlaces.CUISINES.filter((c) => c !== 'Other').map((c) => `<option${c === params.get('cuisine') ? ' selected' : ''}>${esc(c)}</option>`).join('')}`;
   f.zip.value = params.get('zip') || ls.get('tb_zip') || '';
 
   // ----- mode: search vs pick for me -----
@@ -109,14 +109,13 @@
     const zip = f.zip.value.trim();
     if (!/^\d{5}$/.test(zip)) { TB.toast('Please enter a 5-digit ZIP code.', true); return null; }
     ls.set('tb_zip', zip);
-    return { zip, date: f.date.value, time: f.time.value, party: f.party.value };
+    return { zip, date: f.date.value, time: f.time.value, party: f.party.value, ...(f.cuisine.value ? { cuisine: f.cuisine.value } : {}) };
   }
   function clear() { head.textContent = ''; list.innerHTML = ''; pickBox.innerHTML = ''; empty.classList.add('hidden'); }
-  function noneNear(zip) {
+  function noneNear(zip, cuisine) {
     empty.classList.remove('hidden');
-    empty.innerHTML = `<h3>No restaurants on Rbooked near ${esc(zip)} yet.</h3>
-      <p class="muted">Know a great spot? <a href="/for-restaurants">Restaurants can join free for 30 days.</a></p>
-      <p class="muted small">Sample restaurants are in ZIPs 10011, 94110, 97205, 60607 and 78701.</p>`;
+    empty.innerHTML = `<h3>No ${cuisine ? `${esc(cuisine)} ` : ''}restaurants on Rbooked near ${esc(zip)} yet.</h3>
+      <p class="muted">${cuisine ? 'Try "Any cuisine". ' : ''}Know a great spot? <a href="/for-restaurants">Restaurants can try Rbooked free for 14 days.</a></p>`;
   }
 
   async function search(push) {
@@ -128,7 +127,7 @@
       const data = await api('/api/public/search?' + q);
       const where = data.origin ? `${data.origin.city}, ${data.origin.state}` : v.zip;
       head.innerHTML = `<b>${data.results.length}</b> restaurant${data.results.length === 1 ? '' : 's'} near ${esc(where)} · ${TB.date(v.date)} · ${data.party} ${data.party === 1 ? 'person' : 'people'}`;
-      if (!data.results.length) noneNear(v.zip);
+      if (!data.results.length) noneNear(v.zip, v.cuisine);
       list.innerHTML = data.results.map((r) => card(r, data.party)).join('');
     } catch (err) { head.textContent = ''; empty.classList.remove('hidden'); empty.innerHTML = `<div class="alert error">${esc(err.message)}</div>`; }
   }
@@ -213,7 +212,8 @@
       let where = /^\d{5}$/.test(zip) ? `near ${zip}` : '';
       if (!rows.length && q.has('zip')) { q.delete('zip'); rows = await api('/api/public/featured?' + q); where = 'across Rbooked'; }
       document.getElementById('featured-where').textContent = where ? `· ${where}` : '';
-      document.getElementById('featured').innerHTML = rows.map((r) => mini(r, f.party.value, r.slots, 'Featured')).join('') || '<p class="muted">No featured restaurants yet.</p>';
+      document.getElementById('featured').innerHTML = rows.map((r) => mini(r, f.party.value, r.slots, 'Featured')).join('');
+      document.getElementById('featured-wrap').classList.toggle('hidden', !rows.length);
     } catch { document.getElementById('featured-wrap').classList.add('hidden'); }
   }
 

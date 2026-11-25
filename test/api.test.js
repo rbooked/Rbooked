@@ -35,15 +35,15 @@ async function call(method, url, body, useCookie = true) {
 const tomorrow = addDays(nowInZone('America/New_York').date, 1);
 let manageToken;
 
-test('restaurant signup starts a 30-day trial with starter setup', async () => {
+test('restaurant signup starts a 14-day trial with starter setup', async () => {
   const r = await call('POST', '/api/auth/signup', {
     restaurant_name: 'Test Bistro', owner_name: 'Owner', email: 'owner@test.local', password: 'password123',
-    phone: '555-123-4567', address: '1 Main St', city: 'New York', state: 'NY', zip: '10011', timezone: 'America/New_York',
+    phone: '555-123-4567', address: '1 Main St', city: 'New York', state: 'NY', zip: '10011', cuisine: 'Thai',
   });
   assert.strictEqual(r.status, 201, JSON.stringify(r.data));
   const me = await call('GET', '/api/admin/restaurant');
   assert.strictEqual(me.data.billing.status, 'trialing');
-  assert.ok(me.data.billing.trialDaysLeft >= 29);
+  assert.ok(me.data.billing.trialDaysLeft >= 13);
   const floor = await call('GET', '/api/admin/floor');
   assert.strictEqual(floor.data.tables.length, 6);
   // Give it coordinates so ZIP search works offline in tests.
@@ -270,4 +270,23 @@ test('restaurant profile: website, hours, photo upload and menu with dietary fil
   assert.strictEqual(s.data.results.length, 1, 'search finds restaurants by dish');
   const v = await call('GET', '/api/public/search?zip=10011&tag=vegan', null, false);
   assert.strictEqual(v.data.results.length, 1);
+});
+
+test('cuisine and state come from fixed lists; time zone follows the ZIP code', async () => {
+  const bad = await call('POST', '/api/auth/signup', {
+    restaurant_name: 'Odd Place', owner_name: 'O', email: 'odd@test.local', password: 'password123',
+    phone: '555-123-4567', address: '1 Main St', city: 'New York', state: 'NY', zip: '10011', cuisine: 'Space food',
+  }, false);
+  assert.strictEqual(bad.status, 400);
+  const c = await call('GET', '/api/public/search?zip=10011&cuisine=Thai', null, false);
+  assert.ok(c.data.results.every((r) => r.cuisine === 'Thai') && c.data.results.length >= 1);
+  const none = await call('GET', '/api/public/search?zip=10011&cuisine=Korean', null, false);
+  assert.strictEqual(none.data.results.length, 0);
+  assert.strictEqual((await call('PUT', '/api/admin/restaurant', { state: 'XX' })).status, 400);
+  const tzBefore = (await call('GET', '/api/admin/restaurant')).data.restaurant.timezone;
+  assert.strictEqual(tzBefore, 'America/New_York');
+  await call('PUT', '/api/admin/restaurant', { timezone: 'Asia/Tokyo' });
+  assert.strictEqual((await call('GET', '/api/admin/restaurant')).data.restaurant.timezone, 'America/New_York', 'time zone is not picked by hand');
+  await call('PUT', '/api/admin/restaurant', { zip: '79901', state: 'TX', city: 'El Paso' });
+  assert.strictEqual((await call('GET', '/api/admin/restaurant')).data.restaurant.timezone, 'America/Denver');
 });

@@ -13,6 +13,7 @@ const router = express.Router();
 const PUBLIC_FIELDS = ['slug', 'name', 'cuisine', 'price_level', 'description', 'phone', 'address', 'city', 'state', 'zip',
   'lat', 'lng', 'timezone', 'image_url', 'max_party_size', 'booking_window_days', 'cancellation_policy', 'accent_color', 'tags', 'featured', 'website_url', 'logo_url', 'hours'];
 const matcher = require('../../public/js/matcher');
+const places = require('../../public/js/places');
 // Diet tags also come from the menu: 3+ vegan dishes makes a restaurant show up for "vegan", and so on.
 const MENU_DIET = ['vegan', 'vegetarian', 'gluten_free', 'halal'];
 function menuStats(rid) {
@@ -80,6 +81,7 @@ router.get('/search', wrap(async (req, res) => {
   const radius = Math.min(100, Number(req.query.radius) || 25);
   const q = String(req.query.q || '').trim().toLowerCase();
   const tag = String(req.query.tag || '');
+  const cuisine = places.cuisine(req.query.cuisine);
   if (!/^\d{5}$/.test(zip)) throw new BookingError('Please enter a 5-digit ZIP code.');
   const { origin, list: near } = await nearby(zip, radius);
   let list = near;
@@ -87,6 +89,7 @@ router.get('/search', wrap(async (req, res) => {
   if (q) list = list.filter(({ r }) => `${r.name} ${r.cuisine}`.toLowerCase().includes(q)
     || all('SELECT name, section FROM menu_items WHERE restaurant_id = ? AND available = 1', r.id).some((m) => `${m.name} ${m.section}`.toLowerCase().includes(q)));
   if (tag) list = list.filter(({ r }) => matcher.parseTags(publicRestaurant(r).tags).includes(tag));
+  if (cuisine) list = list.filter(({ r }) => r.cuisine === cuisine);
   const results = list.slice(0, 40).map(({ r, miles }) => {
     const date = dateFor(req.query.date, r);
     const av = getAvailability(r, date, party);
@@ -118,8 +121,9 @@ router.get('/pick', wrap(async (req, res) => {
   const wantTime = /^\d{2}:\d{2}$/.test(req.query.time || '') ? req.query.time : '19:00';
   const prefs = matcher.parseTags(req.query.prefs);
   const price = Math.max(0, Math.min(4, Number(req.query.price) || 0));
+  const cuisine = places.cuisine(req.query.cuisine);
   const { origin, list } = await nearby(zip, Math.min(100, Number(req.query.radius) || 25));
-  const candidates = list.map(({ r, miles }) => ({ restaurant: { ...r, tags: publicRestaurant(r).tags }, miles, slots: openTimes(r, dateFor(req.query.date, r), party) }));
+  const candidates = list.filter(({ r }) => !cuisine || r.cuisine === cuisine).map(({ r, miles }) => ({ restaurant: { ...r, tags: publicRestaurant(r).tags }, miles, slots: openTimes(r, dateFor(req.query.date, r), party) }));
   const ranked = matcher.rank(candidates, { prefs, price, time: wantTime }).slice(0, 5).map((m) => ({
     ...m, restaurant: { ...publicRestaurant(one('SELECT * FROM restaurants WHERE id = ?', m.restaurant.id)), date: dateFor(req.query.date, m.restaurant) },
   }));

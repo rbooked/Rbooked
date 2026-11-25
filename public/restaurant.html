@@ -10,7 +10,7 @@
 <body>
 <header class="site-header"><div class="container">
   <a class="logo" href="/"><span class="logo-mark">R</span>Rbooked</a>
-  <nav class="nav"><a href="/" class="hide-sm">Find a table</a><a href="/for-restaurants">For restaurants</a><a href="/login" id="nav-login">Restaurant login</a></nav>
+  <nav class="nav"><a href="/" class="hide-sm">Find a table</a><a href="/for-restaurants">For restaurants</a><a href="/login" id="nav-login"><span class="hide-xs">Restaurant login</span><span class="show-xs">Log in</span></a></nav>
 </div></header>
 <main class="container">
   <section class="r-hero" id="banner">
@@ -25,6 +25,7 @@
     </div>
     <div><div class="card sticky-book" id="booking"></div></div>
   </div>
+  <a class="btn mobile-book" id="mobile-book" href="#booking" hidden>Reserve a table</a>
 </main>
 <footer class="footer"><div class="container row"><span>© Rbooked</span><span class="spacer"></span><a href="/for-restaurants">List your restaurant</a><a href="/login">Restaurant login</a></div></footer>
 <script src="/js/common.js"></script>
@@ -64,6 +65,14 @@
   document.getElementById('r-actions').innerHTML = `${web ? `<a class="btn light" href="${esc(web)}" target="_blank" rel="noopener nofollow">🌐 Website</a>` : ''}
     <a class="btn light" href="tel:${esc(r.phone)}">📞 Call</a>${state.menu.length ? '<a class="btn light" href="#menu" id="to-menu">🍽️ Menu</a>' : ''}`;
 
+  // Phones: a floating "Reserve a table" button until the booking card is on screen.
+  const mb = document.getElementById('mobile-book');
+  mb.hidden = false; document.body.classList.add('has-mobile-book');
+  mb.onclick = (e) => { e.preventDefault(); document.getElementById('booking').scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(([en]) => { mb.style.display = en.isIntersecting ? 'none' : ''; }, { threshold: 0.15 }).observe(document.getElementById('booking'));
+  }
+
   const map = `https://www.openstreetmap.org/search?query=${encodeURIComponent(`${r.address}, ${r.city}, ${r.state} ${r.zip}`)}`;
   const webLabel = web.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '');
   document.getElementById('about').innerHTML = `
@@ -71,7 +80,7 @@
     <p style="font-size:17px">${esc(r.description || '')}</p>
     <div class="about-grid">
       <div><b>Address</b><br>${esc(r.address)}<br>${esc(r.city)}, ${esc(r.state)} ${esc(r.zip)}<br><a href="${map}" target="_blank" rel="noopener">Map & directions</a>
-        <p style="margin:12px 0 0"><b>Phone</b><br><a href="tel:${esc(r.phone)}">${esc(r.phone)}</a></p>
+        <p style="margin:12px 0 0"><b>Phone</b><br><a href="tel:${esc(r.phone)}">${esc(String(r.phone || '').replace(/^\+?1?(\d{3})(\d{3})(\d{4})$/, '($1) $2-$3'))}</a></p>
         ${web ? `<p style="margin:12px 0 0"><b>Website</b><br><a href="${esc(web)}" target="_blank" rel="noopener nofollow">${esc(webLabel)}</a></p>` : ''}</div>
       ${hours ? `<div><b>Hours</b><table class="hours">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<tr class="${d === wd ? 'today' : ''}"><td>${DAYS[d]}</td><td>${hours[d].closed ? 'Closed' : `${TB.time(hours[d].open)} – ${TB.time(hours[d].close)}`}</td></tr>`).join('')}</table></div>` : ''}
     </div>

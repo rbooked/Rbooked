@@ -145,7 +145,8 @@
   };
   const CODE = { vg: 'vegan', v: 'vegetarian', gf: 'gluten_free', df: 'dairy_free', nf: 'nut_free', h: 'halal', s: 'spicy' };
   function menuFor(cuisine) {
-    const rows = M[cuisine] || M['New American'];
+    const alias = { 'Spanish & Tapas': 'Spanish', Vegan: 'Vegetarian', Sushi: 'Japanese', 'Ramen & Noodles': 'Japanese', American: 'New American', Burgers: 'Gastropub', 'Wine Bar': 'Spanish', Southern: 'Barbecue', 'Soul Food': 'Barbecue', Mediterranean: 'Spanish', Peruvian: 'Latin American', Cuban: 'Latin American', Brazilian: 'Latin American' };
+    const rows = M[cuisine] || M[alias[cuisine]] || M['New American'];
     return rows.map(([section, name, description, price, codes], i) => {
       const tags = new Set(codes.split(' ').filter(Boolean).map((c) => CODE[c]));
       if (tags.has('vegan')) { tags.add('vegetarian'); tags.add('dairy_free'); }
@@ -156,6 +157,11 @@
   const EMOJI = {
     'New American': '🔥', Indian: '🍛', Italian: '🍝', Japanese: '🍣', Steakhouse: '🥩', Mexican: '🌮', Vegetarian: '🥗',
     Seafood: '🦪', Gastropub: '🍺', Barbecue: '🍖', 'Latin American': '🫓', Spanish: '🥘', Thai: '🍜',
+    American: '🍔', Burgers: '🍔', 'Spanish & Tapas': '🥘', Chinese: '🥟', Korean: '🍲', Vietnamese: '🍜', 'Ramen & Noodles': '🍜',
+    Sushi: '🍣', Pizza: '🍕', French: '🥐', Greek: '🥙', Mediterranean: '🫒', 'Middle Eastern': '🧆', Lebanese: '🧆', Turkish: '🥙',
+    Vegan: '🌱', Cafe: '☕', 'Breakfast & Brunch': '🥞', 'Wine Bar': '🍷', Caribbean: '🍹', Cuban: '🥪', Peruvian: '🐟',
+    Brazilian: '🥩', Ethiopian: '🫓', Moroccan: '🍲', Halal: '🍢', 'Hawaiian & Poke': '🍱', 'Cajun & Creole': '🦐',
+    Southern: '🍗', 'Soul Food': '🍗', German: '🥨', Irish: '🍀',
   };
   const svgUrl = (svg) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   const xml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));

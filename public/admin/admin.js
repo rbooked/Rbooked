@@ -45,9 +45,9 @@
     const el = document.getElementById('banner');
     if (b.billingOff) { el.innerHTML = ''; return; }
     if (b.status === 'expired' || b.status === 'canceled') {
-      el.innerHTML = `<div class="alert error"><b>Your restaurant is hidden from search and the widget is paused.</b> ${b.status === 'expired' ? 'Your free trial has ended.' : 'Your subscription was cancelled.'} <a href="#billing">Subscribe for $20/month</a> to start taking reservations again.</div>`;
+      el.innerHTML = `<div class="alert error"><b>Your restaurant is hidden from search and the widget is paused.</b> ${b.status === 'expired' ? 'Your free trial has ended.' : 'Your subscription was cancelled.'} <a href="#billing">Subscribe for $29.95/month</a> to start taking reservations again.</div>`;
     } else if (b.status === 'trialing') {
-      el.innerHTML = `<div class="alert">Free trial: <b>${b.trialDaysLeft} day${b.trialDaysLeft === 1 ? '' : 's'} left</b>. <a href="#billing">Add a payment method</a> to keep bookings flowing after your trial ($20/month).</div>`;
+      el.innerHTML = `<div class="alert">Free trial: <b>${b.trialDaysLeft} day${b.trialDaysLeft === 1 ? '' : 's'} left</b>. <a href="#billing">Add a payment method</a> to keep bookings flowing after your trial ($29.95/month).</div>`;
     } else if (b.status === 'past_due') {
       el.innerHTML = '<div class="alert error">Your last payment failed. <a href="#billing">Update your card</a> to avoid interruption.</div>';
     } else el.innerHTML = '';
@@ -107,7 +107,7 @@
       ['Menu with prices and dietary tags', menu.length >= 3, '#menu-items'],
       ['Tables, seats and combinations', floor.tables.filter((t) => t.active).length >= 2, '#floor'],
       ['Services and reservation length', shifts.shifts.some((s) => s.active), '#services'],
-      ['Payment method ($20/month after the trial)', b.hasPaymentMethod || b.status === 'active', '#billing'],
+      ['Payment method ($29.95/month after the trial)', b.hasPaymentMethod || b.status === 'active', '#billing'],
     ].filter((s) => !(b.billingOff && s[2] === '#billing'));
     const done = steps.filter((s) => s[1]).length;
     const pill = document.getElementById('setup-pill');
@@ -122,7 +122,7 @@
     const hadHours = !!TBMatch.parseHours(r.hours);
     const pct = Math.round((done / steps.length) * 100);
     view.innerHTML = `
-      ${S.welcome ? `<div class="card welcome"><h2 class="serif">Welcome to Rbooked, ${esc(r.name)}! 🎉</h2><p style="margin:0">${S.me.billing.billingOff ? 'Your account is ready.' : 'Your 30-day free trial has started.'} First, build your restaurant profile: this is what guests see when they find you.</p></div>` : ''}
+      ${S.welcome ? `<div class="card welcome"><h2 class="serif">Welcome to Rbooked, ${esc(r.name)}! 🎉</h2><p style="margin:0">${S.me.billing.billingOff ? 'Your account is ready.' : 'Your 14-day free trial has started.'} First, build your restaurant profile: this is what guests see when they find you.</p></div>` : ''}
       <div class="card setup ${done === steps.length ? 'complete' : ''}">
         <div class="row"><h2 style="margin:0">${done === steps.length ? '✅ Your restaurant is ready for guests' : 'Get your restaurant ready'}</h2><span class="spacer"></span><b>${done} of ${steps.length}</b></div>
         <div class="progress"><i style="width:${pct}%"></i></div>
@@ -142,7 +142,7 @@
       <div class="two-col" style="margin-top:16px">
         <div class="card" id="p-about"><h2>About your restaurant</h2>
           <div class="field"><label for="p-name">Restaurant name</label><input id="p-name" name="name" value="${esc(r.name)}" required></div>
-          <div class="grid-2"><div class="field"><label for="p-cuisine">Cuisine</label><input id="p-cuisine" name="cuisine" value="${esc(r.cuisine)}" placeholder="e.g. Italian, Thai, Vegan"></div>
+          <div class="grid-2"><div class="field"><label for="p-cuisine">Cuisine</label><select id="p-cuisine" name="cuisine">${(TBPlaces.CUISINES.includes(r.cuisine) ? [] : [r.cuisine || '']).concat(TBPlaces.CUISINES).map((c) => `<option value="${esc(c)}"${c === (r.cuisine || '') ? ' selected' : ''}>${esc(c || 'Pick a cuisine…')}</option>`).join('')}</select></div>
           <div class="field"><label for="p-price">Price</label><select id="p-price" name="price_level">${[1, 2, 3, 4].map((n) => `<option value="${n}"${n === r.price_level ? ' selected' : ''}>${'$'.repeat(n)} ${['Inexpensive', 'Moderate', 'Pricey', 'Fine dining'][n - 1]}</option>`).join('')}</select></div></div>
           <div class="field"><label for="p-desc">Description</label><textarea id="p-desc" name="description" rows="4" placeholder="What makes your place special? Signature dishes, atmosphere, chef…">${esc(r.description)}</textarea></div>
           <div class="field"><label>What describes you? <span class="muted small">(used in search and “Pick for me”)</span></label>
@@ -155,8 +155,9 @@
             <div class="field"><label for="p-phone">Phone</label><input id="p-phone" name="phone" type="tel" value="${esc(r.phone)}"></div>
             <div class="field"><label for="p-addr">Street address</label><input id="p-addr" name="address" value="${esc(r.address)}"></div>
             <div class="grid-3"><div class="field"><label for="p-city">City</label><input id="p-city" name="city" value="${esc(r.city)}"></div>
-            <div class="field"><label for="p-state">State</label><input id="p-state" name="state" value="${esc(r.state)}" maxlength="2"></div>
+            <div class="field"><label for="p-state">State</label><select id="p-state" name="state">${TBPlaces.STATES.map(([c, n]) => `<option value="${c}"${c === r.state ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></div>
             <div class="field"><label for="p-zip">ZIP</label><input id="p-zip" name="zip" value="${esc(r.zip)}" maxlength="5" inputmode="numeric"></div></div>
+            <p class="small muted" style="margin:0">Time zone: <b>${esc(TBPlaces.tzLabel(r.timezone))}</b>, set automatically from your ZIP code.</p>
           </div>
           <div class="card" id="p-hours"><div class="row"><h2 style="margin:0">Opening hours</h2><span class="spacer"></span><button type="button" class="btn ghost sm" id="h-copy">Copy Monday to all</button></div>
             ${hadHours ? '' : '<p class="small muted">We filled these in from your services. Adjust and save.</p>'}
@@ -681,12 +682,26 @@
         } catch (e) { fail(e); }
       };
     }
+    // On small screens, shrink the room to fit the width so every table is visible without scrolling sideways.
+    const cv = document.getElementById('rf-canvas');
+    if (cv && tables.length) {
+      const wBox = Math.max(...tables.map((t) => t.x + tableSize(t)[0])) + 40;
+      const hBox = Math.max(...tables.map((t) => t.y + tableSize(t)[1])) + 40;
+      const avail = cv.parentElement.clientWidth - 2;
+      const k = Math.min(1, avail / Math.max(wBox, 300));
+      cv.style.width = `${Math.max(wBox, k < 1 ? 0 : 900)}px`;
+      cv.style.height = `${Math.max(hBox, k < 1 ? 0 : 400)}px`;
+      cv.style.zoom = k < 1 ? String(k) : '';
+    }
     body.querySelectorAll('#rf-canvas .ftable').forEach((el) => {
       el.onclick = () => {
         const id = Number(el.dataset.id);
         if (S.rfCombine) { S.rfSel = sel.includes(id) ? sel.filter((z) => z !== id) : [...sel, id]; }
         else S.rfTable = S.rfTable === id ? null : id;
         renderResFloor(body, rows, floor);
+        if (!S.rfCombine && S.rfTable && window.innerWidth < 1100) {
+          const pn = document.getElementById('rf-panel'); if (pn) pn.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
       };
     });
   }
@@ -1195,13 +1210,11 @@
   // ---------------- Settings ----------------
   async function viewSettings() {
     const r = (await api('/api/admin/restaurant')).restaurant;
-    const tzs = ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Phoenix', 'America/Los_Angeles', 'America/Anchorage', 'Pacific/Honolulu'];
-    if (!tzs.includes(r.timezone)) tzs.push(r.timezone);
     view.innerHTML = `<form id="s-form"><div class="two-col">
       <div class="card"><h2>Account & notifications</h2>
         <p class="small muted">Your name, photos, menu, hours and website are on the <a href="#profile">Restaurant profile</a> page.</p>
         <div class="field"><label>Notification email (new bookings / cancellations)</label><input name="email" type="email" value="${esc(r.email)}"></div>
-        <div class="field"><label>Time zone</label><select name="timezone">${tzs.map((z) => `<option${z === r.timezone ? ' selected' : ''}>${z}</option>`).join('')}</select></div>
+        <p class="small muted">Time zone: <b>${esc(TBPlaces.tzLabel(r.timezone))}</b>, set automatically from your ZIP code.</p>
         ${r.featured ? '<p class="small" style="margin-top:8px"><span class="feat-badge">Featured</span> Your restaurant is featured on the Rbooked home page.</p>' : ''}
       </div>
       <div>
@@ -1243,24 +1256,24 @@
       view.innerHTML = `<div class="card" style="max-width:640px"><h2>Your plan</h2>
         <p style="font-size:28px;margin:0" class="serif">Free</p>
         <p>Rbooked is free while we launch. There's nothing to pay and no card needed. Your restaurant stays visible in search and the booking widget stays on.</p>
-        <p class="muted small">Later the plan will be $20/month with a 30-day free trial. We'll email you well before anything changes.</p></div>`;
+        <p class="muted small">Later the plan will be $29.95/month with a 14-day free trial. We'll email you well before anything changes.</p></div>`;
       return;
     }
     const ok = location.hash.includes('checkout=success');
     view.innerHTML = `<div class="two-col"><div class="card">
       ${ok ? '<div class="alert ok" style="margin-bottom:14px">Thanks! Your payment method was saved. It can take a few seconds for the status to update.</div>' : ''}
       <h2>Your plan</h2>
-      <p style="font-size:28px;margin:0" class="serif">$20<span class="muted" style="font-size:16px">/month</span></p>
+      <p style="font-size:28px;margin:0" class="serif">$29.95<span class="muted" style="font-size:16px">/month</span></p>
       <p>Status: <b>${statusText}</b>${b.status === 'trialing' ? `<br><span class="muted small">Trial ends ${new Date(b.trialEndsAt).toLocaleDateString()}. You won't be charged before then.</span>` : ''}</p>
       <div class="row">
-        ${b.hasPaymentMethod ? '<button class="btn" id="portal">Manage billing & invoices</button>' : `<button class="btn" id="checkout">${b.status === 'trialing' ? 'Add payment method' : 'Subscribe for $20/month'}</button>`}
+        ${b.hasPaymentMethod ? '<button class="btn" id="portal">Manage billing & invoices</button>' : `<button class="btn" id="checkout">${b.status === 'trialing' ? 'Add payment method' : 'Subscribe for $29.95/month'}</button>`}
       </div>
       ${b.demoMode ? `<div class="alert" style="margin-top:18px"><b>Demo mode:</b> Stripe keys aren't configured, so no real payments happen. Use these buttons to try each state.
         <div class="row" style="margin-top:10px"><button class="btn secondary sm" data-sim="active">Simulate paid</button><button class="btn secondary sm" data-sim="expired">Simulate trial ended</button></div></div>` : ''}
     </div>
     <div class="card"><h2>How billing works</h2><ul style="line-height:1.9">
-      <li>Every restaurant gets <b>30 days free</b>, no card needed.</li>
-      <li>Add a card any time during the trial. Your first $20 charge happens when the trial ends.</li>
+      <li>Every restaurant gets <b>14 days free</b>. No credit card required to sign up.</li>
+      <li>Add a card any time during the trial. Your first $29.95 charge happens when the trial ends.</li>
       <li>If the trial ends without a card, you're hidden from search and the widget pauses. Your data is kept.</li>
       <li>Cancel any time from “Manage billing”.</li></ul></div></div>`;
     const go = async (path) => { try { const { url } = await api(path, { body: {} }); location.href = url; } catch (e) { fail(e); } };
