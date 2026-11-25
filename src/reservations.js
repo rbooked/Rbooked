@@ -1,4 +1,5 @@
 'use strict';
+const { turnFor } = require('../public/js/matcher');
 const crypto = require('crypto');
 const { one, all, run, tx } = require('./db');
 const { findSlot, isSeatingFree, anyFreeSeating } = require('./availability');
@@ -70,7 +71,7 @@ function createReservation(restaurant, data, opts = {}) {
     let duration = 90;
     if (opts.admin && (data.table_id || data.combo_id)) {
       // Staff picked a specific table or table combination.
-      duration = Number(data.duration_minutes) || 90;
+      duration = Number(data.duration_minutes) || turnFor(restaurant.turn_times, party, 90);
       let label;
       if (data.combo_id) {
         const c = one('SELECT * FROM table_combos WHERE id = ? AND restaurant_id = ?', data.combo_id, restaurant.id);
@@ -90,7 +91,7 @@ function createReservation(restaurant, data, opts = {}) {
       let slot = findSlot(restaurant, date, time, party, { admin: !!opts.admin });
       if (!slot && opts.admin) {
         // Staff bookings (walk-ins, off-grid times): take any free table or combination that fits.
-        const dur = Number(data.duration_minutes) || 90;
+        const dur = Number(data.duration_minutes) || turnFor(restaurant.turn_times, party, 90);
         const o = anyFreeSeating(restaurant.id, party, date, time, dur);
         if (o) slot = { tableId: o.tableId, comboId: o.comboId, shiftId: null, duration: dur };
       }

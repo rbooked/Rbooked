@@ -72,7 +72,24 @@ test('guest can book, gets confirmation email, and the table is held', async () 
   assert.strictEqual(r2.status, 409);
   const av = await call('GET', `/api/public/restaurants/test-bistro/availability?date=${tomorrow}&party=6`, null, false);
   assert.strictEqual(av.data.slots.find((s) => s.time === '19:30').available, false);
-  assert.strictEqual(av.data.slots.find((s) => s.time === '17:00').available, true);
+  // A party of 6 holds the table for 3 hours (reservation length by party size), so 17:00 overlaps too.
+  assert.strictEqual(one('SELECT duration_minutes FROM reservations WHERE manage_token = ?', manageToken).duration_minutes, 180);
+  assert.strictEqual(av.data.slots.find((s) => s.time === '17:00').available, false);
+  const av2 = await call('GET', `/api/public/restaurants/test-bistro/availability?date=${tomorrow}&party=2`, null, false);
+  assert.strictEqual(av2.data.slots.find((s) => s.time === '17:00').available, true);
+});
+
+test('reservation length follows party size and can be changed', async () => {
+  const saved = await call('PUT', '/api/admin/restaurant', { turn_times: [{ max: 2, minutes: 60 }, { max: 99, minutes: 150 }] });
+  assert.strictEqual(saved.status, 200);
+  const me = await call('GET', '/api/admin/restaurant');
+  assert.strictEqual(me.data.restaurant.turn_times, '2:60,99:150');
+  const day = addDays(tomorrow, 6);
+  const a2 = await call('GET', `/api/admin/availability?date=${day}&party=2`);
+  assert.strictEqual(a2.data.slots[0].duration, 60);
+  const a5 = await call('GET', `/api/admin/availability?date=${day}&party=5`);
+  assert.strictEqual(a5.data.slots[0].duration, 150);
+  await call('PUT', '/api/admin/restaurant', { turn_times: '2:90,4:120,6:180,99:210' });
 });
 
 test('restaurant tags power "Pick for me" and featured lists', async () => {
@@ -179,6 +196,7 @@ test('table combinations seat larger parties and block their member tables', asy
   assert.strictEqual(c.status, 201);
   assert.strictEqual(c.data.name, 'T4 + T5');
   assert.strictEqual(c.data.max_seats, byLabel.T4.max_seats + byLabel.T5.max_seats);
+  assert.strictEqual((await call('POST', '/api/admin/combos', { table_ids: [byLabel.T5.id, byLabel.T4.id] })).status, 409);
   const bad = await call('POST', '/api/admin/combos', { table_ids: [byLabel.T4.id] });
   assert.strictEqual(bad.status, 400);
   const day = addDays(tomorrow, 3);

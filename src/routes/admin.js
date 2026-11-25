@@ -30,8 +30,8 @@ const owned = (table, id, rid) => {
 // ---------- Restaurant profile & settings ----------
 const SETTINGS = ['name', 'cuisine', 'price_level', 'description', 'phone', 'email', 'address', 'city', 'state', 'zip', 'timezone',
   'image_url', 'max_party_size', 'booking_window_days', 'min_notice_minutes', 'reminder_hours', 'no_show_grace_minutes',
-  'auto_no_show', 'send_no_show_email', 'cancellation_policy', 'accent_color', 'tags'];
-const { parseTags } = require('../../public/js/matcher');
+  'auto_no_show', 'send_no_show_email', 'cancellation_policy', 'accent_color', 'tags', 'turn_times'];
+const { parseTags, parseTurns, formatTurns } = require('../../public/js/matcher');
 
 router.get('/restaurant', wrap(async (req, res) => {
   res.json({ restaurant: pick(req.restaurant, ['id', 'slug', 'featured', ...SETTINGS]), user: req.user, billing: billing.billingSummary(req.restaurant), baseUrl: config.baseUrl });
@@ -44,6 +44,7 @@ router.put('/restaurant', wrap(async (req, res) => {
   }
   for (const k of ['auto_no_show', 'send_no_show_email']) if (f[k] !== undefined) f[k] = f[k] ? 1 : 0;
   if (f.tags !== undefined) f.tags = parseTags(Array.isArray(f.tags) ? f.tags.join(',') : f.tags).join(',');
+  if (f.turn_times !== undefined) f.turn_times = Array.isArray(f.turn_times) ? formatTurns(f.turn_times) : formatTurns(parseTurns(f.turn_times));
   if (f.timezone) { try { new Intl.DateTimeFormat('en-US', { timeZone: f.timezone }); } catch { throw new BookingError('Unknown time zone.'); } }
   if (f.zip && f.zip !== req.restaurant.zip) {
     const g = await lookupZip(f.zip);
@@ -235,6 +236,9 @@ router.post('/combos', wrap(async (req, res) => {
   const rid = req.restaurant.id;
   const f = { online_bookable: 1, active: 1, ...cleanCombo(req.body, rid) };
   if (!f.table_ids) throw new BookingError('Pick at least two tables to combine.');
+  const key = (ids) => String(ids).split(',').map(Number).sort((a, b) => a - b).join(',');
+  const dupe = all('SELECT name, table_ids FROM table_combos WHERE restaurant_id = ?', rid).find((c) => key(c.table_ids) === key(f.table_ids));
+  if (dupe) throw new BookingError(`Those tables are already combined as ${dupe.name}.`, 409);
   const members = all(`SELECT label, min_seats, max_seats FROM tables WHERE id IN (${f.table_ids})`);
   f.name = String(f.name || members.map((t) => t.label).join(' + '));
   if (f.max_seats === undefined) f.max_seats = members.reduce((a, t) => a + t.max_seats, 0);

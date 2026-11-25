@@ -2,7 +2,7 @@
 (function () {
   const { api, esc } = TB;
   const view = document.getElementById('view');
-  const S = { me: null, date: null, mode: 'list', floorArea: null, selTable: null };
+  const S = { me: null, date: null, mode: (() => { try { return localStorage.getItem('rb_mode') || 'floor'; } catch { return 'floor'; } })(), floorArea: null, selTable: null };
   const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const STATUS_LABEL = { confirmed: 'Booked', seated: 'Seated', completed: 'Completed', cancelled: 'Cancelled', no_show: 'No-show' };
   const SOURCE_LABEL = { online: 'Rbooked', widget: 'Website', phone: 'Phone', walk_in: 'Walk-in', admin: 'Staff' };
@@ -133,7 +133,7 @@
         <input type="date" id="d-date" value="${S.date}">
         <button class="btn secondary sm" id="d-next" aria-label="Next day">›</button>
         <button class="btn secondary sm" id="d-today">Today</button>
-        <div class="seg" role="tablist"><button data-mode="list">List</button><button data-mode="timeline">Timeline</button></div>
+        <div class="seg" role="tablist"><button data-mode="list">List</button><button data-mode="floor">Floor plan</button><button data-mode="timeline">Timeline</button></div>
         <input type="search" id="d-q" placeholder="Search name, phone, code">
         <span class="live" id="live"><i></i>Live</span>
         <span class="spacer"></span>
@@ -151,7 +151,7 @@
     let qt; document.getElementById('d-q').oninput = () => { clearTimeout(qt); qt = setTimeout(load, 200); };
     document.querySelectorAll('.seg button').forEach((b) => {
       b.classList.toggle('on', b.dataset.mode === S.mode);
-      b.onclick = () => { S.mode = b.dataset.mode; document.querySelectorAll('.seg button').forEach((x) => x.classList.toggle('on', x === b)); load(); };
+      b.onclick = () => { S.mode = b.dataset.mode; try { localStorage.setItem('rb_mode', S.mode); } catch { /* */ } document.querySelectorAll('.seg button').forEach((x) => x.classList.toggle('on', x === b)); load(); };
     });
     document.getElementById('newres').onclick = () => reservationModal(null, load);
     document.getElementById('walkin').onclick = () => walkInModal(load);
@@ -190,6 +190,7 @@
     renderUpNext(data.reservations);
     const body = document.getElementById('res-body');
     if (S.mode === 'timeline') return renderTimeline(body, data.reservations, floor);
+    if (S.mode === 'floor') return renderResFloor(body, data.reservations, floor);
     renderList(body, data.reservations);
   }
 
@@ -349,6 +350,133 @@
     });
   }
 
+  // Floor view of the book: every table on the floor plan, colored by what's happening at the
+  // chosen time. Click a table to see who's there now, who's next, and the rest of its night.
+  function renderResFloor(body, rows, floor) {
+    const now = nowLocal();
+    const isToday = S.date === now.date;
+    if (!S.rfTime) S.rfTime = isToday ? hhmm(Math.floor(now.minutes / 15) * 15) : '19:00';
+    if (S.rfFollowNow && isToday) S.rfTime = hhmm(Math.floor(now.minutes / 5) * 5);
+    const areas = floor.areas.slice();
+    if (floor.tables.some((t) => !t.area_id)) areas.push({ id: 0, name: 'Unassigned' });
+    if (S.rfArea === undefined || !areas.some((a) => a.id === S.rfArea)) S.rfArea = areas.length ? areas[0].id : 0;
+    const combos = new Map((floor.combos || []).map((c) => [c.id, c]));
+    const live = rows.filter((x) => ['confirmed', 'seated', 'completed'].includes(x.status));
+    const seatsOf = (x) => (x.combo_id && combos.has(x.combo_id) ? comboTables(combos.get(x.combo_id)) : x.table_id ? [x.table_id] : []);
+    const at = (t) => live.filter((x) => seatsOf(x).includes(t.id)).sort((a, b) => a.time.localeCompare(b.time));
+    const t0 = toMin(S.rfTime);
+    const state = (t) => {
+      const list = at(t);
+      const cur = list.find((x) => x.status !== 'completed' && toMin(x.time) <= t0 && toMin(x.time) + x.duration_minutes > t0);
+      const next = list.find((x) => x.status === 'confirmed' && toMin(x.time) > t0 && x !== cur);
+      return { list, cur, next };
+    };
+    const until = (x) => TB.time(hhmm(toMin(x.time) + x.duration_minutes));
+    const inMin = (m) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`);
+    const len = (m) => (m % 60 ? `${Math.floor(m / 60) ? `${Math.floor(m / 60)} h ` : ''}${m % 60} min` : `${m / 60} h`);
+    const tables = floor.tables.filter((t) => t.active && (S.rfArea ? t.area_id === S.rfArea : !t.area_id));
+    const sel = S.rfSel || [];
+    const free = floor.tables.filter((t) => t.active && !state(t).cur).length;
+    const covers = live.filter((x) => x.status !== 'completed' && toMin(x.time) <= t0 && toMin(x.time) + x.duration_minutes > t0).reduce((a, x) => a + x.party_size, 0);
+    body.innerHTML = `<div class="rf-bar">
+        <div class="seg" id="rf-areas">${areas.map((a) => `<button data-a="${a.id}" class="${a.id === S.rfArea ? 'on' : ''}">${esc(a.name)}</button>`).join('')}</div>
+        <label class="rf-time"><span class="muted small">Showing</span><b id="rf-tlabel">${TB.time(S.rfTime)}</b>
+          <input type="range" id="rf-range" min="${10 * 60}" max="${23 * 60 + 45}" step="15" value="${t0}" aria-label="Time on the floor plan"></label>
+        ${isToday ? `<button class="btn secondary sm ${S.rfFollowNow ? 'on' : ''}" id="rf-now">● Now</button>` : ''}
+        <span class="muted small"><b>${free}</b> free tables · <b>${covers}</b> guests in house</span>
+        <span class="spacer"></span>
+        <button class="btn ${S.rfCombine ? '' : 'secondary'} sm" id="rf-combine">⛓ ${S.rfCombine ? 'Done combining' : 'Combine tables'}</button>
+      </div>
+      ${S.rfCombine ? `<div class="alert rf-combine-bar"><span>${sel.length ? `<b>${sel.map((id) => esc((floor.tables.find((t) => t.id === id) || {}).label)).join(' + ')}</b> · up to ${sel.reduce((a, id) => a + ((floor.tables.find((t) => t.id === id) || {}).max_seats || 0), 0)} seats` : 'Tap the tables you push together for big parties.'}</span>
+        <span class="spacer"></span><button class="btn sm" id="rf-make" ${sel.length < 2 ? 'disabled' : ''}>Create combination</button><button class="btn ghost sm" id="rf-clear">Clear</button></div>` : ''}
+      <div class="floor-wrap">
+        <div><div class="canvas-scroll"><div class="canvas rf" id="rf-canvas">${tables.map((t) => {
+          const [w, h] = tableSize(t); const st = state(t);
+          const cls = st.cur ? `busy-${st.cur.status}` : st.next && toMin(st.next.time) - t0 <= 30 ? 'soon' : '';
+          const line = st.cur ? `${esc(st.cur.guest_name.split(' ')[0])} · ${st.cur.party_size}<br>until ${until(st.cur)}` : st.next ? `Next ${TB.time(st.next.time)}<br>${esc(st.next.guest_name.split(' ')[0])} · ${st.next.party_size}` : 'Free';
+          const inCombo = st.cur && st.cur.combo_id ? '<span class="rf-link">⛓</span>' : '';
+          return `<div class="ftable ${t.shape} ${cls} ${S.rfTable === t.id ? 'sel' : ''} ${sel.includes(t.id) ? 'combo-hl' : ''}" data-id="${t.id}"
+            style="left:${t.x}px;top:${t.y}px;width:${w}px;height:${h}px;transform:rotate(${t.rotation}deg)">${inCombo}
+            <div>${esc(t.label)}<small class="rf-line">${line}</small></div>${chairs(t, w, h)}</div>`;
+        }).join('') || '<p class="muted" style="padding:20px">No tables in this room.</p>'}</div></div>
+        <div class="legend"><span><i></i>Free</span><span><i style="background:#fef3c7;border-color:#d97706"></i>Arriving within 30 min</span><span><i style="background:#dbeafe;border-color:#2563eb"></i>Booked</span><span><i style="background:#dcfce7;border-color:#16a34a"></i>Seated</span><span>⛓ Combined tables</span></div></div>
+        <div class="card" id="rf-panel"></div>
+      </div>`;
+
+    const panel = () => {
+      const p = document.getElementById('rf-panel');
+      const t = floor.tables.find((z) => z.id === S.rfTable);
+      if (!t) {
+        const nexts = floor.tables.filter((z) => z.active).map((z) => ({ z, n: state(z).next })).filter((o) => o.n).sort((a, b) => a.n.time.localeCompare(b.n.time)).slice(0, 6);
+        p.innerHTML = `<h2>Tap a table</h2><p class="muted small">See who's sitting there, who's next and when, and book or seat a walk-in right on that table.</p>
+          ${nexts.length ? `<h3 class="rf-h">Next to arrive</h3>${nexts.map((o) => `<button class="rf-next" data-t="${o.z.id}"><b>${TB.time(o.n.time)}</b> ${esc(o.n.guest_name)} · ${o.n.party_size}<span class="muted small">${esc(o.n.table_label || o.z.label)}</span></button>`).join('')}` : ''}
+          <h3 class="rf-h">Reservation length</h3><p class="small muted" style="margin:0">${turnSummary()} <a href="#services">Change</a></p>`;
+        p.querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => { S.rfTable = Number(b.dataset.t); renderResFloor(body, rows, floor); }; });
+        return;
+      }
+      const st = state(t);
+      const area = (floor.areas.find((a) => a.id === t.area_id) || { name: 'Unassigned' }).name;
+      const joins = (floor.combos || []).filter((c) => c.active && comboTables(c).includes(t.id));
+      const card = (x, kind) => `<div class="rf-res ${x.status}">
+        <div class="row" style="gap:6px"><span class="badge ${x.status}">${kind}</span><b>${TB.time(x.time)}–${until(x)}</b><span class="muted small">${len(x.duration_minutes)}</span></div>
+        <div class="rf-guest">${esc(x.guest_name)} · ${x.party_size} ${x.party_size === 1 ? 'guest' : 'guests'}</div>
+        ${x.combo_id ? `<div class="small">⛓ ${esc(x.table_label || '')}</div>` : ''}
+        ${guestTags(x)}${x.notes ? `<div class="small">📝 ${esc(x.notes)}</div>` : ''}${x.guest_notes ? `<div class="small muted">📇 ${esc(x.guest_notes)}</div>` : ''}
+        <div class="res-actions" style="margin-top:8px">
+          ${x.status === 'confirmed' ? `<button class="btn ok sm" data-a="seat" data-x="${x.id}">Seat</button>` : ''}
+          ${x.status === 'seated' ? `<button class="btn secondary sm" data-a="complete" data-x="${x.id}">Complete</button>` : ''}
+          <button class="btn secondary sm" data-a="edit" data-x="${x.id}">Edit</button></div></div>`;
+      const nextIn = st.next ? toMin(st.next.time) - t0 : null;
+      const later = st.list.filter((x) => x !== st.cur && x !== st.next && toMin(x.time) > t0);
+      p.innerHTML = `<div class="row"><h2 style="margin:0">Table ${esc(t.label)}</h2><span class="spacer"></span><button class="btn ghost sm" id="rf-x" aria-label="Close">✕</button></div>
+        <p class="muted small" style="margin:4px 0 12px">${t.min_seats}-${t.max_seats} seats · ${esc(area)}${t.online_bookable ? '' : ' · staff only'}</p>
+        <h3 class="rf-h">At ${TB.time(S.rfTime)}</h3>${st.cur ? card(st.cur, st.cur.status === 'seated' ? 'Seated' : 'Booked') : '<p class="rf-free">Free</p>'}
+        <h3 class="rf-h">Next reservation</h3>${st.next ? `<p class="rf-when">${TB.time(st.next.time)} <span class="muted">· in ${inMin(nextIn)}</span></p>${card(st.next, 'Next')}` : '<p class="muted small">Nothing else booked on this table today.</p>'}
+        ${later.length ? `<h3 class="rf-h">Later</h3>${later.map((x) => `<div class="rf-later"><b>${TB.time(x.time)}</b> ${esc(x.guest_name)} · ${x.party_size}</div>`).join('')}` : ''}
+        ${joins.length ? `<h3 class="rf-h">Combines with</h3>${joins.map((c) => `<div class="rf-later">⛓ <b>${esc(c.name)}</b> · ${c.min_seats}-${c.max_seats} seats</div>`).join('')}` : ''}
+        <div class="row" style="margin-top:14px"><button class="btn sm" id="rf-book">+ Book this table</button><button class="btn secondary sm" id="rf-walk">Seat walk-in here</button></div>`;
+      p.querySelector('#rf-x').onclick = () => { S.rfTable = null; renderResFloor(body, rows, floor); };
+      p.querySelectorAll('[data-a]').forEach((b) => { b.onclick = () => resAction(b.dataset.a, rows.find((x) => x.id === Number(b.dataset.x))); });
+      p.querySelector('#rf-book').onclick = () => reservationModal(null, load, { table_id: t.id, time: S.rfTime, party_size: Math.max(t.min_seats, Math.min(2, t.max_seats)) });
+      p.querySelector('#rf-walk').onclick = () => walkInModal(load, `t${t.id}`);
+    };
+    panel();
+
+    body.querySelectorAll('#rf-areas button').forEach((b) => { b.onclick = () => { S.rfArea = Number(b.dataset.a); S.rfTable = null; renderResFloor(body, rows, floor); }; });
+    const range = document.getElementById('rf-range');
+    range.oninput = () => { document.getElementById('rf-tlabel').textContent = TB.time(hhmm(Number(range.value))); };
+    range.onchange = () => { S.rfTime = hhmm(Number(range.value)); S.rfFollowNow = false; renderResFloor(body, rows, floor); };
+    const nowBtn = document.getElementById('rf-now');
+    if (nowBtn) nowBtn.onclick = () => { S.rfFollowNow = true; S.rfTime = null; renderResFloor(body, rows, floor); };
+    document.getElementById('rf-combine').onclick = () => { S.rfCombine = !S.rfCombine; S.rfSel = []; renderResFloor(body, rows, floor); };
+    if (S.rfCombine) {
+      document.getElementById('rf-clear').onclick = () => { S.rfSel = []; renderResFloor(body, rows, floor); };
+      document.getElementById('rf-make').onclick = async () => {
+        try {
+          const c = await api('/api/admin/combos', { body: { table_ids: S.rfSel } });
+          TB.toast(`Combined ${c.name}: parties of ${c.min_seats}-${c.max_seats} are seated here automatically`);
+          S.rfSel = []; S.rfCombine = false; load();
+        } catch (e) { fail(e); }
+      };
+    }
+    body.querySelectorAll('#rf-canvas .ftable').forEach((el) => {
+      el.onclick = () => {
+        const id = Number(el.dataset.id);
+        if (S.rfCombine) { S.rfSel = sel.includes(id) ? sel.filter((z) => z !== id) : [...sel, id]; }
+        else S.rfTable = S.rfTable === id ? null : id;
+        renderResFloor(body, rows, floor);
+      };
+    });
+  }
+
+  function turnSummary() {
+    const rows = TBMatch.parseTurns(S.me.restaurant.turn_times);
+    if (!rows.length) return 'Each service uses its own turn time.';
+    const h = (m) => (m % 60 ? `${(m / 60).toFixed(1).replace('.0', '')} h` : `${m / 60} h`);
+    let lo = 1;
+    return rows.map((r, i) => { const s = i === rows.length - 1 && r.max >= 20 ? `${lo}+ guests` : lo === r.max ? `${r.max} guest${r.max > 1 ? 's' : ''}` : `${lo}-${r.max} guests`; lo = r.max + 1; return `${s}: ${h(r.minutes)}`; }).join(' · ');
+  }
+
   async function guestBook() {
     if (!S.guests) { try { S.guests = (await api('/api/admin/guests')).guests; } catch { S.guests = []; } }
     return S.guests;
@@ -356,13 +484,14 @@
 
   function reservationModal(x, done, prefill) {
     const isNew = !x;
-    const v = x || { date: S.date, time: '19:00', party_size: 2, guest_name: '', guest_email: '', guest_phone: '', notes: '', internal_notes: '', occasion: '', duration_minutes: 90, ...(prefill || {}) };
+    const v = x || { date: S.date, time: '19:00', party_size: 2, guest_name: '', guest_email: '', guest_phone: '', notes: '', internal_notes: '', occasion: '', duration_minutes: 0, ...(prefill || {}) };
+    if (!v.duration_minutes) v.duration_minutes = TBMatch.turnFor(S.me.restaurant.turn_times, Number(v.party_size), 90);
     TB.modal(`<h2>${isNew ? 'New reservation' : `Edit reservation #${esc(v.code)}`}</h2>
       <form id="m-form">
         <div class="grid-3">
           <div class="field"><label for="m-date">Date</label><input id="m-date" type="date" name="date" value="${v.date}" required></div>
           <div class="field"><label for="m-party">Party</label><input id="m-party" type="number" name="party_size" min="1" max="50" value="${v.party_size}" required></div>
-          <div class="field"><label for="m-dur">Duration (min)</label><input id="m-dur" type="number" name="duration_minutes" min="15" step="15" value="${v.duration_minutes}"></div>
+          <div class="field"><label for="m-dur">Length (min) <span class="muted small" id="m-durhint"></span></label><input id="m-dur" type="number" name="duration_minutes" min="15" step="15" value="${v.duration_minutes}"></div>
         </div>
         <div class="field"><label>Time</label><div id="m-slots" class="slots"></div><input type="hidden" name="time" value="${v.time}"></div>
         <div class="field"><label for="m-seat">Table</label><select id="m-seat" name="seat">${seatOptions(seatVal(v), 'Auto-assign best table')}</select></div>
@@ -406,7 +535,16 @@
         box.querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => { f.time.value = b.dataset.t; box.querySelectorAll('.slot').forEach((z) => z.classList.toggle('selected', z === b)); }; });
         box.querySelector('input[type=time]').onchange = (e) => { if (e.target.value) { f.time.value = e.target.value; loadSlots(); } };
       };
-      f.date.onchange = loadSlots; f.party_size.onchange = loadSlots; loadSlots().catch(fail);
+      // Length follows party size (Services & hours › Reservation length) until staff type their own.
+      let durTouched = !isNew;
+      f.duration_minutes.oninput = () => { durTouched = true; };
+      const syncDur = () => {
+        const auto = TBMatch.turnFor(S.me.restaurant.turn_times, Number(f.party_size.value) || 1, 90);
+        if (!durTouched) f.duration_minutes.value = auto;
+        m.querySelector('#m-durhint').textContent = `auto ${auto}`;
+      };
+      syncDur();
+      f.date.onchange = loadSlots; f.party_size.onchange = () => { syncDur(); loadSlots(); }; f.party_size.oninput = syncDur; loadSlots().catch(fail);
       f.onsubmit = async (e) => {
         e.preventDefault();
         const d = TB.formData(f);
@@ -424,10 +562,10 @@
     });
   }
 
-  function walkInModal(done) {
+  function walkInModal(done, seat = '') {
     TB.modal(`<h2>Seat a walk-in</h2><form id="w-form">
       <div class="grid-2"><div class="field"><label for="w-party">Party size</label><input id="w-party" type="number" name="party_size" min="1" value="2"></div>
-      <div class="field"><label for="w-seat">Table</label><select id="w-seat" name="seat">${seatOptions('', 'Auto-assign')}</select></div></div>
+      <div class="field"><label for="w-seat">Table</label><select id="w-seat" name="seat">${seatOptions(seat, 'Auto-assign')}</select></div></div>
       <div class="grid-2"><div class="field"><label for="w-name">Name (optional)</label><input id="w-name" name="name"></div><div class="field"><label for="w-phone">Phone (optional)</label><input id="w-phone" name="phone" type="tel"></div></div>
       <div class="row"><button class="btn ok" type="submit">Seat now</button><button class="btn secondary" type="button" data-close>Close</button></div></form>`,
     (m, close) => {
@@ -558,7 +696,7 @@
     const box = document.getElementById('combos');
     const label = (id) => (floor.tables.find((t) => t.id === id) || { label: '?' }).label;
     box.innerHTML = `<div class="row"><h2 style="margin:0">Table combinations</h2><span class="spacer"></span><button class="btn secondary sm" id="add-combo">+ Combine tables</button></div>
-      <p class="muted small">Push tables together for bigger parties. Rbooked only joins tables when no single table fits, and blocks every table in the combination.</p>
+      <p class="muted small">Push tables together for bigger parties. When a party is bigger than any single table, Rbooked seats them on a combination automatically (online and in the book) and blocks every table in it. Tip: in Reservations › Floor plan you can tap tables to combine them.</p>
       ${(floor.combos || []).length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Combination</th><th>Tables</th><th>Seats</th><th>Online</th><th></th></tr></thead><tbody>
       ${floor.combos.map((c) => `<tr data-combo="${c.id}" class="${c.active ? '' : 'dim'}"><td><b>${esc(c.name)}</b></td><td>${comboTables(c).map(label).map(esc).join(' + ')}</td><td>${c.min_seats}-${c.max_seats}</td>
         <td>${c.online_bookable ? 'Yes' : 'Staff only'}</td><td style="text-align:right;white-space:nowrap"><button class="btn secondary sm" data-edit-combo="${c.id}">Edit</button> <button class="btn ghost sm" data-del-combo="${c.id}">Delete</button></td></tr>`).join('')}
@@ -648,10 +786,11 @@
     view.innerHTML = `<div class="two-col"><div>
         <div class="row" style="margin-bottom:12px"><h2 style="margin:0">Services</h2><span class="spacer"></span><button class="btn" id="add-shift">+ Add service</button></div>
         <div id="shift-list"></div></div>
-      <div class="card"><h2>Closed dates & holidays</h2><p class="muted small">No online bookings are taken on these dates.</p>
+      <div><div class="card" id="turns" style="margin-bottom:16px"></div><div class="card"><h2>Closed dates & holidays</h2><p class="muted small">No online bookings are taken on these dates.</p>
         <form id="c-form" class="row"><input type="date" name="date" required style="width:auto"><input name="reason" placeholder="Reason (optional)" style="flex:1;min-width:140px"><button class="btn secondary" type="submit">Add</button></form>
         <table class="data" style="margin-top:12px">${closures.map((c) => `<tr><td>${TB.date(c.date, { year: 'numeric' })}</td><td>${esc(c.reason)}</td><td style="text-align:right"><button class="btn ghost sm" data-del="${c.id}">Remove</button></td></tr>`).join('') || '<tr><td class="muted">No closed dates.</td></tr>'}</table>
-      </div></div>`;
+      </div></div></div>`;
+    turnsEditor();
     const list = document.getElementById('shift-list');
     const card = (s) => `<form class="card shift-card" data-id="${s.id || ''}">
       <div class="grid-2"><div class="field"><label>Service name</label><input name="name" value="${esc(s.name)}" required></div>
@@ -663,7 +802,7 @@
         <div class="field"><label>Slot every (min)</label><select name="slot_interval">${[10, 15, 20, 30, 60].map((n) => `<option${n === s.slot_interval ? ' selected' : ''}>${n}</option>`).join('')}</select></div>
       </div>
       <div class="grid-2">
-        <div class="field"><label>Table turn time (min)</label><input type="number" name="turn_minutes" min="15" step="15" value="${s.turn_minutes}"></div>
+        <div class="field"><label>Turn time (min) <span class="muted small">used if lengths by party size are off</span></label><input type="number" name="turn_minutes" min="15" step="15" value="${s.turn_minutes}"></div>
         <div class="field"><label>Max covers per slot (0 = no limit)</label><input type="number" name="max_covers_per_slot" min="0" value="${s.max_covers_per_slot}"></div>
       </div>
       <div class="row"><button class="btn" type="submit">${s.id ? 'Save' : 'Create service'}</button>${s.id ? '<button class="btn ghost" type="button" data-del-shift>Delete</button>' : ''}</div></form>`;
@@ -694,6 +833,49 @@
       await api('/api/admin/closures', { body: TB.formData(e.target) }).catch(fail); viewServices().catch(fail);
     };
     view.querySelectorAll('[data-del]').forEach((b) => { b.onclick = async () => { await api(`/api/admin/closures/${b.dataset.del}`, { method: 'DELETE' }).catch(fail); viewServices().catch(fail); }; });
+  }
+
+  // Reservation length by party size: "2 guests 1.5 h, 6 guests 3 h…"
+  function turnsEditor() {
+    const box = document.getElementById('turns');
+    let rows = TBMatch.parseTurns(S.me.restaurant.turn_times);
+    const on = rows.length > 0;
+    if (!on) rows = TBMatch.parseTurns(TBMatch.DEFAULT_TURNS);
+    const opts = (sel) => [45, 60, 75, 90, 105, 120, 135, 150, 165, 180, 210, 240, 270, 300].map((m) => `<option value="${m}"${m === sel ? ' selected' : ''}>${m % 60 ? `${Math.floor(m / 60) ? `${Math.floor(m / 60)} h ` : ''}${m % 60} min` : `${m / 60} h`}</option>`).join('');
+    const draw = () => {
+      let lo = 1;
+      box.innerHTML = `<h2>Reservation length</h2><p class="muted small">How long a party keeps its table, by size. Rbooked uses this to hold tables and work out open times, online and in the book.</p>
+        <label class="check"><input type="checkbox" id="tt-on" ${box.dataset.off === '1' ? '' : 'checked'}> Set length by party size</label>
+        <div id="tt-rows" style="margin-top:10px;${box.dataset.off === '1' ? 'opacity:.45;pointer-events:none' : ''}">${rows.map((r, i) => {
+          const last = i === rows.length - 1;
+          const from = lo; lo = r.max + 1;
+          return `<div class="tt-row"><span class="tt-from">${last ? `${from}+ guests` : `${from}${from === r.max ? '' : ` to`}`}</span>
+            ${last ? '' : `<input type="number" min="${from}" max="40" value="${r.max}" data-max="${i}" aria-label="Up to guests"><span class="muted small">guests</span>`}
+            <span class="tt-arrow">→</span><select data-min="${i}" aria-label="Length">${opts(r.minutes)}</select>
+            ${rows.length > 1 && !last ? `<button class="btn ghost sm" data-rm="${i}" aria-label="Remove">✕</button>` : ''}</div>`;
+        }).join('')}
+        <button class="btn ghost sm" id="tt-add" type="button">+ Add a party size</button></div>
+        <div class="row" style="margin-top:12px"><button class="btn" id="tt-save">Save lengths</button><span class="muted small" id="tt-sum"></span></div>`;
+      box.querySelector('#tt-sum').textContent = turnSummary();
+      box.querySelector('#tt-on').onchange = (e) => { box.dataset.off = e.target.checked ? '' : '1'; draw(); };
+      box.querySelectorAll('[data-max]').forEach((x) => { x.onchange = () => { rows[Number(x.dataset.max)].max = Math.max(1, Number(x.value) || 1); rows.sort((a, b) => a.max - b.max); draw(); }; });
+      box.querySelectorAll('[data-min]').forEach((x) => { x.onchange = () => { rows[Number(x.dataset.min)].minutes = Number(x.value); }; });
+      box.querySelectorAll('[data-rm]').forEach((x) => { x.onclick = () => { rows.splice(Number(x.dataset.rm), 1); draw(); }; });
+      box.querySelector('#tt-add').onclick = () => {
+        const prev = rows.length > 1 ? rows[rows.length - 2].max : 0;
+        rows.splice(rows.length - 1, 0, { max: prev + 2, minutes: rows[rows.length - 1].minutes }); draw();
+      };
+      box.querySelector('#tt-save').onclick = async () => {
+        const last = rows[rows.length - 1]; last.max = Math.max(last.max, 99);
+        const turn_times = box.dataset.off === '1' ? '' : rows.map((r) => `${r.max}:${r.minutes}`).join(',');
+        try {
+          await api('/api/admin/restaurant', { method: 'PUT', body: { turn_times } });
+          S.me = await api('/api/admin/restaurant'); TB.toast('Reservation lengths saved'); draw();
+        } catch (e) { fail(e); }
+      };
+    };
+    if (!on) box.dataset.off = '1';
+    draw();
   }
 
   // ---------------- Guests: address book ----------------

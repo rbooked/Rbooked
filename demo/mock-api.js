@@ -2,7 +2,7 @@
    It answers the same /api/... calls the real server does, keeps data in this
    browser's storage, and records every email in a demo inbox. */
 (function () {
-  const KEY = 'rbooked_demo_v3';
+  const KEY = 'rbooked_demo_v4';
   const mem = {};
   const store = {
     get() { try { return JSON.parse(localStorage.getItem(KEY)); } catch { return mem.db || null; } },
@@ -78,7 +78,7 @@
         timezone: tz, image_url: '', max_party_size: 8, booking_window_days: 60, min_notice_minutes: 60, reminder_hours: 24,
         no_show_grace_minutes: 30, auto_no_show: 0, send_no_show_email: 1, cancellation_policy: 'Please cancel at least 2 hours before your reservation.',
         accent_color: color, trial_ends_at: new Date(Date.now() + 30 * 86400000).toISOString(), subscription_status: idx === 0 ? 'trialing' : 'active',
-        stripe_subscription_id: null, tags: TAGS[name] || '', featured: FEATURED.has(name) ? 1 : 0,
+        stripe_subscription_id: null, tags: TAGS[name] || '', featured: FEATURED.has(name) ? 1 : 0, turn_times: '2:90,4:120,6:180,99:210',
       };
       db.restaurants.push(r);
       starterFloor(db, r, true, id);
@@ -95,7 +95,7 @@
           const fn = FIRST[(idx + d + i) % FIRST.length]; const ln = LAST[(idx * 3 + i) % LAST.length];
           db.reservations.push({
             id: id(), code: rand(6), manage_token: token(), restaurant_id: r.id, table_id: t.id, shift_id: null, date, time,
-            starts_at_utc: zonedToUtc(date, time, tz).toISOString(), duration_minutes: 90, party_size: Math.min(t.max_seats, 2 + ((i + d) % 3)),
+            starts_at_utc: zonedToUtc(date, time, tz).toISOString(), party_size: Math.min(t.max_seats, 2 + ((i + d) % 3)),
             guest_name: `${fn} ${ln}`, guest_email: `${fn}.${ln}@example.com`.toLowerCase(), guest_phone: `(555) 2${String(i).padStart(2, '0')}-${4000 + d * 10 + i}`,
             notes: i === 2 ? 'Window seat if possible' : '', internal_notes: '', occasion: i === 5 ? 'Birthday' : '', source: ['online', 'widget', 'phone'][i % 3],
             status: 'confirmed', created_at: nowSql(), updated_at: nowSql(),
@@ -105,7 +105,7 @@
     });
     // Address book: one contact per guest who booked, with a few staff notes.
     const NOTES = [['VIP,Regular', 'Prefers a booth. Likes the house red.'], ['Allergy', 'Severe nut allergy. Tell the kitchen.'], ['Regular', 'Celebrates anniversary every spring.'], ['', ''], ['VIP', 'Food writer. Comp a dessert.'], ['', '']];
-    db.reservations.forEach((x) => { x.combo_id = null; x.guest_id = upsertGuestIn(db, x.restaurant_id, x, id); });
+    db.reservations.forEach((x) => { x.duration_minutes = x.duration_minutes || window.TBMatch.turnFor('2:90,4:120,6:180,99:210', x.party_size, 90); x.combo_id = null; x.guest_id = upsertGuestIn(db, x.restaurant_id, x, id); });
     db.guests.forEach((g, i) => { [g.tags, g.notes] = NOTES[i % NOTES.length]; });
     return db;
   }
@@ -149,7 +149,7 @@
   }
 
   let db = store.get();
-  if (!db || !db.restaurants || !db.combos) { db = seed(); store.set(db); }
+  if (!db || !db.restaurants || !db.combos || !db.restaurants[0].turn_times) { db = seed(); store.set(db); }
   const save = () => store.set(db);
   const nextId = () => db.seq++;
 
@@ -198,13 +198,14 @@
     const combos = comboMap(r.id);
     const wd = String(weekday(date));
     db.shifts.filter((s) => s.restaurant_id === r.id && s.active && s.days.split(',').includes(wd)).sort((a, b) => a.start_time.localeCompare(b.start_time)).forEach((s) => {
+      const dur = window.TBMatch.turnFor(r.turn_times, party, s.turn_minutes);
       for (let t = toMin(s.start_time); t <= toMin(s.end_time); t += s.slot_interval) {
         const time = hhmm(t);
         let available = !(!opts.admin && date === now.date && t < now.minutes + r.min_notice_minutes);
         if (available && s.max_covers_per_slot > 0 && res.filter((x) => x.time === time).reduce((a, x) => a + x.party_size, 0) + party > s.max_covers_per_slot) available = false;
         let pick = null;
-        if (available) { pick = options.find((o) => tablesFree(o.tableIds, res, combos, t, s.turn_minutes)) || null; if (!pick) available = false; }
-        out.slots.push({ time, shiftId: s.id, shiftName: s.name, available, tableId: pick ? pick.tableId : null, comboId: pick ? pick.comboId : null, duration: s.turn_minutes });
+        if (available) { pick = options.find((o) => tablesFree(o.tableIds, res, combos, t, dur)) || null; if (!pick) available = false; }
+        out.slots.push({ time, shiftId: s.id, shiftName: s.name, available, tableId: pick ? pick.tableId : null, comboId: pick ? pick.comboId : null, duration: dur });
       }
     });
     return out;
@@ -263,7 +264,7 @@
     const source = opts.source || 'online';
     let slot;
     if (opts.admin && (d.table_id || d.combo_id)) {
-      const dur = Number(d.duration_minutes) || 90; let seat; let label;
+      const dur = Number(d.duration_minutes) || window.TBMatch.turnFor(r.turn_times, party, 90); let seat; let label;
       if (d.combo_id) {
         const c = db.combos.find((x) => x.id === Number(d.combo_id) && x.restaurant_id === r.id);
         if (!c) throw new E('Table combination not found.'); seat = { tableId: null, comboId: c.id }; label = c.name;
@@ -277,7 +278,7 @@
     } else {
       slot = findSlot(r, date, time, party, { admin: !!opts.admin });
       if (!slot && opts.admin) {
-        const dur = Number(d.duration_minutes) || 90;
+        const dur = Number(d.duration_minutes) || window.TBMatch.turnFor(r.turn_times, party, 90);
         const o = anyFreeSeating(r.id, party, date, time, dur);
         if (o) slot = { tableId: o.tableId, comboId: o.comboId, shiftId: null, duration: dur };
       }
@@ -430,7 +431,7 @@
       lat: z ? z[0] : near ? near.lat : null, lng: z ? z[1] : near ? near.lng : null, timezone: b.timezone || 'America/New_York', image_url: '',
       max_party_size: 8, booking_window_days: 60, min_notice_minutes: 60, reminder_hours: 24, no_show_grace_minutes: 30, auto_no_show: 0, send_no_show_email: 1,
       cancellation_policy: 'Please cancel at least 2 hours before your reservation.', accent_color: '#c2410c',
-      trial_ends_at: new Date(Date.now() + 30 * 86400000).toISOString(), subscription_status: 'trialing', stripe_subscription_id: null, tags: '', featured: 0,
+      trial_ends_at: new Date(Date.now() + 30 * 86400000).toISOString(), subscription_status: 'trialing', stripe_subscription_id: null, tags: '', featured: 0, turn_times: '2:90,4:120,6:180,99:210',
     };
     db.restaurants.push(r);
     starterFloor(db, r, false, nextId);
@@ -448,7 +449,7 @@
   on('POST', '/api/auth/logout', () => { db.session = null; return { ok: true }; });
   on('GET', '/api/auth/me', () => { const u = db.users.find((x) => x.id === db.session); return { user: u ? { name: u.name, email: u.email } : null, demo: true }; });
 
-  const SETTINGS = ['name', 'cuisine', 'price_level', 'description', 'phone', 'email', 'address', 'city', 'state', 'zip', 'timezone', 'image_url', 'max_party_size', 'booking_window_days', 'min_notice_minutes', 'reminder_hours', 'no_show_grace_minutes', 'auto_no_show', 'send_no_show_email', 'cancellation_policy', 'accent_color', 'tags'];
+  const SETTINGS = ['name', 'cuisine', 'price_level', 'description', 'phone', 'email', 'address', 'city', 'state', 'zip', 'timezone', 'image_url', 'max_party_size', 'booking_window_days', 'min_notice_minutes', 'reminder_hours', 'no_show_grace_minutes', 'auto_no_show', 'send_no_show_email', 'cancellation_policy', 'accent_color', 'tags', 'turn_times'];
   on('GET', '/api/admin/restaurant', () => {
     const { u, r } = me();
     const base = location.href.replace(/[^/]*$/, '').replace(/\/$/, '');
@@ -458,6 +459,7 @@
     const { r } = me(); const f = pick(b, SETTINGS);
     ['price_level', 'max_party_size', 'booking_window_days', 'min_notice_minutes', 'reminder_hours', 'no_show_grace_minutes'].forEach((k) => { if (f[k] !== undefined) f[k] = Math.max(0, Number(f[k]) || 0); });
     ['auto_no_show', 'send_no_show_email'].forEach((k) => { if (f[k] !== undefined) f[k] = f[k] ? 1 : 0; });
+    if (f.turn_times !== undefined) f.turn_times = Array.isArray(f.turn_times) ? window.TBMatch.formatTurns(f.turn_times) : window.TBMatch.formatTurns(window.TBMatch.parseTurns(f.turn_times));
     if (f.tags !== undefined) f.tags = window.TBMatch.parseTags(Array.isArray(f.tags) ? f.tags.join(',') : f.tags).join(',');
     Object.assign(r, f); return { ok: true };
   });
@@ -550,6 +552,9 @@
   on('POST', '/api/admin/combos', (q, b) => {
     const { r } = me(); const f = { online_bookable: 1, active: 1, ...cleanCombo(b, r.id) };
     if (!f.table_ids) throw new E('Pick at least two tables to combine.');
+    const key = (ids) => String(ids).split(',').map(Number).sort((a, b) => a - b).join(',');
+    const dupe = db.combos.find((c) => c.restaurant_id === r.id && key(c.table_ids) === key(f.table_ids));
+    if (dupe) throw new E(`Those tables are already combined as ${dupe.name}.`, 409);
     const members = memberIds(f).map((i) => db.tables.find((t) => t.id === i));
     f.name = f.name || members.map((t) => t.label).join(' + ');
     if (f.max_seats === undefined) f.max_seats = members.reduce((a, t) => a + t.max_seats, 0);

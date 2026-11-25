@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS restaurants (
   cancellation_policy TEXT DEFAULT 'Please cancel at least 2 hours before your reservation.',
   accent_color TEXT DEFAULT '#c2410c',
   tags TEXT DEFAULT '',                  -- comma list of tag ids (see public/js/matcher.js)
+  turn_times TEXT DEFAULT '2:90,4:120,6:180,99:210', -- reservation length by party size (maxParty:minutes)
   featured INTEGER DEFAULT 0,            -- set by the platform, shown in "Featured" sections
   -- billing
   trial_ends_at TEXT NOT NULL,
@@ -193,6 +194,7 @@ if (!cols.has('tags')) db.exec("ALTER TABLE restaurants ADD COLUMN tags TEXT DEF
 const rcols = new Set(db.prepare('PRAGMA table_info(reservations)').all().map((c) => c.name));
 if (!rcols.has('combo_id')) db.exec('ALTER TABLE reservations ADD COLUMN combo_id INTEGER');
 if (!rcols.has('guest_id')) db.exec('ALTER TABLE reservations ADD COLUMN guest_id INTEGER');
+if (!cols.has('turn_times')) db.exec("ALTER TABLE restaurants ADD COLUMN turn_times TEXT DEFAULT '2:90,4:120,6:180,99:210'");
 if (!cols.has('featured')) db.exec('ALTER TABLE restaurants ADD COLUMN featured INTEGER DEFAULT 0');
 
 /** Run fn inside a transaction. */

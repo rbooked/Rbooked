@@ -72,5 +72,23 @@
     return out.sort((a, b) => b.score - a.score || a.time.localeCompare(b.time));
   }
 
-  return { TAGS, TAG_IDS, label, parseTags, rank };
+  // ---- Reservation length by party size ----
+  // Stored as "maxParty:minutes" pairs, e.g. "2:90,4:120,6:180,99:210":
+  // parties up to 2 get 90 minutes, up to 4 get 2 hours, and so on. Empty = use each service's turn time.
+  const DEFAULT_TURNS = '2:90,4:120,6:180,99:210';
+  function parseTurns(str) {
+    const rows = String(str || '').split(',').map((p) => p.split(':').map(Number))
+      .filter(([max, min]) => max >= 1 && min >= 15 && min <= 720).map(([max, minutes]) => ({ max: Math.round(max), minutes: Math.round(minutes / 15) * 15 }));
+    const seen = new Set();
+    return rows.sort((a, b) => a.max - b.max).filter((r) => !seen.has(r.max) && seen.add(r.max));
+  }
+  const formatTurns = (rows) => parseTurns(rows.map((r) => `${r.max}:${r.minutes}`).join(',')).map((r) => `${r.max}:${r.minutes}`).join(',');
+  function turnFor(str, party, fallback) {
+    const rows = parseTurns(str);
+    if (!rows.length) return fallback;
+    const hit = rows.find((r) => party <= r.max) || rows[rows.length - 1];
+    return hit.minutes;
+  }
+
+  return { TAGS, TAG_IDS, label, parseTags, rank, DEFAULT_TURNS, parseTurns, formatTurns, turnFor };
 });

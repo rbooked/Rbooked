@@ -105,7 +105,7 @@ tx(() => {
         const code = crypto.randomBytes(3).toString('hex').toUpperCase();
         run(`INSERT INTO reservations (code, manage_token, restaurant_id, table_id, date, time, starts_at_utc, duration_minutes, party_size,
             guest_name, guest_email, guest_phone, notes, source, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        code, crypto.randomBytes(20).toString('hex'), rid, t.id, date, time, zonedToUtc(date, time, tz).toISOString(), 90, party,
+        code, crypto.randomBytes(20).toString('hex'), rid, t.id, date, time, zonedToUtc(date, time, tz).toISOString(), require('../public/js/matcher').turnFor('2:90,4:120,6:180,99:210', party, 90), party,
         `${fn} ${ln}`, `${fn}.${ln}@example.com`.toLowerCase(), `(555) 2${String(i).padStart(2, '0')}-${4000 + d * 10 + i}`,
         i === 2 ? 'Window seat if possible' : i === 5 ? 'Birthday' : '', ['online', 'widget', 'phone'][i % 3], 'confirmed');
       });

@@ -1,6 +1,7 @@
 'use strict';
 const { one, all } = require('./db');
 const { toMin, toHHMM, weekday, nowInZone, addDays } = require('./time');
+const { turnFor } = require('../public/js/matcher');
 
 const ACTIVE = "('confirmed','seated')";
 
@@ -85,6 +86,8 @@ function getAvailability(restaurant, date, partySize, opts = {}) {
   const combos = comboMap(restaurant.id);
 
   for (const shift of shiftsForDate(restaurant.id, date)) {
+    // How long this party holds the table: set by party size, or the service's turn time.
+    const duration = turnFor(restaurant.turn_times, party, shift.turn_minutes);
     const start = toMin(shift.start_time);
     const end = toMin(shift.end_time);
     for (let t = start; t <= end; t += shift.slot_interval) {
@@ -97,12 +100,12 @@ function getAvailability(restaurant, date, partySize, opts = {}) {
       }
       let pick = null;
       if (available) {
-        pick = options.find((o) => tablesFree(o.tableIds, reservations, combos, t, shift.turn_minutes)) || null;
+        pick = options.find((o) => tablesFree(o.tableIds, reservations, combos, t, duration)) || null;
         if (!pick) available = false;
       }
       result.slots.push({
         time, shiftId: shift.id, shiftName: shift.name, available,
-        tableId: pick ? pick.tableId : null, comboId: pick ? pick.comboId : null, duration: shift.turn_minutes,
+        tableId: pick ? pick.tableId : null, comboId: pick ? pick.comboId : null, duration,
       });
     }
   }
