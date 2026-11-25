@@ -266,6 +266,7 @@
           <div class="menu-list">${list.map((m) => `<div class="mi-row ${m.available ? '' : 'off'}" data-id="${m.id}">
             <div class="mi-move"><button class="btn ghost sm" data-up aria-label="Move up">↑</button><button class="btn ghost sm" data-down aria-label="Move down">↓</button></div>
             <div class="mi-main"><b>${esc(m.name)}</b>${m.available ? '' : ' <span class="tag">Hidden</span>'}${m.description ? `<div class="small muted">${esc(m.description)}</div>` : ''}
+              ${m.options ? `<div class="small muted mi-opts">${esc(TBMenuImport.optionsText(m.options).split('\n').join(' · '))}</div>` : ''}
               <div class="mi-tags">${TBMatch.sortMenuTags(m.tags).map((t) => `<span class="dtag">${TBMatch.menuTag(t).icon} ${esc(TBMatch.menuTag(t).label)}</span>`).join('')}</div></div>
             <div class="mi-price">${money(m.price_cents)}</div>
             <div class="mi-acts"><label class="switch" title="Show on menu"><input type="checkbox" data-avail ${m.available ? 'checked' : ''} aria-label="Show ${esc(m.name)} on menu"><i></i></label>
@@ -396,6 +397,16 @@
     }
     return out;
   }
+  // AI reads the menu when it's available (sections, prices, sizes, add-ons); otherwise the built-in reader does.
+  async function smartRead(text, status) {
+    if (!String(text || '').trim()) return [];
+    if (status) status('Reading your menu with AI… (up to a minute for a long menu)');
+    try {
+      const r = await api('/api/admin/menu/ai-parse', { body: { text } });
+      if (r.ai && r.items.length) return r.items;
+    } catch { /* fall back */ }
+    return TBMenuImport.parseText(text);
+  }
   async function readMenuFile(file, status) {
     const name = file.name.toLowerCase();
     if (/\.(csv|tsv)$/.test(name)) return TBMenuImport.parseCSV(await file.text());
@@ -404,9 +415,9 @@
       const wb = window.XLSX.read(await file.arrayBuffer());
       return wb.SheetNames.flatMap((n) => TBMenuImport.parseRows(window.XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: '' }).map((r) => r.map(String))));
     }
-    if (/\.pdf$/.test(name) || file.type === 'application/pdf') return TBMenuImport.parseText(await pdfText(file, status));
-    if (file.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp)$/.test(name)) return TBMenuImport.parseText(await ocr(file, status, 'Reading your photo'));
-    if (/\.(txt|md)$/.test(name) || file.type.startsWith('text/')) return TBMenuImport.parseText(await file.text());
+    if (/\.pdf$/.test(name) || file.type === 'application/pdf') return smartRead(await pdfText(file, status), status);
+    if (file.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp)$/.test(name)) return smartRead(await ocr(file, status, 'Reading your photo'), status);
+    if (/\.(txt|md)$/.test(name) || file.type.startsWith('text/')) return smartRead(await file.text(), status);
     throw new Error('Pick a PDF, a photo, an Excel/CSV file, or paste your menu as text.');
   }
 
@@ -434,7 +445,7 @@
     document.getElementById('imp-cancel').onclick = back;
     const run = async (fn) => {
       const btn = document.getElementById('imp-read'); btn.disabled = true;
-      try { rows = await fn(); status(''); if (!rows.length) { status('We couldn’t find any dishes with prices. Try pasting the text, or a clearer photo.'); return; } review(); }
+      try { rows = (await fn()).map((x) => ({ section: x.section || 'Menu', name: x.name, description: x.description || '', price: x.price || '', tags: x.tags || [], opts: TBMenuImport.optionsText(x.options || []) })); status(''); if (!rows.length) { status('We couldn’t find any dishes with prices. Try pasting the text, or a clearer photo.'); return; } review(); }
       catch (e) { status(''); fail(e); } finally { btn.disabled = false; }
     };
     const file = document.getElementById('imp-file');
@@ -445,10 +456,10 @@
     drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove('over'); const f = e.dataTransfer.files[0]; if (f) { status(`Reading ${f.name}…`); run(() => readMenuFile(f, status)); } };
     document.getElementById('imp-read').onclick = () => {
       const t = document.getElementById('imp-text').value; if (!t.trim()) { status('Paste your menu or choose a file first.'); return; }
-      run(async () => TBMenuImport.parseText(t));
+      run(() => smartRead(t, status));
     };
 
-    if (preset && preset.items) { rows = preset.items.map((x) => ({ section: x.section || 'Menu', name: x.name, description: x.description || '', price: x.price || '', tags: x.tags || [] })); setTimeout(review, 0); }
+    if (preset && preset.items) { rows = preset.items.map((x) => ({ section: x.section || 'Menu', name: x.name, description: x.description || '', price: x.price || '', tags: x.tags || [], opts: TBMenuImport.optionsText(x.options || []) })); setTimeout(review, 0); }
     else if (preset && preset.pdf) {
       status('Getting the menu from your website…');
       run(async () => {
@@ -462,10 +473,11 @@
       const box = document.getElementById('imp-review');
       const secs = [...new Set(rows.map((r) => r.section))];
       box.innerHTML = `<div class="card" style="margin-top:16px"><div class="row"><h2 style="margin:0">Check ${rows.length} dish${rows.length === 1 ? '' : 'es'}</h2><span class="spacer"></span><span class="muted small">${secs.length} section${secs.length === 1 ? '' : 's'}</span></div>
-        <p class="small muted">${preset ? 'From your website. ' : ''}Fix anything we read wrong. Remove rows you don't want. Nothing is saved until you press Import.</p>
+        <p class="small muted">${preset ? 'From your website. ' : ''}Fix anything we read wrong. Sizes and add-ons go one group per line, like “Size: Small $9 | Large $14”. Remove rows you don't want. Nothing is saved until you press Import.</p>
         <div class="imp-list">${rows.map((r, i) => `<div class="imp-row" data-i="${i}">
           <div class="imp-top"><input data-k="name" value="${esc(r.name)}" aria-label="Dish name" placeholder="Dish name"><input data-k="price" value="${esc(r.price)}" inputmode="decimal" aria-label="Price" placeholder="Price" class="imp-price"><button class="btn ghost sm" data-rm aria-label="Remove ${esc(r.name)}">✕</button></div>
           <div class="imp-mid"><input data-k="section" value="${esc(r.section)}" list="imp-secs" aria-label="Section" class="imp-sec"><input data-k="description" value="${esc(r.description)}" aria-label="Description" placeholder="Description (optional)"></div>
+          <details class="imp-opts" ${r.opts ? 'open' : ''}><summary>Sizes &amp; add-ons${r.opts ? ` (${r.opts.split('\n').length})` : ''}</summary><textarea data-k="opts" rows="2" aria-label="Sizes and add-ons for ${esc(r.name)}" placeholder="Size: Small $9 | Large $14&#10;Add-ons: Extra cheese +2 | Bacon +3">${esc(r.opts || '')}</textarea></details>
           <div class="imp-tags">${TBMatch.MENU_TAGS.map((t) => `<label class="dchip ${r.tags.includes(t.id) ? 'on' : ''}"><input type="checkbox" data-tag="${t.id}" ${r.tags.includes(t.id) ? 'checked' : ''}>${t.icon} ${esc(t.label)}</label>`).join('')}</div></div>`).join('')}</div>
         <datalist id="imp-secs">${secs.map((x) => `<option value="${esc(x)}">`).join('')}</datalist>
         <div class="imp-actions">${existing ? `<label class="check"><input type="checkbox" id="imp-replace"> Replace my current menu (${existing} dish${existing === 1 ? '' : 'es'})</label>` : ''}
@@ -477,7 +489,7 @@
         el.querySelector('[data-rm]').onclick = () => { rows.splice(rows.indexOf(r), 1); review(); };
       });
       document.getElementById('imp-go').onclick = async (e) => {
-        const items = rows.filter((r) => String(r.name).trim()); if (!items.length) { TB.toast('No dishes to import.', true); return; }
+        const items = rows.filter((r) => String(r.name).trim()).map(({ opts, ...r }) => ({ ...r, options: opts || '' })); if (!items.length) { TB.toast('No dishes to import.', true); return; }
         e.target.disabled = true;
         try {
           const rep = document.getElementById('imp-replace');
@@ -490,13 +502,15 @@
   }
 
   function menuItemModal(m, sections, section) {
-    const v = m || { section: section || 'Starters', name: '', description: '', price_cents: null, tags: '', available: 1 };
+    const v = m || { section: section || 'Starters', name: '', description: '', price_cents: null, tags: '', available: 1, options: '' };
     const has = new Set(v.tags.split(','));
     TB.modal(`<h2>${m ? `Edit ${esc(m.name)}` : 'Add a dish'}</h2><form id="mi-form">
       <div class="grid-2"><div class="field"><label for="mi-sec">Section</label><input id="mi-sec" name="section" list="mi-secs" value="${esc(v.section)}" required><datalist id="mi-secs">${[...new Set([...sections, 'Starters', 'Mains', 'Sides', 'Desserts', 'Drinks'])].map((s) => `<option value="${esc(s)}">`).join('')}</datalist></div>
       <div class="field"><label for="mi-price">Price</label><div class="money"><span>$</span><input id="mi-price" name="price" inputmode="decimal" value="${v.price_cents === null ? '' : (v.price_cents / 100).toFixed(2).replace(/\.00$/, '')}" placeholder="18"></div></div></div>
       <div class="field"><label for="mi-name">Dish name</label><input id="mi-name" name="name" value="${esc(v.name)}" required placeholder="e.g. Margherita pizza"></div>
       <div class="field"><label for="mi-desc">Description <span class="muted small">(optional)</span></label><textarea id="mi-desc" name="description" rows="2" placeholder="Ingredients, how it's made…">${esc(v.description)}</textarea></div>
+      <div class="field"><label for="mi-opts">Sizes &amp; add-ons <span class="muted small">(optional, one group per line)</span></label><textarea id="mi-opts" name="options" rows="2" placeholder="Size: Small $9 | Large $14&#10;Add-ons: Extra cheese +2 | Bacon +3">${esc(TBMenuImport.optionsText(v.options || ''))}</textarea>
+        <p class="small muted" style="margin:6px 0 0">Sizes show their full price. Add-ons show the extra charge, like +2.</p></div>
       <div class="field"><label>Dietary tags</label><div class="days">${TBMatch.MENU_TAGS.map((t) => `<label><input type="checkbox" data-mt="${t.id}" ${has.has(t.id) ? 'checked' : ''}>${t.icon} ${esc(t.label)}</label>`).join('')}</div>
         <p class="small muted" style="margin:6px 0 0">Vegan dishes are also counted as vegetarian and dairy-free.</p></div>
       <label class="check"><input type="checkbox" name="available" ${v.available ? 'checked' : ''}> Show on the menu</label>
@@ -507,7 +521,7 @@
       const save = async (again) => {
         if (!f.reportValidity()) return;
         const d = TB.formData(f);
-        const body = { section: d.section, name: d.name, description: d.description, price: d.price, available: d.available, tags: [...box.querySelectorAll('[data-mt]:checked')].map((x) => x.dataset.mt) };
+        const body = { section: d.section, name: d.name, description: d.description, price: d.price, available: d.available, options: d.options || '', tags: [...box.querySelectorAll('[data-mt]:checked')].map((x) => x.dataset.mt) };
         try {
           await api(m ? `/api/admin/menu/${m.id}` : '/api/admin/menu', { method: m ? 'PUT' : 'POST', body });
           TB.toast(m ? 'Dish saved' : `${d.name} added`);

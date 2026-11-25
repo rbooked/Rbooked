@@ -313,3 +313,6 @@ table.data tr:hover td { background: #fcfaf7; }
 .site-pick, .site-pick label { font-size: 15px; color: var(--ink); font-weight: 400; text-transform: none; letter-spacing: 0; margin: 0; }
 .site-pick b { font-weight: 600; }
 .site-pick .muted { color: var(--muted); font-weight: 400; }
+
+/* Dish options (sizes, add-ons) */
+.dish-opts { margin-top: 4px; display: grid; gap: 2px; }

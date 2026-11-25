@@ -99,12 +99,20 @@
   box.innerHTML = `<div class="row"><h2 class="serif" style="margin:0">Menu</h2><span class="spacer"></span><input type="search" id="m-q" placeholder="Search dishes" aria-label="Search the menu" style="max-width:220px"></div>
     <div class="chips menu-chips" role="group" aria-label="Dietary filters">${TBMatch.MENU_TAGS.filter((t) => counts[t.id]).map((t) => `<button class="chip" data-t="${t.id}" aria-pressed="false">${t.icon} ${esc(t.label)} <span class="cnt">${counts[t.id]}</span></button>`).join('')}</div>
     <div id="m-list"></div>`;
+  // Sizes and add-ons, stored as JSON [{ name, choices: [{ name, price }] }]
+  function dishOptions(raw) {
+    let groups = []; try { groups = raw ? JSON.parse(raw) : []; } catch { groups = []; }
+    if (!Array.isArray(groups) || !groups.length) return '';
+    const m$ = (p) => { if (!p) return ''; const plus = String(p).startsWith('+'); const n = Number(String(p).replace('+', '')); return ` ${plus ? '+' : ''}$${n % 1 ? n.toFixed(2) : n}`; };
+    return `<div class="dish-opts">${groups.map((g) => `<div class="small"><span class="muted">${esc(g.name)}:</span> ${(g.choices || []).map((c) => `${esc(c.name)}${esc(m$(c.price))}`).join(' · ')}</div>`).join('')}</div>`;
+  }
   const draw = () => {
     const list = menu.filter((m) => [...want].every((t) => m.tags.split(',').includes(t)) && (!q || `${m.name} ${m.description}`.toLowerCase().includes(q)));
     const secs = [...new Set(menu.map((m) => m.section))].filter((s) => list.some((m) => m.section === s));
     box.querySelector('#m-list').innerHTML = secs.length
       ? secs.map((s) => `<h3 class="menu-h">${esc(s)}</h3>${list.filter((m) => m.section === s).map((m) => `<div class="dish">
           <div><b>${esc(m.name)}</b>${m.description ? `<div class="muted small">${esc(m.description)}</div>` : ''}
+          ${dishOptions(m.options)}
           <div class="dish-tags">${TBMatch.sortMenuTags(m.tags).map((t) => { const x = TBMatch.menuTag(t); return `<span class="dtag">${x.icon} ${esc(x.label)}</span>`; }).join('')}</div></div>
           <div class="dish-price">${money(m.price_cents)}${TB.heart('dish', m.id, m.likes, m.liked, 'sm')}</div></div>`).join('')}`).join('')
       : `<p class="muted">No dishes match ${want.size ? 'those filters' : 'your search'}. <button class="btn ghost sm" id="m-reset">Clear filters</button></p>`;

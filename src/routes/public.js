@@ -149,7 +149,7 @@ router.get('/pick', wrap(async (req, res) => {
 router.get('/restaurants/:slug', wrap(async (req, res) => {
   const r = getBookableRestaurant(req.params.slug);
   const shifts = all('SELECT name, days, start_time, end_time FROM shifts WHERE restaurant_id = ? AND active = 1 ORDER BY start_time', r.id);
-  const menu = all(`SELECT id, section, name, description, price_cents, tags FROM menu_items
+  const menu = all(`SELECT id, section, name, description, price_cents, tags, options FROM menu_items
     WHERE restaurant_id = ? AND available = 1 ORDER BY sort_order, id`, r.id);
   const fan = fanId(req);
   const counts = (kind, ids) => {

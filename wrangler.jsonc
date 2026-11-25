@@ -10,6 +10,7 @@
     "bindings": [{ "name": "DB", "class_name": "RbookedDB" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RbookedDB"] }],
+  "ai": { "binding": "AI" }, // Workers AI: smart menu import, free daily allowance, no card
   "triggers": { "crons": ["*/5 * * * *"] },
   "alias": {
     "express": "./src/worker/mini-express.js",

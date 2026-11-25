@@ -450,7 +450,8 @@ router.post('/billing/simulate', wrap(async (req, res) => {
 
 // ---------- Menu ----------
 function cleanMenuItem(b) {
-  const f = pick(b, ['section', 'name', 'description', 'price', 'price_cents', 'tags', 'sort_order', 'available']);
+  const f = pick(b, ['section', 'name', 'description', 'price', 'price_cents', 'tags', 'sort_order', 'available', 'options']);
+  if (f.options !== undefined) { const o = require('../../public/js/menu-import').cleanOptions(f.options); f.options = o.length ? JSON.stringify(o) : ''; }
   if (f.section !== undefined) f.section = String(f.section).trim().slice(0, 60) || 'Menu';
   if (f.name !== undefined) f.name = String(f.name).trim().slice(0, 120);
   if (f.description !== undefined) f.description = String(f.description).trim().slice(0, 500);
@@ -480,6 +481,12 @@ router.post('/menu', wrap(async (req, res) => {
   const keys = Object.keys(f);
   const info = run(`INSERT INTO menu_items (restaurant_id, ${keys.join(',')}) VALUES (?, ${keys.map(() => '?').join(',')})`, rid, ...keys.map((k) => f[k]));
   res.status(201).json(one('SELECT * FROM menu_items WHERE id = ?', info.lastInsertRowid));
+}));
+// Read messy menu text (from a PDF, photo or paste) with AI. { ai: false } means use the built-in reader.
+router.post('/menu/ai-parse', wrap(async (req, res) => {
+  const ai = require('../ai-menu');
+  const items = await ai.aiParseMenu(String(req.body.text || ''));
+  res.json(items ? { ai: true, items } : { ai: false, items: [] });
 }));
 // Import many dishes at once (from a pasted menu, spreadsheet, PDF or photo, read in the browser).
 router.post('/menu/import', wrap(async (req, res) => {

@@ -102,7 +102,7 @@ function meta(html, key) {
 function pageText(html) {
   return decode(html.replace(/<(script|style|noscript|svg|template|iframe)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<!--[\s\S]*?-->/g, ' ')
     .replace(/<(br|\/p|\/div|\/li|\/h[1-6]|\/tr|\/section|\/article|\/header|\/footer|\/dt|\/dd|hr)\b[^>]*>/gi, '\n').replace(/<(td|th)\b[^>]*>/gi, '  ')
-    .replace(/<[^>]+>/g, ' ')).split('\n').map((l) => l.replace(/[ \t ]+/g, ' ').trim()).filter(Boolean).join('\n');
+    .replace(/<(p|div|li|h[1-6]|tr|section|article|header|footer|dt|dd|ul|ol|table)\b[^>]*>/gi, '\n').replace(/<[^>]+>/g, '')).split('\n').map((l) => l.replace(/[ \t ]+/g, ' ').trim()).filter(Boolean).join('\n');
 }
 function jsonLd(html) {
   const out = [];
@@ -156,6 +156,13 @@ function ldMenu(menu) {
 }
 
 /** Read a restaurant's website. Returns what we found; nothing is saved here. */
+/** AI reading of a menu page's text when it's available; null means use the built-in reader. */
+async function smartMenu(text) {
+  const ai = require('./ai-menu'); if (!ai.available()) return null;
+  const items = await ai.aiParseMenu(text);
+  return items && items.length ? items : null;
+}
+
 async function importSite(input) {
   const menuParse = require('../public/js/menu-import');
   const page = await fetchPublic(input);
@@ -225,13 +232,13 @@ async function importSite(input) {
         if (!mp.type.includes('html')) continue;
         const mh = new TextDecoder('utf-8').decode(mp.buf);
         menu = ldMenu(jsonLd(mh).filter((o) => types(o).includes('menu') || o.hasMenuSection));
-        if (!menu.length) menu = menuParse.parseText(pageText(mh)).filter((it) => it.price);
+        if (!menu.length) { const t = pageText(mh); menu = (await smartMenu(t)) || menuParse.parseText(t).filter((it) => it.price); }
         if (menu.length >= 3) { out.menu_source = mp.url; break; }
         const pdf = /href\s*=\s*["']([^"']+\.pdf[^"']*)["']/i.exec(mh); if (pdf) { out.menu_pdf = abs(new URL(pdf[1], mp.url).href); break; }
       } catch { /* try the next link */ }
     }
   }
-  if (!menu.length) { const here = menuParse.parseText(text).filter((it) => it.price); if (here.length >= 5) { menu = here; out.menu_source = page.url; } }
+  if (!menu.length) { const here = menuParse.parseText(text).filter((it) => it.price); if (here.length >= 5) { menu = (await smartMenu(text)) || here; out.menu_source = page.url; } }
   out.menu = menu.slice(0, 300).map((it) => ({ ...it, tags: [...new Set([...(it.tags || []), ...menuParse.tagsFor(`${it.name} ${it.description}`)])] }));
 
   out.found = [out.name && 'name', out.address && 'address', out.phone && 'phone', out.hours && 'hours', out.cuisine && 'cuisine',

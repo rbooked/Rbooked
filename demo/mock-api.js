@@ -394,7 +394,7 @@
   on('GET', '/api/public/restaurants/:slug', (q, b, p) => {
     const r = bookable(p.slug);
     const menu = db.menu.filter((m) => m.restaurant_id === r.id && m.available).sort((a, c) => a.sort_order - c.sort_order || a.id - c.id)
-      .map(({ id, section, name, description, price_cents, tags }) => ({ id, section, name, description, price_cents, tags }));
+      .map(({ id, section, name, description, price_cents, tags, options }) => ({ id, section, name, description, price_cents, tags, options: options || '' }));
     return { restaurant: pub(r), shifts: db.shifts.filter((s) => s.restaurant_id === r.id && s.active), menu, today: nowInZone(r.timezone).date };
   });
   on('GET', '/api/public/restaurants/:slug/availability', (q, b, p) => {
@@ -650,7 +650,8 @@
     db.reservations.forEach((x) => { if (x.guest_id === Number(p.id)) x.guest_id = null; }); return { ok: true };
   });
   const cleanMenuItem = (b) => {
-    const f = pick(b, ['section', 'name', 'description', 'price', 'price_cents', 'tags', 'sort_order', 'available']);
+    const f = pick(b, ['section', 'name', 'description', 'price', 'price_cents', 'tags', 'sort_order', 'available', 'options']);
+    if (f.options !== undefined) { const o = window.TBMenuImport ? window.TBMenuImport.cleanOptions(f.options) : []; f.options = o.length ? JSON.stringify(o) : ''; }
     if (f.section !== undefined) f.section = String(f.section).trim().slice(0, 60) || 'Menu';
     if (f.name !== undefined) f.name = String(f.name).trim().slice(0, 120);
     if (f.description !== undefined) f.description = String(f.description).trim().slice(0, 500);
@@ -669,6 +670,7 @@
     const m = { id: nextId(), restaurant_id: r.id, description: '', price_cents: null, tags: '', available: 1, sort_order: mine.length ? Math.max(...mine.map((x) => x.sort_order)) + 1 : 0, created_at: nowSql(), ...f };
     db.menu.push(m); return m;
   });
+  on('POST', '/api/admin/menu/ai-parse', () => ({ ai: false, items: [] }));
   on('POST', '/api/admin/menu/import', (q, b) => {
     const { r } = me(); const list = (b.items || []).slice(0, 500).map((x) => ({ section: 'Menu', ...cleanMenuItem(x) })).filter((f) => f.name);
     if (!list.length) throw new E('No dishes to import.');

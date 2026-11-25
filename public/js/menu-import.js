@@ -48,7 +48,8 @@
     // Letter-spaced headings in PDFs and photos come through as "S T A R T E R S": join those letters back up.
     const unspace = (l) => l.split(/(\s{2,})/).map((chunk) => {
       const t = chunk.split(' ');
-      return t.length >= 3 && t.every((x) => x.length <= 2) && t.filter((x) => x.length === 1).length >= t.length * 0.6 ? t.join('') : chunk;
+      if (/^\$?(?: ?[\d.,]){2,}$/.test(chunk) && / /.test(chunk)) return chunk.replace(/ /g, ''); // "2 4 . 9 5"
+      return t.length >= 3 && t.every((x) => x.length <= 2) && t.filter((x) => x.length === 1).length >= t.length * 0.6 ? t.join('').replace(/([a-z)])(\$?\d)/gi, '$1 $2') : chunk;
     }).join('');
     const lines = String(text || '').replace(/\r/g, '').split('\n').map((l) => unspace(l.replace(/\t/g, '  ').trim())).filter((l) => l && !/^page \d+( of \d+)?$/i.test(l));
     const items = [];
@@ -130,5 +131,31 @@
   }
 
   const parseCSV = (text) => parseRows(csvRows(text));
-  return { parseText, parseCSV, parseRows, csvRows, tagsFor };
+
+  // ---- Dish options (sizes, add-ons…) ----
+  // Stored as JSON: [{ name: 'Size', choices: [{ name: 'Small', price: '9' }, …] }]. Sizes carry their full price,
+  // add-ons an extra charge ("+2").
+  const cleanPrice = (p) => { const m = /(\+)?\s*\$?\s*(\d{1,4}(?:[.,]\d{1,2})?)/.exec(String(p ?? '')); return m ? `${m[1] ? '+' : ''}${m[2].replace(',', '.')}` : ''; };
+  function cleanOptions(v) {
+    let a = v; if (typeof a === 'string') { try { a = a.trim().startsWith('[') ? JSON.parse(a) : parseOptionsText(a); } catch { a = []; } }
+    if (!Array.isArray(a)) return [];
+    return a.slice(0, 8).map((g) => ({
+      name: String((g && (g.name || g.group)) || 'Options').trim().slice(0, 40),
+      choices: (Array.isArray(g && g.choices) ? g.choices : []).slice(0, 20).map((c) => ({ name: String((c && c.name) || '').trim().slice(0, 60), price: cleanPrice(c && c.price) })).filter((c) => c.name),
+    })).filter((g) => g.choices.length);
+  }
+  /** "Size: Small $9 | Large $14" (one group per line) to options. Easy to type on a phone. */
+  function parseOptionsText(text) {
+    return String(text || '').split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
+      const i = l.indexOf(':'); const name = i > 0 ? l.slice(0, i).trim() : 'Options'; const rest = i > 0 ? l.slice(i + 1) : l;
+      return { name, choices: rest.split(/[|;]/).map((c) => c.trim()).filter(Boolean).map((c) => {
+        const m = /^(.*?)\s*\(?\s*(\+?\s*\$?\s*\d{1,4}(?:[.,]\d{1,2})?)\s*\)?$/.exec(c);
+        return m && m[1] ? { name: m[1].replace(/[-–:]\s*$/, '').trim(), price: cleanPrice(m[2]) } : { name: c, price: '' };
+      }) };
+    });
+  }
+  const money = (p) => { const s = String(p || ''); if (!s) return ''; const plus = s.startsWith('+'); const n = Number(s.replace('+', '')); return `${plus ? '+' : ''}$${n % 1 ? n.toFixed(2) : n}`; };
+  const optionsText = (opts) => cleanOptions(opts).map((g) => `${g.name}: ${g.choices.map((c) => `${c.name}${c.price ? ` ${money(c.price)}` : ''}`).join(' | ')}`).join('\n');
+
+  return { parseText, parseCSV, parseRows, csvRows, tagsFor, cleanOptions, parseOptionsText, optionsText, optionMoney: money };
 });

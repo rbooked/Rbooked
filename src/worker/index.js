@@ -33,6 +33,7 @@ function sqliteDriver(storage) {
 export class RbookedDB extends DurableObject {
   setup() {
     if (this.app) return;
+    if (this.env.AI) globalThis.__rbAI = this.env.AI; // Workers AI (free daily allowance) for smart menu reading
     for (const [k, v] of Object.entries(this.env)) if (typeof v === 'string') process.env[k] = v;
     const db = require('../db.js');
     db.init(sqliteDriver(this.ctx.storage));

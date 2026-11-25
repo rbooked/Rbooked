@@ -174,6 +174,7 @@ CREATE TABLE IF NOT EXISTS menu_items (
   name TEXT NOT NULL,
   description TEXT DEFAULT '',
   price_cents INTEGER,                    -- NULL = no price shown (e.g. market price)
+  options TEXT DEFAULT '',                -- JSON: sizes, add-ons [{name, choices: [{name, price}]}]
   tags TEXT DEFAULT '',                   -- comma list: vegan,vegetarian,gluten_free,dairy_free,nut_free,halal,spicy
   sort_order INTEGER NOT NULL DEFAULT 0,
   available INTEGER NOT NULL DEFAULT 1,
@@ -249,6 +250,10 @@ function migrate(d) {
   if (!cols.has('turn_times')) d.exec("ALTER TABLE restaurants ADD COLUMN turn_times TEXT DEFAULT '2:90,4:120,6:180,99:210'");
   for (const [c, def] of [['website_url', "''"], ['logo_url', "''"], ['hours', "''"]]) if (!cols.has(c)) d.exec(`ALTER TABLE restaurants ADD COLUMN ${c} TEXT DEFAULT ${def}`);
   if (!cols.has('featured')) d.exec('ALTER TABLE restaurants ADD COLUMN featured INTEGER DEFAULT 0');
+  try {
+    const mcols = new Set(d.all('PRAGMA table_info(menu_items)').map((c) => c.name));
+    if (mcols.size && !mcols.has('options')) d.exec("ALTER TABLE menu_items ADD COLUMN options TEXT DEFAULT ''");
+  } catch { /* table is new */ }
 }
 
 /** Plug in a database engine and make sure the schema exists. */

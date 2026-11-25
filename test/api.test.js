@@ -315,6 +315,44 @@ test('menu import: pasted text becomes dishes with sections, prices and diet tag
   assert.strictEqual((await call('GET', '/api/admin/menu')).data.length, 1);
 });
 
+test('dish options and smart AI menu reading (with a fallback when AI is off)', async () => {
+  const M = require('../public/js/menu-import');
+  assert.deepStrictEqual(M.parseOptionsText('Size: Small $9 | Large $14.50\nAdd-ons: Extra cheese +2; Bacon (+3)'), [
+    { name: 'Size', choices: [{ name: 'Small', price: '9' }, { name: 'Large', price: '14.50' }] },
+    { name: 'Add-ons', choices: [{ name: 'Extra cheese', price: '+2' }, { name: 'Bacon', price: '+3' }] }]);
+  assert.strictEqual(M.optionsText(M.parseOptionsText('Size: Small $9 | Large $14.50')), 'Size: Small $9 | Large $14.50');
+
+  // No AI binding: the endpoint says so and the browser uses the built-in reader.
+  delete globalThis.__rbAI;
+  assert.deepStrictEqual((await call('POST', '/api/admin/menu/ai-parse', { text: 'MAINS\nSaleeg 24.95\nMandi 22' })).data, { ai: false, items: [] });
+
+  let seen = 0;
+  globalThis.__rbAI = { run: async (model, input) => { seen++; assert.ok(input.messages[1].content.includes('S a l e e g')); return { response: { items: [
+    { section: 'mains', name: 'Saleeg', price: '$24.95', description: 'creamy rice, chicken', tags: ['halal', 'bogus'], options: [{ name: 'Size', choices: [{ name: 'Half', price: '24.95' }, { name: 'Whole', price: '$39' }] }, { name: 'Add-ons', choices: [{ name: 'Extra lamb', price: '+8' }] }] },
+    { section: 'Mains', name: 'Saleeg', price: '24.95' },
+    { section: 'Drinks', name: 'Vegan Mango Lassi', price: '5' }] } }; } };
+  try {
+    const r = await call('POST', '/api/admin/menu/ai-parse', { text: 'MAINS\nS a l e e g $ 2 4 . 9 5\nVegan Mango Lassi 5' });
+    assert.strictEqual(r.data.ai, true); assert.strictEqual(seen, 1);
+    assert.strictEqual(r.data.items.length, 2, 'duplicates dropped');
+    const [sal, lassi] = r.data.items;
+    assert.strictEqual(sal.price, '24.95'); assert.deepStrictEqual(sal.tags, ['halal']);
+    assert.deepStrictEqual(sal.options[0].choices.map((c) => c.price), ['24.95', '39']);
+    assert.ok(lassi.tags.includes('vegetarian') && lassi.tags.includes('dairy_free'));
+    // A failing model means null, so the browser falls back.
+    globalThis.__rbAI = { run: async () => { throw new Error('quota'); } };
+    assert.strictEqual((await call('POST', '/api/admin/menu/ai-parse', { text: 'MAINS\nSaleeg 24.95\nMandi 22' })).data.ai, false);
+
+    await call('POST', '/api/admin/menu/import', { items: [{ ...sal, options: M.optionsText(sal.options) }], replace: true });
+    const saved = (await call('GET', '/api/admin/menu')).data[0];
+    assert.deepStrictEqual(JSON.parse(saved.options)[1], { name: 'Add-ons', choices: [{ name: 'Extra lamb', price: '+8' }] });
+    const slug = (await call('GET', '/api/admin/restaurant')).data.restaurant.slug;
+    const pub = (await call('GET', `/api/public/restaurants/${slug}`)).data.menu[0];
+    assert.strictEqual(JSON.parse(pub.options)[0].choices[1].name, 'Whole');
+  } finally { delete globalThis.__rbAI; }
+  assert.ok(require('../src/ai-menu').chunks('a\n'.repeat(9000), 5000).length >= 3);
+});
+
 test('start over wipes the restaurant but keeps the login', async () => {
   assert.strictEqual((await call('POST', '/api/admin/account/reset', { password: 'wrong-pass' })).status, 401);
   const r = await call('POST', '/api/admin/account/reset', { password: 'password123' });
