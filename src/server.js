@@ -54,6 +54,7 @@ app.use(['/api/public', '/api/auth'], (req, res, next) => {
 app.use('/api/public', publicRouter);
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/staff', require('./routes/staff'));
 
 // Restaurants embed /embed.html in an iframe on their own sites; everything else stays same-origin.
 app.use((req, res, next) => {

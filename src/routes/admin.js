@@ -53,7 +53,11 @@ router.post('/account/reset', wrap(async (req, res) => {
   if (req.user.role !== 'owner') throw new BookingError('Only the owner can start over.', 403);
   const u = one('SELECT password_hash FROM users WHERE id = ?', req.user.id);
   if (!u || !require('../auth').verifyPassword(String(req.body.password || ''), u.password_hash)) throw new BookingError('That password is not right.', 401);
-  const rid = req.restaurant.id;
+  resetRestaurant(req.restaurant.id);
+  res.json({ ok: true });
+}));
+/** Wipe a restaurant back to a fresh start (new trial, starter setup). Logins are kept. */
+function resetRestaurant(rid) {
   tx(() => {
     run('DELETE FROM email_log WHERE reservation_id IN (SELECT id FROM reservations WHERE restaurant_id = ?)', rid);
     for (const t of ['reservations', 'table_combos', 'guests', 'menu_items', 'gallery_photos', 'likes', 'images', 'closures', 'shifts', 'tables', 'areas']) run(`DELETE FROM ${t} WHERE restaurant_id = ?`, rid);
@@ -63,8 +67,7 @@ router.post('/account/reset', wrap(async (req, res) => {
     new Date(Date.now() + config.plan.trialDays * 86400000).toISOString(), rid);
     require('./auth').starterSetup(rid);
   });
-  res.json({ ok: true });
-}));
+}
 
 router.get('/restaurant', wrap(async (req, res) => {
   res.json({ restaurant: pick(req.restaurant, ['id', 'slug', 'featured', ...SETTINGS]), user: { ...req.user, platformAdmin: isPlatformAdmin(req) }, billing: billing.billingSummary(req.restaurant), baseUrl: config.baseUrl });
@@ -588,3 +591,4 @@ router.delete('/gallery/:id', wrap(async (req, res) => {
 }));
 
 module.exports = router;
+module.exports.resetRestaurant = resetRestaurant;

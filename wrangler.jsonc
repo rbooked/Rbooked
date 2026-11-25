@@ -23,5 +23,5 @@
   },
   "observability": { "enabled": true }
   // Secrets (set in the dashboard under Settings > Variables and Secrets):
-  //   RESEND_API_KEY, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, PLATFORM_ADMIN_EMAILS (who can feature restaurants), and optionally SESSION_SECRET
+  //   RESEND_API_KEY, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, PLATFORM_ADMIN_EMAILS (who can feature restaurants), STAFF_API_KEY (32+ chars, support tools at /api/staff), and optionally SESSION_SECRET
 }

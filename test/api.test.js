@@ -365,6 +365,24 @@ test('start over wipes the restaurant but keeps the login', async () => {
   assert.strictEqual((await call('POST', '/api/auth/login', { email: 'owner@test.local', password: 'password123' })).status, 200);
 });
 
+test('staff key can reset a restaurant and keep its logins', async () => {
+  const req = (method, path, key) => fetch(`${base}${path}`, { method, headers: key ? { Authorization: `Bearer ${key}` } : {} });
+  delete process.env.STAFF_API_KEY;
+  assert.strictEqual((await req('GET', '/api/staff/restaurants', 'x')).status, 404, 'off without a key');
+  process.env.STAFF_API_KEY = 'k'.repeat(40);
+  try {
+    assert.strictEqual((await req('GET', '/api/staff/restaurants', 'wrong')).status, 401);
+    const list = await (await req('GET', '/api/staff/restaurants', 'k'.repeat(40))).json();
+    const myId = (await call('GET', '/api/admin/restaurant')).data.restaurant.id;
+    const mine = list.find((r) => r.id === myId);
+    assert.ok(mine && mine.logins);
+    const out = await (await req('POST', `/api/staff/restaurants/${mine.id}/reset`, 'k'.repeat(40))).json();
+    assert.ok(out.ok && out.logins_kept >= 1);
+    const me = await call('GET', '/api/admin/restaurant');
+    assert.strictEqual(me.status, 200); assert.strictEqual(me.data.restaurant.name, 'My restaurant');
+  } finally { delete process.env.STAFF_API_KEY; }
+});
+
 test('gallery and likes: diners heart restaurants, dishes and food photos', async () => {
   await call('PUT', '/api/admin/restaurant', { name: 'Heart Cafe', cuisine: 'Cafe', description: 'Cozy cafe with pastries.' });
   const dish = (await call('POST', '/api/admin/menu', { name: 'Croissant', price: '4', section: 'Bakery' })).data;
