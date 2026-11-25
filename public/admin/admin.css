@@ -260,3 +260,25 @@ pre.code { background: #1f1b16; color: #f5e6d8; padding: 14px; border-radius: 10
 .imp-opts textarea { width: 100%; font-size: 14px; margin-top: 4px; }
 .mi-opts { margin-top: 2px; }
 @media (max-width: 640px) { .imp-opts textarea { font-size: 16px; } }
+
+/* Reservation status buttons: easy to tap on phones */
+@media (max-width: 760px) {
+  .res-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .res-actions .btn.sm { min-height: 42px; padding: 8px 14px; font-size: 15px; flex: 1 1 auto; }
+}
+
+/* Reservation list: one card per booking on phones, buttons always visible */
+.res-list .show-sm { display: none; }
+@media (max-width: 760px) {
+  .res-list thead { display: none; }
+  .res-list, .res-list tbody, .res-list tr, .res-list td { display: block; width: 100%; }
+  .res-list tr { padding: 14px 16px; border-bottom: 1px solid var(--line); position: relative; }
+  .res-list td { border: none !important; padding: 2px 0 !important; }
+  .res-list .time-cell { font-size: 18px; font-weight: 700; }
+  .res-list td[data-label] { display: flex; align-items: center; gap: 10px; }
+  .res-list td[data-label]::before { content: attr(data-label); color: var(--muted); font-size: 13px; min-width: 54px; }
+  .res-list td[data-label] select { flex: 1; min-width: 0 !important; }
+  .res-list .show-sm { display: inline; }
+  .res-list .res-actions { margin-top: 8px; }
+  .res-list tr.dim { opacity: .75; }
+}

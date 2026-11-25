@@ -4,7 +4,7 @@
   const view = document.getElementById('view');
   const S = { me: null, date: null, mode: (() => { try { return localStorage.getItem('rb_mode') || 'floor'; } catch { return 'floor'; } })(), floorArea: null, selTable: null };
   const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const STATUS_LABEL = { confirmed: 'Booked', seated: 'Seated', completed: 'Completed', cancelled: 'Cancelled', no_show: 'No-show' };
+  const STATUS_LABEL = { confirmed: 'Booked', seated: 'Seated', completed: 'Finished', cancelled: 'Cancelled', no_show: 'No-show' };
   const SOURCE_LABEL = { online: 'Rbooked', widget: 'Website', phone: 'Phone', walk_in: 'Walk-in', admin: 'Staff' };
 
   const fail = (e) => TB.toast(e.message, true);
@@ -636,7 +636,7 @@
     const tiles = [
       ['Reservations', data.reservations.filter((x) => x.status !== 'cancelled').length, 'bookings'],
       ['Covers', stats.covers || 0, 'covers'], ['Upcoming', stats.upcoming || 0, 'upcoming'], ['Seated', stats.seated || 0, 'seated'],
-      ['Completed', stats.completed || 0, 'completed'], ['No-shows', stats.no_shows || 0, 'no_shows'], ['Cancelled', stats.cancelled || 0, 'cancelled'],
+      ['Finished', stats.completed || 0, 'completed'], ['No-shows', stats.no_shows || 0, 'no_shows'], ['Cancelled', stats.cancelled || 0, 'cancelled'],
       ['Seats', stats.seats, 'seats'],
     ];
     document.getElementById('stats').innerHTML = tiles.map(([k, v, key]) =>
@@ -680,7 +680,7 @@
   function renderList(body, rows) {
     if (!rows.length) { body.innerHTML = `<div class="card"><p class="muted" style="margin:0">No reservations for ${TB.date(S.date, { weekday: 'long', month: 'long' })}. Use “+ New reservation” to add one.</p></div>`; return; }
     const now = nowLocal();
-    body.innerHTML = `<div class="card" style="padding:0"><div class="table-wrap"><table class="data">
+    body.innerHTML = `<div class="card" style="padding:0"><div class="table-wrap"><table class="data res-list">
       <thead><tr><th>Time</th><th>Guest</th><th>Party</th><th>Table</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody>${rows.map((x) => {
         const late = x.status === 'confirmed' && x.date === now.date && toMin(x.time) + 15 < now.minutes;
@@ -690,14 +690,11 @@
           <td>${x.guest_id ? `<a href="#guests" class="guest-link" data-guest="${x.guest_id}"><b>${esc(x.guest_name)}</b></a>` : `<b>${esc(x.guest_name)}</b>`}<br><a href="tel:${esc(x.guest_phone)}">${esc(x.guest_phone)}</a> · <span class="muted">${esc(x.guest_email)}</span>
             ${guestTags(x)}${x.notes ? `<div class="small" style="margin-top:4px">📝 ${esc(x.notes)}</div>` : ''}${x.guest_notes ? `<div class="small muted">📇 ${esc(x.guest_notes)}</div>` : ''}${x.internal_notes ? `<div class="small muted">🔒 ${esc(x.internal_notes)}</div>` : ''}
             <div class="small muted">#${esc(x.code)}</div></td>
-          <td>${x.party_size}</td>
-          <td><select data-act="table" ${dim ? 'disabled' : ''} style="min-width:130px" aria-label="Table">${seatOptions(seatVal(x))}</select></td>
-          <td><span class="badge ${x.status}">${STATUS_LABEL[x.status]}</span></td>
+          <td class="party-cell" data-label="Party">${x.party_size}<span class="show-sm"> ${x.party_size === 1 ? 'guest' : 'guests'}</span></td>
+          <td data-label="Table"><select data-act="table" ${dim ? 'disabled' : ''} style="min-width:130px" aria-label="Table">${seatOptions(seatVal(x))}</select></td>
+          <td data-label="Status"><span class="badge ${x.status}">${STATUS_LABEL[x.status]}</span></td>
           <td><div class="res-actions">
-            ${x.status === 'confirmed' ? '<button class="btn ok sm" data-act="seat">Seat</button><button class="btn secondary sm" data-act="noshow">No-show</button>' : ''}
-            ${x.status === 'seated' ? '<button class="btn secondary sm" data-act="complete">Complete</button>' : ''}
-            ${['confirmed', 'seated'].includes(x.status) ? '<button class="btn secondary sm" data-act="edit">Edit</button><button class="btn secondary sm" data-act="cancel">Cancel</button>' : ''}
-            ${['no_show', 'completed'].includes(x.status) ? '<button class="btn secondary sm" data-act="undo">Undo</button>' : ''}
+            ${statusButtons(x, 'data-act')}
             ${x.guest_email !== 'walkin@guest.local' ? '<button class="btn ghost sm" data-act="resend" title="Resend email" aria-label="Resend email">✉️</button>' : ''}
           </div></td></tr>`;
       }).join('')}</tbody></table></div></div>`;
@@ -714,10 +711,18 @@
     body.querySelectorAll('.guest-link').forEach((a) => { a.onclick = (e) => { e.preventDefault(); S.openGuest = Number(a.dataset.guest); location.hash = 'guests'; }; });
   }
 
+  // Status buttons for a reservation: Seat → Finished, or No-show / Cancel, and Undo. Big enough to tap on a phone.
+  function statusButtons(x, attr, extra = '') {
+    const b = (act, label, cls = 'secondary') => `<button class="btn ${cls} sm" ${attr}="${act}" ${extra}>${label}</button>`;
+    if (x.status === 'confirmed') return b('seat', '✓ Seat', 'ok') + b('noshow', 'No-show') + b('cancel', 'Cancel') + b('edit', 'Edit');
+    if (x.status === 'seated') return b('complete', '✓ Finished', 'ok') + b('undo', 'Undo seat') + b('cancel', 'Cancel') + b('edit', 'Edit');
+    if (['no_show', 'completed'].includes(x.status)) return b('undo', 'Undo');
+    return '';
+  }
   async function resAction(act, x) {
     try {
       if (act === 'seat') { await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { status: 'seated' } }); TB.toast(`${x.guest_name} seated`); }
-      if (act === 'complete') await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { status: 'completed' } });
+      if (act === 'complete') { await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { status: 'completed' } }); TB.toast(`${x.guest_name}'s table is finished`); }
       if (act === 'undo') await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { status: 'confirmed' } });
       if (act === 'resend') { await api(`/api/admin/reservations/${x.id}/resend`, { body: {} }); TB.toast('Email sent'); return; }
       if (act === 'edit') return reservationModal(x, load);
@@ -879,9 +884,7 @@
         ${x.combo_id ? `<div class="small">⛓ ${esc(x.table_label || '')}</div>` : ''}
         ${guestTags(x)}${x.notes ? `<div class="small">📝 ${esc(x.notes)}</div>` : ''}${x.guest_notes ? `<div class="small muted">📇 ${esc(x.guest_notes)}</div>` : ''}
         <div class="res-actions" style="margin-top:8px">
-          ${x.status === 'confirmed' ? `<button class="btn ok sm" data-a="seat" data-x="${x.id}">Seat</button>` : ''}
-          ${x.status === 'seated' ? `<button class="btn secondary sm" data-a="complete" data-x="${x.id}">Complete</button>` : ''}
-          <button class="btn secondary sm" data-a="edit" data-x="${x.id}">Edit</button></div></div>`;
+          ${statusButtons(x, 'data-a', `data-x="${x.id}"`)}</div></div>`;
       const nextIn = st.next ? toMin(st.next.time) - t0 : null;
       const later = st.list.filter((x) => x !== st.cur && x !== st.next && toMin(x.time) > t0);
       p.innerHTML = `<div class="row"><h2 style="margin:0">Table ${esc(t.label)}</h2><span class="spacer"></span><button class="btn ghost sm" id="rf-x" aria-label="Close">✕</button></div>
