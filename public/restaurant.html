@@ -23,6 +23,7 @@
 </main>
 <footer class="footer"><div class="container row"><span>© Tablebird</span><span class="spacer"></span><a href="/for-restaurants">List your restaurant</a><a href="/login">Restaurant login</a></div></footer>
 <script src="/js/common.js"></script>
+<script src="/js/matcher.js"></script>
 <script src="/js/booking.js"></script>
 <script>
 (async function () {
@@ -38,7 +39,8 @@
   document.getElementById('banner').setAttribute('style', TB.thumbStyle(r));
   const map = `https://www.openstreetmap.org/search?query=${encodeURIComponent(`${r.address}, ${r.city}, ${r.state} ${r.zip}`)}`;
   document.getElementById('about').innerHTML = `
-    <div class="r-meta" style="margin-bottom:8px">${esc(r.cuisine)} · ${TB.price(r.price_level)}</div>
+    <div class="r-meta" style="margin-bottom:8px">${esc(r.cuisine)} · ${TB.price(r.price_level)}${r.featured ? ' · <span class="feat-badge">Featured</span>' : ''}</div>
+    <div class="tagchips" style="margin-bottom:10px">${TBMatch.parseTags(r.tags).map((t) => `<span class="tagchip">${esc(TBMatch.label(t))}</span>`).join('')}</div>
     <p>${esc(r.description || '')}</p>
     <p><b>Address</b><br>${esc(r.address)}<br>${esc(r.city)}, ${esc(r.state)} ${esc(r.zip)} · <a href="${map}" target="_blank" rel="noopener">Map</a></p>
     <p><b>Phone</b><br><a href="tel:${esc(r.phone)}">${esc(r.phone)}</a></p>

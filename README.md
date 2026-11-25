@@ -74,13 +74,16 @@ How billing works:
 - Booking takes name, email, phone, occasion and special requests. A hidden honeypot field blocks simple bots.
 - The private manage link lets guests view, **change** (date, time or party size, re-checked against availability) or **cancel**.
 
+- **Pick for me**: diners choose a few quick options (food such as vegan or halal, vibe such as classy or romantic, extras, price) plus a time. Tablebird ranks nearby restaurants with a table open within 90 minutes of that time and shows a top pick with a match score, the reasons, and other good matches. Food choices are treated as must-haves. The ranking lives in `public/js/matcher.js`.
+- **Featured restaurants** appear on the home page, near the diner's ZIP when one is known. Featured is set by the platform (`restaurants.featured`), so it can later become a paid add-on.
+
 **Restaurants (dashboard at `/admin/`)**
 - **Reservations**: a day view with list and **timeline** (tables × time) modes, plus stats for covers, seated, no-shows and cancellations. Staff can seat, complete, mark no-show, cancel (with optional guest email), edit, reassign tables, resend email, take phone bookings and seat walk-ins. Each guest shows history tags (visits and no-shows) and a "Late" flag.
 - **Floor plan & tables**: rooms or areas; drag-and-drop tables; shapes (square, round, long, booth, bar); **min and max seats with chairs drawn around each table**; rotation; online-bookable and active flags. A live view shows which tables are booked or seated at any time.
 - **Services & hours**: per service, set the days, first and last seating, slot interval, table turn time, and **max covers per slot** (pacing). Closed dates and holidays can be added too.
 - **Guests**: a CRM-style list with reservations, visits, no-shows and cancellations per guest.
 - **Website widget**: copy-paste snippets (inline, floating button, iframe, direct link) with a live preview.
-- **Settings**: profile, brand color, max online party size, booking window, minimum notice, reminder timing, cancellation policy, and no-show automation (grace period and whether to email the guest).
+- **Settings**: profile, tags that describe the restaurant (vegan, classy, outdoor seating…), brand color, max online party size, booking window, minimum notice, reminder timing, cancellation policy, and no-show automation (grace period and whether to email the guest).
 - **Billing** and the **Email log**.
 
 **How availability works**

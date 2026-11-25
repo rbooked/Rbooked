@@ -564,6 +564,9 @@
         <div class="grid-2"><div class="field"><label>Time zone</label><select name="timezone">${tzs.map((z) => `<option${z === r.timezone ? ' selected' : ''}>${z}</option>`).join('')}</select></div>
         <div class="field"><label>Brand color</label><input type="color" name="accent_color" value="${esc(r.accent_color)}" style="height:44px;padding:4px"></div></div>
         <div class="field"><label>Photo URL (optional)</label><input name="image_url" value="${esc(r.image_url)}" placeholder="https://…"></div>
+        <div class="field"><label>What describes you? (used by search and “Pick for me”)</label>
+          <div class="days">${TBMatch.TAGS.map((t) => `<label><input type="checkbox" data-tag="${t.id}" ${TBMatch.parseTags(r.tags).includes(t.id) ? 'checked' : ''}>${esc(t.label)}</label>`).join('')}</div>
+          ${r.featured ? '<p class="small" style="margin-top:8px"><span class="feat-badge">Featured</span> Your restaurant is featured on the Tablebird home page.</p>' : ''}</div>
       </div>
       <div>
         <div class="card" style="margin-bottom:16px"><h2>Booking rules</h2>
@@ -585,7 +588,9 @@
     document.getElementById('s-form').onsubmit = async (e) => {
       e.preventDefault();
       try {
-        await api('/api/admin/restaurant', { method: 'PUT', body: TB.formData(e.target) });
+        const body = TB.formData(e.target);
+        body.tags = [...e.target.querySelectorAll('[data-tag]:checked')].map((x) => x.dataset.tag);
+        await api('/api/admin/restaurant', { method: 'PUT', body });
         S.me = await api('/api/admin/restaurant');
         document.getElementById('rest-name').textContent = S.me.restaurant.name;
         document.documentElement.style.setProperty('--brand', S.me.restaurant.accent_color);

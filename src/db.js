@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS restaurants (
   send_no_show_email INTEGER DEFAULT 1,
   cancellation_policy TEXT DEFAULT 'Please cancel at least 2 hours before your reservation.',
   accent_color TEXT DEFAULT '#c2410c',
+  tags TEXT DEFAULT '',                  -- comma list of tag ids (see public/js/matcher.js)
+  featured INTEGER DEFAULT 0,            -- set by the platform, shown in "Featured" sections
   -- billing
   trial_ends_at TEXT NOT NULL,
   subscription_status TEXT NOT NULL DEFAULT 'trialing', -- trialing | active | past_due | canceled | expired
@@ -154,6 +156,11 @@ CREATE TABLE IF NOT EXISTS zip_cache (
   state TEXT
 );
 `);
+
+// Lightweight migrations for databases created by earlier versions.
+const cols = new Set(db.prepare('PRAGMA table_info(restaurants)').all().map((c) => c.name));
+if (!cols.has('tags')) db.exec("ALTER TABLE restaurants ADD COLUMN tags TEXT DEFAULT ''");
+if (!cols.has('featured')) db.exec('ALTER TABLE restaurants ADD COLUMN featured INTEGER DEFAULT 0');
 
 /** Run fn inside a transaction. */
 function tx(fn) {

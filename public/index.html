@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="/css/app.css">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%229%22 fill=%22%23c2410c%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2218%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Georgia%22%3ET%3C/text%3E%3C/svg%3E">
 <title>Tablebird · Book a table near you</title>
-<meta name="description" content="Find restaurants near your ZIP code and book a table instantly.">
+<meta name="description" content="Find restaurants near your ZIP code and book a table instantly, or let Tablebird pick one for you.">
 </head>
 <body>
 <header class="site-header"><div class="container">
@@ -16,87 +16,210 @@
 <section class="hero">
   <div class="container">
     <h1>Find a table near you, tonight or any night.</h1>
-    <p>Enter your ZIP code to see nearby restaurants and the times they have open. Book in seconds, no account needed.</p>
+    <p>Search by ZIP code and book in seconds. Can't decide? Tell us your mood and we'll pick a place with a table open at your time.</p>
+    <div class="mode-tabs" role="tablist" aria-label="How do you want to find a table?">
+      <button type="button" role="tab" id="tab-search" aria-selected="true" data-mode="search">Search restaurants</button>
+      <button type="button" role="tab" id="tab-pick" aria-selected="false" data-mode="pick">✨ Pick for me</button>
+    </div>
     <form class="search-bar" id="search">
       <div><label for="zip" class="hidden">ZIP code</label><input id="zip" name="zip" inputmode="numeric" maxlength="5" placeholder="ZIP code" required pattern="\d{5}" aria-label="ZIP code"></div>
       <input id="date" name="date" type="date" aria-label="Date">
       <select id="time" name="time" aria-label="Time"></select>
       <select id="party" name="party" aria-label="Party size"></select>
-      <button class="btn lg" type="submit">Find a table</button>
+      <button class="btn lg" type="submit" id="go">Find a table</button>
+      <div class="prefs hidden" id="prefs">
+        <div class="pref-group"><span class="pref-label">Food</span><div class="chips" data-group="diet"></div></div>
+        <div class="pref-group"><span class="pref-label">Vibe</span><div class="chips" data-group="vibe"></div></div>
+        <div class="pref-group"><span class="pref-label">Extras</span><div class="chips" data-group="extra"></div></div>
+        <div class="pref-group"><span class="pref-label">Price</span><div class="chips" id="price-chips">
+          <button type="button" class="chip on" data-price="0">Any</button><button type="button" class="chip" data-price="1">$</button><button type="button" class="chip" data-price="2">$$</button><button type="button" class="chip" data-price="3">$$$</button><button type="button" class="chip" data-price="4">$$$$</button>
+        </div></div>
+      </div>
     </form>
   </div>
 </section>
 <main class="container results">
   <div class="results-head" id="results-head"></div>
+  <div id="pick-result"></div>
   <div id="results"></div>
   <div id="empty" class="card hidden"></div>
-  <section class="section" id="how">
+  <section class="section" id="featured-wrap">
+    <div class="row" style="align-items:baseline"><h2 class="serif" style="font-size:30px;margin:0">Featured restaurants</h2><span class="muted small" id="featured-where"></span></div>
+    <div class="featured" id="featured"><p class="muted">Loading…</p></div>
+  </section>
+  <section class="section" id="how" style="padding-top:0">
     <h2 class="serif" style="font-size:30px">How it works</h2>
     <div class="features">
-      <div class="card feature"><h3>1. Search by ZIP</h3><p class="muted">See restaurants within 25 miles, sorted by distance, with real open times.</p></div>
-      <div class="card feature"><h3>2. Pick a time</h3><p class="muted">Tap a time slot. Tables are held live, so what you see is what you get.</p></div>
-      <div class="card feature"><h3>3. Get it by email</h3><p class="muted">Instant confirmation, a calendar invite, and a reminder before you go. Cancel or change anytime.</p></div>
+      <div class="card feature"><h3>Search by ZIP</h3><p class="muted">See restaurants within 25 miles, sorted by distance, with real open times.</p></div>
+      <div class="card feature"><h3>Or let us pick</h3><p class="muted">Choose vegan, classy, romantic or more. We'll match you with a place that has a table at your time.</p></div>
+      <div class="card feature"><h3>Book in seconds</h3><p class="muted">Tap a time. Tables are held live, so what you see is what you get.</p></div>
+      <div class="card feature"><h3>Get it by email</h3><p class="muted">Instant confirmation, a calendar invite, and a reminder before you go. Cancel or change anytime.</p></div>
     </div>
   </section>
 </main>
 <footer class="footer"><div class="container row"><span>© Tablebird</span><span class="spacer"></span><a href="/for-restaurants">List your restaurant</a><a href="/login">Restaurant login</a></div></footer>
 <script src="/js/common.js"></script>
+<script src="/js/matcher.js"></script>
 <script>
 (function () {
   const { api, esc } = TB;
   const f = document.getElementById('search');
   const params = new URLSearchParams(location.search);
+  const ls = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { /* ignore */ } } };
   f.date.value = params.get('date') || TB.today();
   f.date.min = TB.today();
   f.time.innerHTML = TB.timeOptions(params.get('time') || '19:00');
   f.party.innerHTML = TB.partyOptions(params.get('party') || 2, 20);
-  f.zip.value = params.get('zip') || localStorageGet('tb_zip') || '';
+  f.zip.value = params.get('zip') || ls.get('tb_zip') || '';
 
-  function localStorageGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
-  function localStorageSet(k, v) { try { localStorage.setItem(k, v); } catch { /* ignore */ } }
+  // ----- mode: search vs pick for me -----
+  let mode = params.get('mode') === 'pick' ? 'pick' : 'search';
+  const prefs = new Set((params.get('prefs') || '').split(',').filter(Boolean));
+  let price = Number(params.get('price')) || 0;
+  document.querySelectorAll('#prefs .chips[data-group]').forEach((box) => {
+    box.innerHTML = TBMatch.TAGS.filter((t) => t.group === box.dataset.group)
+      .map((t) => `<button type="button" class="chip${prefs.has(t.id) ? ' on' : ''}" data-tag="${t.id}" aria-pressed="${prefs.has(t.id)}">${esc(t.label)}</button>`).join('');
+  });
+  document.querySelectorAll('[data-tag]').forEach((b) => {
+    b.onclick = () => { const on = !prefs.has(b.dataset.tag); on ? prefs.add(b.dataset.tag) : prefs.delete(b.dataset.tag); b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); };
+  });
+  document.querySelectorAll('[data-price]').forEach((b) => {
+    b.classList.toggle('on', Number(b.dataset.price) === price);
+    b.onclick = () => { price = Number(b.dataset.price); document.querySelectorAll('[data-price]').forEach((x) => x.classList.toggle('on', x === b)); };
+  });
+  function setMode(m) {
+    mode = m;
+    document.querySelectorAll('.mode-tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === m)));
+    document.getElementById('prefs').classList.toggle('hidden', m !== 'pick');
+    document.getElementById('go').textContent = m === 'pick' ? 'Pick for me' : 'Find a table';
+  }
+  document.querySelectorAll('.mode-tabs button').forEach((b) => { b.onclick = () => setMode(b.dataset.mode); });
+  setMode(mode);
 
-  f.onsubmit = (e) => { e.preventDefault(); search(true); };
+  f.onsubmit = (e) => { e.preventDefault(); mode === 'pick' ? pick(true) : search(true); };
+
+  const head = document.getElementById('results-head');
+  const list = document.getElementById('results');
+  const empty = document.getElementById('empty');
+  const pickBox = document.getElementById('pick-result');
+  const bookLink = (r, party, t) => `/restaurant?slug=${encodeURIComponent(r.slug)}&date=${r.date}&party=${party}${t ? `&time=${t}` : ''}`;
+  const tagChips = (r, highlight = [], limit = 99) => TBMatch.parseTags(r.tags).slice(0, limit).map((t) => `<span class="tagchip${highlight.includes(t) ? ' hit' : ''}">${esc(TBMatch.label(t))}</span>`).join('');
+
+  function readForm() {
+    const zip = f.zip.value.trim();
+    if (!/^\d{5}$/.test(zip)) { TB.toast('Please enter a 5-digit ZIP code.', true); return null; }
+    ls.set('tb_zip', zip);
+    return { zip, date: f.date.value, time: f.time.value, party: f.party.value };
+  }
+  function clear() { head.textContent = ''; list.innerHTML = ''; pickBox.innerHTML = ''; empty.classList.add('hidden'); }
+  function noneNear(zip) {
+    empty.classList.remove('hidden');
+    empty.innerHTML = `<h3>No restaurants on Tablebird near ${esc(zip)} yet.</h3>
+      <p class="muted">Know a great spot? <a href="/for-restaurants">Restaurants can join free for 30 days.</a></p>
+      <p class="muted small">Sample restaurants are in ZIPs 10011, 94110, 97205, 60607 and 78701.</p>`;
+  }
 
   async function search(push) {
-    const zip = f.zip.value.trim();
-    if (!/^\d{5}$/.test(zip)) { TB.toast('Please enter a 5-digit ZIP code.', true); return; }
-    localStorageSet('tb_zip', zip);
-    const q = new URLSearchParams({ zip, date: f.date.value, time: f.time.value, party: f.party.value });
+    const v = readForm(); if (!v) return;
+    const q = new URLSearchParams(v);
     if (push) history.replaceState(null, '', '?' + q);
-    const head = document.getElementById('results-head');
-    const list = document.getElementById('results');
-    const empty = document.getElementById('empty');
-    head.textContent = 'Searching…'; list.innerHTML = ''; empty.classList.add('hidden');
+    clear(); head.textContent = 'Searching…';
     try {
       const data = await api('/api/public/search?' + q);
-      const where = data.origin ? `${data.origin.city}, ${data.origin.state}` : zip;
-      head.innerHTML = `<b>${data.results.length}</b> restaurant${data.results.length === 1 ? '' : 's'} near ${esc(where)} · ${TB.date(f.date.value)} · ${data.party} ${data.party === 1 ? 'person' : 'people'}`;
-      if (!data.results.length) {
-        empty.classList.remove('hidden');
-        empty.innerHTML = `<h3>No restaurants on Tablebird near ${esc(zip)} yet.</h3>
-          <p class="muted">Know a great spot? <a href="/for-restaurants">Restaurants can join free for 30 days.</a></p>
-          <p class="muted small">Demo data lives in ZIPs 10011, 94110, 97205, 60607 and 78701.</p>`;
-      }
-      list.innerHTML = data.results.map((r) => {
-        const link = (t) => `/restaurant?slug=${encodeURIComponent(r.slug)}&date=${r.date}&party=${data.party}${t ? `&time=${t}` : ''}`;
-        return `<article class="card r-card">
-          <a href="${link()}" class="r-thumb" style="${TB.thumbStyle(r)}" aria-hidden="true" tabindex="-1">${r.image_url ? '' : esc(TB.initials(r.name))}</a>
-          <div>
-            <h3><a href="${link()}">${esc(r.name)}</a></h3>
-            <div class="r-meta">${esc(r.cuisine)} · ${TB.price(r.price_level)} · ${esc(r.city)}${r.miles != null ? ` · ${r.miles} mi` : ''}</div>
-            <div class="r-meta">${esc(r.address)}, ${esc(r.zip)} · <a href="tel:${esc(r.phone)}">${esc(r.phone)}</a></div>
-            <div class="slots">${r.closed ? '<span class="muted small">Closed this day</span>'
-              : r.slots.length ? r.slots.map((t) => `<a class="slot" style="background:${esc(r.accent_color)}" href="${link(t)}">${TB.time(t)}</a>`).join('')
-              : '<span class="muted small">No tables near this time. <a href="' + link() + '">See all times</a></span>'}</div>
-          </div></article>`;
-      }).join('');
-    } catch (err) {
-      head.textContent = '';
-      empty.classList.remove('hidden');
-      empty.innerHTML = `<div class="alert error">${esc(err.message)}</div>`;
-    }
+      const where = data.origin ? `${data.origin.city}, ${data.origin.state}` : v.zip;
+      head.innerHTML = `<b>${data.results.length}</b> restaurant${data.results.length === 1 ? '' : 's'} near ${esc(where)} · ${TB.date(v.date)} · ${data.party} ${data.party === 1 ? 'person' : 'people'}`;
+      if (!data.results.length) noneNear(v.zip);
+      list.innerHTML = data.results.map((r) => card(r, data.party)).join('');
+    } catch (err) { head.textContent = ''; empty.classList.remove('hidden'); empty.innerHTML = `<div class="alert error">${esc(err.message)}</div>`; }
   }
-  if (f.zip.value && params.get('zip')) search(false);
+
+  function card(r, party) {
+    const link = (t) => bookLink(r, party, t);
+    return `<article class="card r-card">
+      <a href="${link()}" class="r-thumb" style="${TB.thumbStyle(r)}" aria-hidden="true" tabindex="-1">${r.image_url ? '' : esc(TB.initials(r.name))}</a>
+      <div>
+        <h3><a href="${link()}">${esc(r.name)}</a>${r.featured ? ' <span class="feat-badge">Featured</span>' : ''}</h3>
+        <div class="r-meta">${esc(r.cuisine)} · ${TB.price(r.price_level)} · ${esc(r.city)}${r.miles != null ? ` · ${r.miles} mi` : ''}</div>
+        <div class="r-meta">${esc(r.address)}, ${esc(r.zip)} · <a href="tel:${esc(r.phone)}">${esc(r.phone)}</a></div>
+        <div class="tagchips">${tagChips(r)}</div>
+        <div class="slots">${r.closed ? '<span class="muted small">Closed this day</span>'
+          : r.slots.length ? r.slots.map((t) => `<a class="slot" style="background:${esc(r.accent_color)}" href="${link(t)}">${TB.time(t)}</a>`).join('')
+          : `<span class="muted small">No tables near this time. <a href="${link()}">See all times</a></span>`}</div>
+      </div></article>`;
+  }
+
+  let picks = []; let pickIdx = 0; let pickParty = 2;
+  async function pick(push) {
+    const v = readForm(); if (!v) return;
+    const q = new URLSearchParams({ ...v, mode: 'pick', prefs: [...prefs].join(','), price });
+    if (push) history.replaceState(null, '', '?' + q);
+    clear(); head.textContent = 'Finding your table…';
+    try {
+      const data = await api('/api/public/pick?' + q);
+      picks = data.picks; pickIdx = 0; pickParty = data.party;
+      const where = data.origin ? `${data.origin.city}, ${data.origin.state}` : v.zip;
+      const wanted = [...prefs].map(TBMatch.label).concat(price ? ['$'.repeat(price)] : []);
+      head.innerHTML = `Picked for you near ${esc(where)} · ${TB.date(v.date)} around ${TB.time(v.time)} · ${data.party} ${data.party === 1 ? 'person' : 'people'}${wanted.length ? ` · ${esc(wanted.join(', '))}` : ''}`;
+      if (!picks.length) {
+        empty.classList.remove('hidden');
+        empty.innerHTML = `<h3>No match with a table open around ${TB.time(v.time)}.</h3><p class="muted">Try fewer choices, a different time, or another date.</p>`;
+        return;
+      }
+      renderPick();
+    } catch (err) { head.textContent = ''; empty.classList.remove('hidden'); empty.innerHTML = `<div class="alert error">${esc(err.message)}</div>`; }
+  }
+
+  function renderPick() {
+    const m = picks[pickIdx]; const r = m.restaurant;
+    const others = picks.filter((_, i) => i !== pickIdx).slice(0, 3);
+    pickBox.innerHTML = `<article class="card pick-card">
+      <div class="pick-top"><span class="pick-eyebrow">${pickIdx === 0 ? 'Our top pick' : `Pick ${pickIdx + 1} of ${picks.length}`}</span><span class="match">${m.score}% match</span></div>
+      <div class="pick-body">
+        <a href="${bookLink(r, pickParty)}" class="r-thumb big" style="${TB.thumbStyle(r)}" aria-hidden="true" tabindex="-1">${r.image_url ? '' : esc(TB.initials(r.name))}</a>
+        <div style="min-width:0">
+          <h2 class="serif" style="font-size:30px;margin:0 0 4px"><a href="${bookLink(r, pickParty)}" style="color:inherit;text-decoration:none">${esc(r.name)}</a></h2>
+          <div class="r-meta">${esc(r.cuisine)} · ${TB.price(r.price_level)} · ${esc(r.address)}, ${esc(r.city)}</div>
+          <p style="margin:8px 0">${esc(r.description || '')}</p>
+          <div class="tagchips">${tagChips(r, m.matched)}</div>
+          <ul class="reasons">${m.reasons.map((x) => `<li>✓ ${esc(x)}</li>`).join('')}</ul>
+          ${m.missed.length ? `<p class="muted small">Doesn't list: ${esc(m.missed.map(TBMatch.label).join(', '))}</p>` : ''}
+          <div class="slots">${m.times.map((t) => `<a class="slot${t === m.time ? ' best' : ''}" style="background:${esc(r.accent_color)}" href="${bookLink(r, pickParty, t)}">${TB.time(t)}</a>`).join('')}</div>
+          <div class="row" style="margin-top:14px">${picks.length > 1 ? '<button class="btn secondary" type="button" id="next-pick">Show me another</button>' : ''}<a class="btn ghost" href="${bookLink(r, pickParty)}">See all times →</a></div>
+        </div>
+      </div></article>
+      ${others.length ? `<h3 style="margin:22px 0 10px;color:var(--ink)">Other good matches</h3>
+        <div class="featured">${others.map((o) => mini(o.restaurant, pickParty, o.times.slice(0, 3), `${o.score}% match`)).join('')}</div>` : ''}`;
+    const nb = document.getElementById('next-pick');
+    if (nb) nb.onclick = () => { pickIdx = (pickIdx + 1) % picks.length; renderPick(); pickBox.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  }
+
+  function mini(r, party, slots, badge) {
+    return `<article class="card mini">
+      <a href="${bookLink(r, party)}" class="mini-img" style="${TB.thumbStyle(r)}" aria-hidden="true" tabindex="-1">${r.image_url ? '' : esc(TB.initials(r.name))}</a>
+      <div class="mini-body">
+        <div class="row" style="gap:6px"><h3 style="margin:0;font-size:17px"><a href="${bookLink(r, party)}" style="color:inherit;text-decoration:none">${esc(r.name)}</a></h3><span class="spacer"></span>${badge ? `<span class="feat-badge">${esc(badge)}</span>` : ''}</div>
+        <div class="r-meta">${esc(r.cuisine)} · ${TB.price(r.price_level)} · ${esc(r.city)}${r.miles != null ? ` · ${r.miles} mi` : ''}</div>
+        <div class="tagchips">${tagChips(r, [], 3)}</div>
+        <div class="slots">${slots.length ? slots.map((t) => `<a class="slot sm" style="background:${esc(r.accent_color)}" href="${bookLink(r, party, t)}">${TB.time(t)}</a>`).join('') : `<a class="small" href="${bookLink(r, party)}">See times</a>`}</div>
+      </div></article>`;
+  }
+
+  async function loadFeatured() {
+    const zip = f.zip.value.trim();
+    const q = new URLSearchParams({ date: f.date.value, time: f.time.value, party: f.party.value });
+    if (/^\d{5}$/.test(zip)) q.set('zip', zip);
+    try {
+      let rows = await api('/api/public/featured?' + q);
+      let where = /^\d{5}$/.test(zip) ? `near ${zip}` : '';
+      if (!rows.length && q.has('zip')) { q.delete('zip'); rows = await api('/api/public/featured?' + q); where = 'across Tablebird'; }
+      document.getElementById('featured-where').textContent = where ? `· ${where}` : '';
+      document.getElementById('featured').innerHTML = rows.map((r) => mini(r, f.party.value, r.slots, 'Featured')).join('') || '<p class="muted">No featured restaurants yet.</p>';
+    } catch { document.getElementById('featured-wrap').classList.add('hidden'); }
+  }
+
+  loadFeatured();
+  f.zip.addEventListener('change', loadFeatured);
+  if (f.zip.value && params.get('zip')) (mode === 'pick' ? pick(false) : search(false));
 })();
 </script>
 </body>

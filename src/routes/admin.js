@@ -30,10 +30,11 @@ const owned = (table, id, rid) => {
 // ---------- Restaurant profile & settings ----------
 const SETTINGS = ['name', 'cuisine', 'price_level', 'description', 'phone', 'email', 'address', 'city', 'state', 'zip', 'timezone',
   'image_url', 'max_party_size', 'booking_window_days', 'min_notice_minutes', 'reminder_hours', 'no_show_grace_minutes',
-  'auto_no_show', 'send_no_show_email', 'cancellation_policy', 'accent_color'];
+  'auto_no_show', 'send_no_show_email', 'cancellation_policy', 'accent_color', 'tags'];
+const { parseTags } = require('../../public/js/matcher');
 
 router.get('/restaurant', wrap(async (req, res) => {
-  res.json({ restaurant: pick(req.restaurant, ['id', 'slug', ...SETTINGS]), user: req.user, billing: billing.billingSummary(req.restaurant), baseUrl: config.baseUrl });
+  res.json({ restaurant: pick(req.restaurant, ['id', 'slug', 'featured', ...SETTINGS]), user: req.user, billing: billing.billingSummary(req.restaurant), baseUrl: config.baseUrl });
 }));
 
 router.put('/restaurant', wrap(async (req, res) => {
@@ -42,12 +43,14 @@ router.put('/restaurant', wrap(async (req, res) => {
     if (f[k] !== undefined) f[k] = Math.max(0, Number(f[k]) || 0);
   }
   for (const k of ['auto_no_show', 'send_no_show_email']) if (f[k] !== undefined) f[k] = f[k] ? 1 : 0;
+  if (f.tags !== undefined) f.tags = parseTags(Array.isArray(f.tags) ? f.tags.join(',') : f.tags).join(',');
   if (f.timezone) { try { new Intl.DateTimeFormat('en-US', { timeZone: f.timezone }); } catch { throw new BookingError('Unknown time zone.'); } }
   if (f.zip && f.zip !== req.restaurant.zip) {
     const g = await lookupZip(f.zip);
     if (g) { f.lat = g.lat; f.lng = g.lng; }
   }
-  update('restaurants', req.restaurant.id, req.restaurant.id, f);
+  const keys = Object.keys(f);
+  if (keys.length) run(`UPDATE restaurants SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, ...keys.map((k) => f[k]), req.restaurant.id);
   res.json({ ok: true });
 }));
 

@@ -38,6 +38,9 @@ const RESTAURANTS = [
   ['Pilsen Table', 'Latin American', 2, '60607', '1430 W Taylor St', 'America/Chicago', 'Neighborhood spot for arepas, ceviche and cocktails.', '#be185d'],
 ];
 
+const TAGS = {"Ember & Rye": "classy,romantic,cocktails,vegetarian", "Little Saffron": "vegan,vegetarian,halal,casual,family", "Osteria Lume": "romantic,classy,quiet,vegetarian", "Kumo Sushi Bar": "classy,quiet,gluten_free", "Marrow & Vine": "classy,cocktails,views,gluten_free", "Tía Luz Cocina": "casual,lively,outdoor,family,vegetarian,vegan", "Fern & Fig": "vegan,vegetarian,gluten_free,casual,outdoor", "Harbor Oyster House": "classy,views,cocktails,gluten_free", "The Copper Kettle": "casual,lively,late_night,family", "Smoke Signal BBQ": "casual,lively,family,outdoor,gluten_free", "Pilsen Table": "lively,cocktails,late_night,vegan,vegetarian"};
+const FEATURED = new Set(["Ember & Rye", "Fern & Fig", "Harbor Oyster House", "Kumo Sushi Bar", "Smoke Signal BBQ", "Tía Luz Cocina"]);
+
 const FIRST = ['Ava', 'Liam', 'Maya', 'Noah', 'Sofia', 'Ethan', 'Zoe', 'Lucas', 'Priya', 'Omar', 'Grace', 'Diego', 'Hana', 'Sam'];
 const LAST = ['Johnson', 'Kim', 'Garcia', 'Patel', 'Nguyen', 'Brown', 'Rossi', 'Cohen', 'Okafor', 'Silva', 'Lee', 'Martin'];
 
@@ -54,9 +57,10 @@ tx(() => {
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
     const trialEnds = new Date(Date.now() + 30 * 86400000).toISOString();
     const rid = run(`INSERT INTO restaurants (slug, name, cuisine, price_level, description, phone, email, address, city, state, zip, lat, lng, timezone,
-      accent_color, trial_ends_at, subscription_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      accent_color, trial_ends_at, subscription_status, tags, featured) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     slug, name, cuisine, price, desc, `(555) 01${String(idx).padStart(2, '0')}-${1000 + idx * 7}`, `hello@${slug}.example`,
-    address, z[3], z[4], zip, z[1] + jitter(), z[2] + jitter(), tz, color, trialEnds, idx === 0 ? 'trialing' : 'active').lastInsertRowid;
+    address, z[3], z[4], zip, z[1] + jitter(), z[2] + jitter(), tz, color, trialEnds, idx === 0 ? 'trialing' : 'active',
+    TAGS[name] || '', FEATURED.has(name) ? 1 : 0).lastInsertRowid;
 
     const main = run('INSERT INTO areas (restaurant_id, name, sort_order) VALUES (?,?,0)', rid, 'Main room').lastInsertRowid;
     const patio = run('INSERT INTO areas (restaurant_id, name, sort_order) VALUES (?,?,1)', rid, 'Patio').lastInsertRowid;

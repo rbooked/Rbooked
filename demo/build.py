@@ -9,7 +9,7 @@ files = {
   'index.html': 'index.html', 'restaurant.html': 'restaurant.html', 'reservation.html': 'reservation.html',
   'for-restaurants.html': 'for-restaurants.html', 'login.html': 'login.html', 'embed.html': 'embed.html',
   'admin/index.html': 'admin.html', 'admin/admin.js': 'admin/admin.js', 'admin/admin.css': 'admin/admin.css',
-  'css/app.css': 'css/app.css', 'js/common.js': 'js/common.js', 'js/booking.js': 'js/booking.js',
+  'css/app.css': 'css/app.css', 'js/common.js': 'js/common.js', 'js/booking.js': 'js/booking.js', 'js/matcher.js': 'js/matcher.js',
 }
 REPL = [
   ('href="/css/', 'href="css/'), ('src="/js/', 'src="js/'),
@@ -19,12 +19,12 @@ REPL = [
   ("'/login'", "'login.html'"), ("'/admin/#welcome'", "'admin.html#welcome'"), ("'/admin/'", "'admin.html'"),
   ('href="/admin/"', 'href="admin.html"'), ('/restaurant?slug=', 'restaurant.html?slug='),
   ('${TB.base || location.origin}/reservation.html', 'reservation.html'),
-  ('src="/embed.html?r=', 'src="embed.html?r='),
+  ('src="/js/matcher.js"', 'src="js/matcher.js"'), ('src="/embed.html?r=', 'src="embed.html?r='),
   ('href="/api/admin/emails/${e.id}" target="_blank" rel="noopener"', 'href="#emails" data-email="${e.id}"'),
   ('href="#settings" data-view="settings"', 'href="#preferences" data-view="preferences"'),
   ("settings: ['Settings', viewSettings]", "preferences: ['Settings', viewSettings]"),
   ('href="#settings"', 'href="#preferences"'),
-  ('<script src="js/common.js"></script>', '<script src="mock-api.js"></script>\n<script src="js/common.js"></script>'),
+  ('<script src="js/common.js"></script>', '<script src="js/matcher.js"></script>\n<script src="mock-api.js"></script>\n<script src="js/common.js"></script>'),
 ]
 for src, dst in files.items():
     s = open(os.path.join(SRC, src), encoding='utf-8').read()
@@ -32,7 +32,7 @@ for src, dst in files.items():
         s = s.replace(a, b)
     if dst == 'index.html':  # the main page is wrapped in a document skeleton at publish time
         s = re.sub(r'<!doctype html>\s*', '', s, flags=re.I)
-        s = re.sub(r'</?(html|head|body)[^>]*>\s*', '', s, flags=re.I)
+        s = re.sub(r'</?(html|head|body)\b[^>]*>\s*', '', s, flags=re.I)
     open(os.path.join(OUT, dst), 'w', encoding='utf-8').write(s)
 shutil.copy(os.path.join(ROOT, 'demo', 'mock-api.js'), os.path.join(OUT, 'mock-api.js'))
 print('built', OUT)

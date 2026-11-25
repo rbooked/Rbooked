@@ -2,7 +2,7 @@
    It answers the same /api/... calls the real server does, keeps data in this
    browser's storage, and records every email in a demo inbox. */
 (function () {
-  const KEY = 'tablebird_demo_v1';
+  const KEY = 'tablebird_demo_v2';
   const mem = {};
   const store = {
     get() { try { return JSON.parse(localStorage.getItem(KEY)); } catch { return mem.db || null; } },
@@ -57,6 +57,12 @@
     ['Sol y Sal', 'Spanish', 3, '33130', '1200 Brickell Ave', 'America/New_York', 'Tapas, paella for two, and a long sherry list.', '#b91c1c'],
     ['Silver Lake Noodle', 'Thai', 2, '90028', '6300 Sunset Blvd', 'America/Los_Angeles', 'Boat noodles, khao soi and late-night curries.', '#7e22ce'],
   ];
+  const TAGS = { 'Ember & Rye': 'classy,romantic,cocktails,vegetarian', 'Little Saffron': 'vegan,vegetarian,halal,casual,family', 'Osteria Lume': 'romantic,classy,quiet,vegetarian',
+    'Kumo Sushi Bar': 'classy,quiet,gluten_free', 'Marrow & Vine': 'classy,cocktails,views,gluten_free', 'Tía Luz Cocina': 'casual,lively,outdoor,family,vegetarian,vegan',
+    'Fern & Fig': 'vegan,vegetarian,gluten_free,casual,outdoor', 'Harbor Oyster House': 'classy,views,cocktails,gluten_free', 'The Copper Kettle': 'casual,lively,late_night,family',
+    'Smoke Signal BBQ': 'casual,lively,family,outdoor,gluten_free', 'Pilsen Table': 'lively,cocktails,late_night,vegan,vegetarian',
+    'Sol y Sal': 'classy,romantic,cocktails,views,gluten_free', 'Silver Lake Noodle': 'casual,late_night,vegan,vegetarian,lively' };
+  const FEATURED = new Set(['Ember & Rye', 'Tía Luz Cocina', 'Fern & Fig', 'Harbor Oyster House', 'Smoke Signal BBQ', 'Kumo Sushi Bar', 'Sol y Sal']);
   const FIRST = ['Ava', 'Liam', 'Maya', 'Noah', 'Sofia', 'Ethan', 'Zoe', 'Lucas', 'Priya', 'Omar', 'Grace', 'Diego', 'Hana', 'Sam'];
   const LAST = ['Johnson', 'Kim', 'Garcia', 'Patel', 'Nguyen', 'Brown', 'Rossi', 'Cohen', 'Okafor', 'Silva', 'Lee', 'Martin'];
 
@@ -72,7 +78,7 @@
         timezone: tz, image_url: '', max_party_size: 8, booking_window_days: 60, min_notice_minutes: 60, reminder_hours: 24,
         no_show_grace_minutes: 30, auto_no_show: 0, send_no_show_email: 1, cancellation_policy: 'Please cancel at least 2 hours before your reservation.',
         accent_color: color, trial_ends_at: new Date(Date.now() + 30 * 86400000).toISOString(), subscription_status: idx === 0 ? 'trialing' : 'active',
-        stripe_subscription_id: null,
+        stripe_subscription_id: null, tags: TAGS[name] || '', featured: FEATURED.has(name) ? 1 : 0,
       };
       db.restaurants.push(r);
       starterFloor(db, r, true, id);
@@ -248,7 +254,7 @@
     return x;
   }
 
-  const PUBLIC = ['slug', 'name', 'cuisine', 'price_level', 'description', 'phone', 'address', 'city', 'state', 'zip', 'lat', 'lng', 'timezone', 'image_url', 'max_party_size', 'booking_window_days', 'cancellation_policy', 'accent_color'];
+  const PUBLIC = ['slug', 'name', 'cuisine', 'price_level', 'description', 'phone', 'address', 'city', 'state', 'zip', 'lat', 'lng', 'timezone', 'image_url', 'max_party_size', 'booking_window_days', 'cancellation_policy', 'accent_color', 'tags', 'featured'];
   const pub = (r) => Object.fromEntries(PUBLIC.map((k) => [k, r[k]]));
   const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
   function bookable(slug) {
@@ -290,23 +296,48 @@
   const routes = [];
   const on = (method, pattern, fn) => routes.push({ method, re: new RegExp(`^${pattern.replace(/:(\w+)/g, '(?<$1>[^/]+)')}$`), fn });
 
-  on('GET', '/api/public/search', (q) => {
-    const zip = String(q.zip || '').trim(); const party = Math.max(1, Math.min(20, Number(q.party) || 2));
-    const want = /^\d{2}:\d{2}$/.test(q.time || '') ? q.time : '19:00';
-    if (!/^\d{5}$/.test(zip)) throw new E('Please enter a 5-digit ZIP code.');
+  function nearby(zip, radius = 25) {
     const z = ZIPS[zip]; const origin = z ? { lat: z[0], lng: z[1], city: z[2], state: z[3] } : null;
-    let list = db.restaurants.filter(isBookable).map((r) => ({ r, mi: origin ? miles(origin, r) : (r.zip.slice(0, 3) === zip.slice(0, 3) ? 0 : Infinity) }))
-      .filter((x) => x.mi <= 25).sort((a, b) => a.mi - b.mi);
+    const list = db.restaurants.filter(isBookable)
+      .map((r) => ({ r, mi: origin && r.lat != null ? miles(origin, r) : (r.zip.slice(0, 3) === zip.slice(0, 3) ? (r.zip === zip ? 0 : 3) : Infinity) }))
+      .filter((x) => x.mi <= radius).sort((a, b) => a.mi - b.mi).map(({ r, mi }) => ({ r, miles: Math.round(mi * 10) / 10 }));
+    return { origin, list };
+  }
+  const dateFor = (d, r) => (/^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : nowInZone(r.timezone).date);
+  const openTimes = (r, date, party) => getAvailability(r, date, party).slots.filter((s) => s.available).map((s) => s.time);
+  const closest = (times, want, n = 5) => { const t = toMin(want); return times.slice().sort((a, b) => Math.abs(toMin(a) - t) - Math.abs(toMin(b) - t)).slice(0, n).sort(); };
+  const wantTime = (q) => (/^\d{2}:\d{2}$/.test(q.time || '') ? q.time : '19:00');
+  const partyOf = (q) => Math.max(1, Math.min(20, Number(q.party) || 2));
+
+  on('GET', '/api/public/tags', () => window.TBMatch.TAGS);
+  on('GET', '/api/public/search', (q) => {
+    const zip = String(q.zip || '').trim(); const party = partyOf(q); const want = wantTime(q);
+    if (!/^\d{5}$/.test(zip)) throw new E('Please enter a 5-digit ZIP code.');
+    const { origin } = nearby(zip); let { list } = nearby(zip);
     if (q.q) list = list.filter(({ r }) => `${r.name} ${r.cuisine}`.toLowerCase().includes(String(q.q).toLowerCase()));
+    if (q.tag) list = list.filter(({ r }) => window.TBMatch.parseTags(r.tags).includes(q.tag));
     return {
       origin: origin ? { city: origin.city, state: origin.state } : null, party, time: want,
-      results: list.map(({ r, mi }) => {
-        const date = /^\d{4}-\d{2}-\d{2}$/.test(q.date || '') ? q.date : nowInZone(r.timezone).date;
-        const av = getAvailability(r, date, party); const tgt = toMin(want);
-        const slots = av.slots.filter((s) => s.available).sort((a, b) => Math.abs(toMin(a.time) - tgt) - Math.abs(toMin(b.time) - tgt)).slice(0, 5).map((s) => s.time).sort();
-        return { ...pub(r), miles: Math.round(mi * 10) / 10, date, slots, closed: av.closed };
+      results: list.map(({ r, miles: mi }) => {
+        const date = dateFor(q.date, r); const av = getAvailability(r, date, party);
+        return { ...pub(r), miles: mi, date, slots: closest(av.slots.filter((s) => s.available).map((s) => s.time), want), closed: av.closed };
       }),
     };
+  });
+  on('GET', '/api/public/featured', (q) => {
+    const zip = String(q.zip || '').trim(); const party = partyOf(q); const want = wantTime(q);
+    const list = /^\d{5}$/.test(zip) ? nearby(zip, 50).list.filter((x) => x.r.featured) : db.restaurants.filter((r) => r.featured && isBookable(r)).map((r) => ({ r, miles: null }));
+    return list.slice(0, 12).map(({ r, miles: mi }) => { const date = dateFor(q.date, r); return { ...pub(r), miles: mi, date, slots: closest(openTimes(r, date, party), want, 3) }; });
+  });
+  on('GET', '/api/public/pick', (q) => {
+    const zip = String(q.zip || '').trim();
+    if (!/^\d{5}$/.test(zip)) throw new E('Please enter a 5-digit ZIP code.');
+    const party = partyOf(q); const want = wantTime(q);
+    const prefs = window.TBMatch.parseTags(q.prefs); const price = Math.max(0, Math.min(4, Number(q.price) || 0));
+    const { origin, list } = nearby(zip);
+    const ranked = window.TBMatch.rank(list.map(({ r, miles: mi }) => ({ restaurant: r, miles: mi, slots: openTimes(r, dateFor(q.date, r), party) })), { prefs, price, time: want })
+      .slice(0, 5).map((m) => ({ ...m, restaurant: { ...pub(m.restaurant), date: dateFor(q.date, m.restaurant) } }));
+    return { origin: origin ? { city: origin.city, state: origin.state } : null, party, time: want, prefs, price, picks: ranked };
   });
   on('GET', '/api/public/restaurants/:slug', (q, b, p) => {
     const r = bookable(p.slug);
@@ -359,7 +390,7 @@
       lat: z ? z[0] : near ? near.lat : null, lng: z ? z[1] : near ? near.lng : null, timezone: b.timezone || 'America/New_York', image_url: '',
       max_party_size: 8, booking_window_days: 60, min_notice_minutes: 60, reminder_hours: 24, no_show_grace_minutes: 30, auto_no_show: 0, send_no_show_email: 1,
       cancellation_policy: 'Please cancel at least 2 hours before your reservation.', accent_color: '#c2410c',
-      trial_ends_at: new Date(Date.now() + 30 * 86400000).toISOString(), subscription_status: 'trialing', stripe_subscription_id: null,
+      trial_ends_at: new Date(Date.now() + 30 * 86400000).toISOString(), subscription_status: 'trialing', stripe_subscription_id: null, tags: '', featured: 0,
     };
     db.restaurants.push(r);
     starterFloor(db, r, false, nextId);
@@ -377,16 +408,17 @@
   on('POST', '/api/auth/logout', () => { db.session = null; return { ok: true }; });
   on('GET', '/api/auth/me', () => { const u = db.users.find((x) => x.id === db.session); return { user: u ? { name: u.name, email: u.email } : null, demo: true }; });
 
-  const SETTINGS = ['name', 'cuisine', 'price_level', 'description', 'phone', 'email', 'address', 'city', 'state', 'zip', 'timezone', 'image_url', 'max_party_size', 'booking_window_days', 'min_notice_minutes', 'reminder_hours', 'no_show_grace_minutes', 'auto_no_show', 'send_no_show_email', 'cancellation_policy', 'accent_color'];
+  const SETTINGS = ['name', 'cuisine', 'price_level', 'description', 'phone', 'email', 'address', 'city', 'state', 'zip', 'timezone', 'image_url', 'max_party_size', 'booking_window_days', 'min_notice_minutes', 'reminder_hours', 'no_show_grace_minutes', 'auto_no_show', 'send_no_show_email', 'cancellation_policy', 'accent_color', 'tags'];
   on('GET', '/api/admin/restaurant', () => {
     const { u, r } = me();
     const base = location.href.replace(/[^/]*$/, '').replace(/\/$/, '');
-    return { restaurant: pick(r, ['id', 'slug', ...SETTINGS]), user: { name: u.name, email: u.email }, billing: billingSummary(r), baseUrl: 'https://YOUR-DOMAIN.com', demoBase: base };
+    return { restaurant: pick(r, ['id', 'slug', 'featured', ...SETTINGS]), user: { name: u.name, email: u.email }, billing: billingSummary(r), baseUrl: 'https://YOUR-DOMAIN.com', demoBase: base };
   });
   on('PUT', '/api/admin/restaurant', (q, b) => {
     const { r } = me(); const f = pick(b, SETTINGS);
     ['price_level', 'max_party_size', 'booking_window_days', 'min_notice_minutes', 'reminder_hours', 'no_show_grace_minutes'].forEach((k) => { if (f[k] !== undefined) f[k] = Math.max(0, Number(f[k]) || 0); });
     ['auto_no_show', 'send_no_show_email'].forEach((k) => { if (f[k] !== undefined) f[k] = f[k] ? 1 : 0; });
+    if (f.tags !== undefined) f.tags = window.TBMatch.parseTags(Array.isArray(f.tags) ? f.tags.join(',') : f.tags).join(',');
     Object.assign(r, f); return { ok: true };
   });
   on('GET', '/api/admin/reservations', (q) => {

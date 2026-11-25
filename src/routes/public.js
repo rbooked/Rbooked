@@ -11,7 +11,8 @@ const email = require('../email');
 const router = express.Router();
 
 const PUBLIC_FIELDS = ['slug', 'name', 'cuisine', 'price_level', 'description', 'phone', 'address', 'city', 'state', 'zip',
-  'lat', 'lng', 'timezone', 'image_url', 'max_party_size', 'booking_window_days', 'cancellation_policy', 'accent_color'];
+  'lat', 'lng', 'timezone', 'image_url', 'max_party_size', 'booking_window_days', 'cancellation_policy', 'accent_color', 'tags', 'featured'];
+const matcher = require('../../public/js/matcher');
 const publicRestaurant = (r) => Object.fromEntries(PUBLIC_FIELDS.map((k) => [k, r[k]]));
 
 function getBookableRestaurant(slug) {
@@ -31,6 +32,29 @@ const wrap = (fn) => async (req, res) => {
   }
 };
 
+/** Bookable restaurants near a ZIP, sorted by distance. */
+async function nearby(zip, radius = 25) {
+  const origin = await lookupZip(zip);
+  let list = all('SELECT * FROM restaurants').filter(isBookable);
+  if (origin) {
+    list = list.map((r) => ({ r, miles: r.lat != null ? milesBetween(origin, r) : (r.zip === zip ? 0 : Infinity) }))
+      .filter((x) => x.miles <= radius);
+  } else {
+    // Offline fallback: same 3-digit ZIP prefix.
+    list = list.filter((r) => r.zip.slice(0, 3) === zip.slice(0, 3)).map((r) => ({ r, miles: r.zip === zip ? 0 : null }));
+  }
+  list.sort((a, b) => (a.miles ?? 999) - (b.miles ?? 999));
+  return { origin, list: list.map((x) => ({ ...x, miles: x.miles == null ? null : Math.round(x.miles * 10) / 10 })) };
+}
+const dateFor = (q, r) => (/^\d{4}-\d{2}-\d{2}$/.test(q || '') ? q : nowInZone(r.timezone).date);
+const openTimes = (r, date, party) => getAvailability(r, date, party).slots.filter((s) => s.available).map((s) => s.time);
+function closest(times, wantTime, n = 5) {
+  const target = toMin(wantTime);
+  return times.slice().sort((a, b) => Math.abs(toMin(a) - target) - Math.abs(toMin(b) - target)).slice(0, n).sort();
+}
+
+router.get('/tags', (req, res) => res.json(matcher.TAGS));
+
 // ZIP code search: nearby restaurants with times around the requested time.
 router.get('/search', wrap(async (req, res) => {
   const zip = String(req.query.zip || '').trim();
@@ -38,32 +62,49 @@ router.get('/search', wrap(async (req, res) => {
   const wantTime = /^\d{2}:\d{2}$/.test(req.query.time || '') ? req.query.time : '19:00';
   const radius = Math.min(100, Number(req.query.radius) || 25);
   const q = String(req.query.q || '').trim().toLowerCase();
+  const tag = String(req.query.tag || '');
   if (!/^\d{5}$/.test(zip)) throw new BookingError('Please enter a 5-digit ZIP code.');
-
-  const origin = await lookupZip(zip);
-  let list = all('SELECT * FROM restaurants').filter(isBookable);
-  if (q) list = list.filter((r) => `${r.name} ${r.cuisine}`.toLowerCase().includes(q));
-
-  if (origin) {
-    list = list.map((r) => ({ r, miles: r.lat != null ? milesBetween(origin, r) : (r.zip === zip ? 0 : Infinity) }))
-      .filter((x) => x.miles <= radius);
-  } else {
-    // Offline fallback: same ZIP first, then same 3-digit ZIP prefix.
-    list = list.filter((r) => r.zip.slice(0, 3) === zip.slice(0, 3)).map((r) => ({ r, miles: r.zip === zip ? 0 : null }));
-  }
-  list.sort((a, b) => (a.miles ?? 999) - (b.miles ?? 999));
-
+  const { origin, list: near } = await nearby(zip, radius);
+  let list = near;
+  if (q) list = list.filter(({ r }) => `${r.name} ${r.cuisine}`.toLowerCase().includes(q));
+  if (tag) list = list.filter(({ r }) => matcher.parseTags(r.tags).includes(tag));
   const results = list.slice(0, 40).map(({ r, miles }) => {
-    const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : nowInZone(r.timezone).date;
+    const date = dateFor(req.query.date, r);
     const av = getAvailability(r, date, party);
-    const target = toMin(wantTime);
-    const open = av.slots.filter((s) => s.available)
-      .sort((a, b) => Math.abs(toMin(a.time) - target) - Math.abs(toMin(b.time) - target))
-      .slice(0, 5).sort((a, b) => toMin(a.time) - toMin(b.time))
-      .map((s) => s.time);
-    return { ...publicRestaurant(r), miles: miles == null ? null : Math.round(miles * 10) / 10, date, slots: open, closed: av.closed };
+    const slots = closest(av.slots.filter((s) => s.available).map((s) => s.time), wantTime);
+    return { ...publicRestaurant(r), miles, date, slots, closed: av.closed };
   });
   res.json({ origin: origin ? { city: origin.city, state: origin.state } : null, party, time: wantTime, results });
+}));
+
+// Featured restaurants, near a ZIP when one is given, with tonight's open times.
+router.get('/featured', wrap(async (req, res) => {
+  const zip = String(req.query.zip || '').trim();
+  const party = Math.max(1, Math.min(20, Number(req.query.party) || 2));
+  const wantTime = /^\d{2}:\d{2}$/.test(req.query.time || '') ? req.query.time : '19:00';
+  let list;
+  if (/^\d{5}$/.test(zip)) list = (await nearby(zip, 50)).list.filter((x) => x.r.featured);
+  else list = all('SELECT * FROM restaurants WHERE featured = 1').filter(isBookable).map((r) => ({ r, miles: null }));
+  res.json(list.slice(0, 12).map(({ r, miles }) => {
+    const date = dateFor(req.query.date, r);
+    return { ...publicRestaurant(r), miles, date, slots: closest(openTimes(r, date, party), wantTime, 3) };
+  }));
+}));
+
+// "Pick for me": choose restaurants from a few quick choices + time + live availability.
+router.get('/pick', wrap(async (req, res) => {
+  const zip = String(req.query.zip || '').trim();
+  if (!/^\d{5}$/.test(zip)) throw new BookingError('Please enter a 5-digit ZIP code.');
+  const party = Math.max(1, Math.min(20, Number(req.query.party) || 2));
+  const wantTime = /^\d{2}:\d{2}$/.test(req.query.time || '') ? req.query.time : '19:00';
+  const prefs = matcher.parseTags(req.query.prefs);
+  const price = Math.max(0, Math.min(4, Number(req.query.price) || 0));
+  const { origin, list } = await nearby(zip, Math.min(100, Number(req.query.radius) || 25));
+  const candidates = list.map(({ r, miles }) => ({ restaurant: r, miles, slots: openTimes(r, dateFor(req.query.date, r), party) }));
+  const ranked = matcher.rank(candidates, { prefs, price, time: wantTime }).slice(0, 5).map((m) => ({
+    ...m, restaurant: { ...publicRestaurant(m.restaurant), date: dateFor(req.query.date, m.restaurant) },
+  }));
+  res.json({ origin: origin ? { city: origin.city, state: origin.state } : null, party, time: wantTime, prefs, price, picks: ranked });
 }));
 
 router.get('/restaurants/:slug', wrap(async (req, res) => {

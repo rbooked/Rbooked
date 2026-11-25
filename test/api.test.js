@@ -75,6 +75,23 @@ test('guest can book, gets confirmation email, and the table is held', async () 
   assert.strictEqual(av.data.slots.find((s) => s.time === '17:00').available, true);
 });
 
+test('restaurant tags power "Pick for me" and featured lists', async () => {
+  const put = await call('PUT', '/api/admin/restaurant', { tags: ['vegan', 'classy', 'not_a_tag'] });
+  assert.strictEqual(put.status, 200);
+  assert.strictEqual(one('SELECT tags FROM restaurants').tags, 'vegan,classy');
+  const p = await call('GET', `/api/public/pick?zip=10011&date=${tomorrow}&time=18:00&party=2&prefs=vegan,classy`, null, false);
+  assert.strictEqual(p.status, 200);
+  assert.strictEqual(p.data.picks[0].restaurant.slug, 'test-bistro');
+  assert.deepStrictEqual(p.data.picks[0].matched, ['vegan', 'classy']);
+  assert.ok(p.data.picks[0].times.includes('18:00'));
+  // Diet choices are dealbreakers.
+  const h = await call('GET', `/api/public/pick?zip=10011&date=${tomorrow}&prefs=halal`, null, false);
+  assert.strictEqual(h.data.picks.length, 0);
+  run('UPDATE restaurants SET featured = 1');
+  const f = await call('GET', `/api/public/featured?zip=10011&date=${tomorrow}`, null, false);
+  assert.strictEqual(f.data[0].slug, 'test-bistro');
+});
+
 test('booking validates name, email and phone', async () => {
   const r = await call('POST', '/api/public/restaurants/test-bistro/reservations',
     { date: tomorrow, time: '18:00', party_size: 2, name: 'X', email: 'nope', phone: '1' }, false);
