@@ -45,7 +45,12 @@
 
   /** Free text (pasted, or read from a PDF/photo) → items. */
   function parseText(text) {
-    const lines = String(text || '').replace(/\r/g, '').split('\n').map((l) => l.replace(/\t/g, '  ').trim()).filter((l) => l && !/^page \d+( of \d+)?$/i.test(l));
+    // Letter-spaced headings in PDFs and photos come through as "S T A R T E R S": join those letters back up.
+    const unspace = (l) => l.split(/(\s{2,})/).map((chunk) => {
+      const t = chunk.split(' ');
+      return t.length >= 3 && t.every((x) => x.length <= 2) && t.filter((x) => x.length === 1).length >= t.length * 0.6 ? t.join('') : chunk;
+    }).join('');
+    const lines = String(text || '').replace(/\r/g, '').split('\n').map((l) => unspace(l.replace(/\t/g, '  ').trim())).filter((l) => l && !/^page \d+( of \d+)?$/i.test(l));
     const items = [];
     let section = 'Menu';
     let last = null; // the item lines are being attached to

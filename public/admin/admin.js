@@ -379,7 +379,15 @@
       const rows = new Map();
       for (const it of tc.items) { if (!it.str.trim()) continue; const y = Math.round(it.transform[5] / 3); if (!rows.has(y)) rows.set(y, []); rows.get(y).push(it); }
       const text = [...rows.entries()].sort((a, b) => b[0] - a[0]).map(([, its]) => its.sort((a, b) => a.transform[4] - b.transform[4])
-        .reduce((acc, it, i, arr) => { const prev = arr[i - 1]; const gap = prev ? it.transform[4] - (prev.transform[4] + prev.width) : 0; return acc + (i && gap > 12 ? '   ' : i && gap > 1 ? ' ' : '') + it.str; }, '')).join('\n');
+        .reduce((acc, it, i, arr) => {
+          // Space between pieces by the gap relative to the font size, so letter-spaced fonts don't become "F r i e d"
+          // and tightly set words don't run together.
+          const prev = arr[i - 1]; if (!prev) return it.str;
+          const size = Math.abs(it.transform[0]) || it.height || 10;
+          const gap = it.transform[4] - (prev.transform[4] + prev.width);
+          const sep = gap > size * 1.5 ? '   ' : gap > size * 0.28 && !/\s$/.test(acc) && !/^\s/.test(it.str) ? ' ' : '';
+          return acc + sep + it.str;
+        }, '').replace(/[ \t]{4,}/g, '   ')).join('\n');
       if (text.replace(/\s/g, '').length > 20) { out += `${text}\n`; continue; }
       // A scanned page with no text: read it like a photo.
       const vp = page.getViewport({ scale: 2 }); const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
