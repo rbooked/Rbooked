@@ -669,6 +669,14 @@
     const m = { id: nextId(), restaurant_id: r.id, description: '', price_cents: null, tags: '', available: 1, sort_order: mine.length ? Math.max(...mine.map((x) => x.sort_order)) + 1 : 0, created_at: nowSql(), ...f };
     db.menu.push(m); return m;
   });
+  on('POST', '/api/admin/menu/import', (q, b) => {
+    const { r } = me(); const list = (b.items || []).slice(0, 500).map((x) => ({ section: 'Menu', ...cleanMenuItem(x) })).filter((f) => f.name);
+    if (!list.length) throw new E('No dishes to import.');
+    if (b.replace) db.menu = db.menu.filter((m) => m.restaurant_id !== r.id);
+    const mine = db.menu.filter((m) => m.restaurant_id === r.id); let order = mine.length ? Math.max(...mine.map((x) => x.sort_order)) + 1 : 0;
+    for (const f of list) { delete f.sort_order; db.menu.push({ id: nextId(), restaurant_id: r.id, description: '', price_cents: null, tags: '', available: 1, created_at: nowSql(), ...f, sort_order: order++ }); }
+    return { imported: list.length };
+  });
   on('PUT', '/api/admin/menu/order', (q, b) => { const { r } = me(); (b.ids || []).forEach((id, i) => { const m = db.menu.find((x) => x.id === Number(id) && x.restaurant_id === r.id); if (m) m.sort_order = i; }); return { ok: true }; });
   on('PUT', '/api/admin/menu/:id', (q, b, p) => { const { r } = me(); const m = owned('menu', p.id, r.id); const f = cleanMenuItem(b); if (f.name === '') throw new E('Give the dish a name.'); Object.assign(m, f); return m; });
   on('DELETE', '/api/admin/menu/:id', (q, b, p) => { const { r } = me(); owned('menu', p.id, r.id); db.menu = db.menu.filter((m) => m.id !== Number(p.id)); return { ok: true }; });

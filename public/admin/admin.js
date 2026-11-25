@@ -225,11 +225,11 @@
     const counts = {}; items.forEach((m) => m.tags.split(',').filter(Boolean).forEach((t) => { counts[t] = (counts[t] || 0) + 1; }));
     const shown = (m) => !S.menuFilter || m.tags.split(',').includes(S.menuFilter);
     view.innerHTML = `
-      <div class="toolbar"><button class="btn" id="mi-add">+ Add dish</button>
+      <div class="toolbar"><button class="btn" id="mi-add">+ Add dish</button><button class="btn secondary" id="mi-import">⬆ Import menu</button>
         <div class="chips">${['', ...TBMatch.MENU_TAGS.map((t) => t.id)].map((id) => { const t = id ? TBMatch.menuTag(id) : null; return `<button class="chip ${S.menuFilter === id ? 'on' : ''}" data-f="${id}">${t ? `${t.icon} ${esc(t.label)} <span class="muted">${counts[id] || 0}</span>` : `All <span class="muted">${items.length}</span>`}</button>`; }).join('')}</div>
         <span class="spacer"></span><a class="btn ghost sm" href="${S.me.demoBase ? `restaurant.html?slug=${r.slug}` : `/restaurant?slug=${r.slug}`}#menu">Preview as a guest ↗</a></div>
       ${items.length ? '' : `<div class="card empty-menu"><h2>Add your menu</h2><p>Guests can browse it on your page and filter by vegetarian, vegan, gluten-free and more. Restaurants with 3 or more vegan (or vegetarian, gluten-free, halal) dishes also show up when guests search for those.</p>
-        <div class="row"><button class="btn" id="mi-first">+ Add your first dish</button><button class="btn secondary" id="mi-sample">Start from a sample ${esc(r.cuisine || '')} menu</button></div></div>`}
+        <div class="row"><button class="btn" id="mi-import2">⬆ Import my menu</button><button class="btn secondary" id="mi-first">+ Add dishes one by one</button><button class="btn ghost" id="mi-sample">Start from a sample ${esc(r.cuisine || '')} menu</button></div></div>`}
       ${sections.map((sec) => { const list = items.filter((m) => m.section === sec && shown(m)); if (!list.length) return ''; return `<div class="card menu-sec"><div class="row"><h2 style="margin:0">${esc(sec)}</h2><span class="muted small">${list.length} item${list.length > 1 ? 's' : ''}</span><span class="spacer"></span>
           <button class="btn ghost sm" data-rename="${esc(sec)}">Rename</button><button class="btn secondary sm" data-add-in="${esc(sec)}">+ Add to ${esc(sec)}</button></div>
           <div class="menu-list">${list.map((m) => `<div class="mi-row ${m.available ? '' : 'off'}" data-id="${m.id}">
@@ -242,6 +242,8 @@
     view.querySelectorAll('[data-f]').forEach((b) => { b.onclick = () => { S.menuFilter = b.dataset.f; viewMenu().catch(fail); }; });
     const add = (section) => menuItemModal(null, sections, section);
     document.getElementById('mi-add').onclick = () => add(sections[0] || 'Starters');
+    document.getElementById('mi-import').onclick = () => viewMenuImport(items.length);
+    const imp2 = document.getElementById('mi-import2'); if (imp2) imp2.onclick = () => viewMenuImport(0);
     const first = document.getElementById('mi-first'); if (first) first.onclick = () => add('Starters');
     const sample = document.getElementById('mi-sample');
     if (sample) {
@@ -273,6 +275,124 @@
       };
       row.querySelector('[data-up]').onclick = () => move(-1); row.querySelector('[data-down]').onclick = () => move(1);
     });
+  }
+
+  // ---------------- Menu import: paste, spreadsheet, PDF or photo (all read in the browser) ----------------
+  const loadScript = (src) => new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+    const el = document.createElement('script'); el.src = src; el.onload = resolve; el.onerror = () => reject(new Error('Could not load the file reader. Check your connection and try again.'));
+    document.head.appendChild(el);
+  });
+  // Readers are served from Rbooked itself (public/vendor) so they work without outside CDNs.
+  const LIBS = {
+    pdf: '/vendor/pdfjs/pdf.min.js', pdfWorker: '/vendor/pdfjs/pdf.worker.min.js',
+    ocr: '/vendor/tesseract/tesseract.min.js', xlsx: '/vendor/xlsx/xlsx.full.min.js',
+  };
+  const abs = (u) => new URL(u, location.href).href;
+  async function ocr(image, status, label) {
+    await loadScript(LIBS.ocr);
+    const worker = await window.Tesseract.createWorker('eng', 1, {
+      workerPath: abs('/vendor/tesseract/worker.min.js'), corePath: abs('/vendor/tesseract/core'), langPath: abs('/vendor/tesseract/lang'),
+      logger: (m) => { if (m.status === 'recognizing text') status(`${label}… ${Math.round(m.progress * 100)}%`); else if (/load/.test(m.status)) status(`${label}… getting ready`); },
+    });
+    try { const { data } = await worker.recognize(image); return data.text; } finally { worker.terminate(); }
+  }
+  async function pdfText(file, status) {
+    await loadScript(LIBS.pdf);
+    const lib = window.pdfjsLib; lib.GlobalWorkerOptions.workerSrc = LIBS.pdfWorker;
+    const doc = await lib.getDocument({ data: await file.arrayBuffer() }).promise;
+    const pages = Math.min(doc.numPages, 12); let out = '';
+    for (let n = 1; n <= pages; n++) {
+      status(`Reading page ${n} of ${pages}…`);
+      const page = await doc.getPage(n);
+      const tc = await page.getTextContent();
+      // Group text pieces into lines by their height on the page; keep wide gaps (e.g. before prices).
+      const rows = new Map();
+      for (const it of tc.items) { if (!it.str.trim()) continue; const y = Math.round(it.transform[5] / 3); if (!rows.has(y)) rows.set(y, []); rows.get(y).push(it); }
+      const text = [...rows.entries()].sort((a, b) => b[0] - a[0]).map(([, its]) => its.sort((a, b) => a.transform[4] - b.transform[4])
+        .reduce((acc, it, i, arr) => { const prev = arr[i - 1]; const gap = prev ? it.transform[4] - (prev.transform[4] + prev.width) : 0; return acc + (i && gap > 12 ? '   ' : i && gap > 1 ? ' ' : '') + it.str; }, '')).join('\n');
+      if (text.replace(/\s/g, '').length > 20) { out += `${text}\n`; continue; }
+      // A scanned page with no text: read it like a photo.
+      const vp = page.getViewport({ scale: 2 }); const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
+      await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+      out += `${await ocr(c, status, `Reading scanned page ${n} of ${pages}`)}\n`;
+    }
+    return out;
+  }
+  async function readMenuFile(file, status) {
+    const name = file.name.toLowerCase();
+    if (/\.(csv|tsv)$/.test(name)) return TBMenuImport.parseCSV(await file.text());
+    if (/\.(xlsx|xls|ods)$/.test(name)) {
+      status('Reading spreadsheet…'); await loadScript(LIBS.xlsx);
+      const wb = window.XLSX.read(await file.arrayBuffer());
+      return wb.SheetNames.flatMap((n) => TBMenuImport.parseRows(window.XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: '' }).map((r) => r.map(String))));
+    }
+    if (/\.pdf$/.test(name) || file.type === 'application/pdf') return TBMenuImport.parseText(await pdfText(file, status));
+    if (file.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp)$/.test(name)) return TBMenuImport.parseText(await ocr(file, status, 'Reading your photo'));
+    if (/\.(txt|md)$/.test(name) || file.type.startsWith('text/')) return TBMenuImport.parseText(await file.text());
+    throw new Error('Pick a PDF, a photo, an Excel/CSV file, or paste your menu as text.');
+  }
+
+  function viewMenuImport(existing) {
+    let rows = [];
+    document.getElementById('view-title').textContent = 'Import your menu';
+    view.innerHTML = `<div class="card imp-start"><h2>Import your menu</h2>
+      <p class="muted">Upload what you already have. We'll read it, then you check the dishes, prices and diet tags before anything is saved.</p>
+      <label class="imp-drop" id="imp-drop"><input type="file" id="imp-file" accept=".pdf,.csv,.tsv,.txt,.xlsx,.xls,image/*" hidden>
+        <b>📄 Choose a file</b><span class="muted small">PDF menu, photo of your menu, Excel or CSV</span></label>
+      <div class="imp-or"><span>or paste it</span></div>
+      <textarea id="imp-text" rows="7" placeholder="STARTERS&#10;Spring Rolls (V) ..... 8&#10;Crispy rolls with glass noodles&#10;&#10;MAINS&#10;Pad Thai - rice noodles, egg, peanuts  16"></textarea>
+      <div class="row" style="margin-top:10px"><button class="btn" id="imp-read">Read my menu</button><button class="btn ghost" id="imp-cancel">Cancel</button><span class="muted small" id="imp-status" role="status"></span></div>
+      <p class="small muted" style="margin:10px 0 0">Tip: (V), (VG), GF, “vegan”, “spicy” and 🌶 in your menu are turned into diet tags automatically.</p></div>
+      <div id="imp-review"></div>`;
+    const status = (t) => { document.getElementById('imp-status').textContent = t; };
+    const back = () => { history.replaceState(null, '', '#menu-items'); route(); };
+    document.getElementById('imp-cancel').onclick = back;
+    const run = async (fn) => {
+      const btn = document.getElementById('imp-read'); btn.disabled = true;
+      try { rows = await fn(); status(''); if (!rows.length) { status('We couldn’t find any dishes with prices. Try pasting the text, or a clearer photo.'); return; } review(); }
+      catch (e) { status(''); fail(e); } finally { btn.disabled = false; }
+    };
+    const file = document.getElementById('imp-file');
+    file.onchange = () => { const f = file.files[0]; if (f) { status(`Reading ${f.name}…`); run(() => readMenuFile(f, status)); } file.value = ''; };
+    const drop = document.getElementById('imp-drop');
+    drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
+    drop.ondragleave = () => drop.classList.remove('over');
+    drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove('over'); const f = e.dataTransfer.files[0]; if (f) { status(`Reading ${f.name}…`); run(() => readMenuFile(f, status)); } };
+    document.getElementById('imp-read').onclick = () => {
+      const t = document.getElementById('imp-text').value; if (!t.trim()) { status('Paste your menu or choose a file first.'); return; }
+      run(async () => TBMenuImport.parseText(t));
+    };
+
+    function review() {
+      const box = document.getElementById('imp-review');
+      const secs = [...new Set(rows.map((r) => r.section))];
+      box.innerHTML = `<div class="card" style="margin-top:16px"><div class="row"><h2 style="margin:0">Check ${rows.length} dish${rows.length === 1 ? '' : 'es'}</h2><span class="spacer"></span><span class="muted small">${secs.length} section${secs.length === 1 ? '' : 's'}</span></div>
+        <p class="small muted">Fix anything we read wrong. Remove rows you don't want. Nothing is saved until you press Import.</p>
+        <div class="imp-list">${rows.map((r, i) => `<div class="imp-row" data-i="${i}">
+          <div class="imp-top"><input data-k="name" value="${esc(r.name)}" aria-label="Dish name" placeholder="Dish name"><input data-k="price" value="${esc(r.price)}" inputmode="decimal" aria-label="Price" placeholder="Price" class="imp-price"><button class="btn ghost sm" data-rm aria-label="Remove ${esc(r.name)}">✕</button></div>
+          <div class="imp-mid"><input data-k="section" value="${esc(r.section)}" list="imp-secs" aria-label="Section" class="imp-sec"><input data-k="description" value="${esc(r.description)}" aria-label="Description" placeholder="Description (optional)"></div>
+          <div class="imp-tags">${TBMatch.MENU_TAGS.map((t) => `<label class="dchip ${r.tags.includes(t.id) ? 'on' : ''}"><input type="checkbox" data-tag="${t.id}" ${r.tags.includes(t.id) ? 'checked' : ''}>${t.icon} ${esc(t.label)}</label>`).join('')}</div></div>`).join('')}</div>
+        <datalist id="imp-secs">${secs.map((x) => `<option value="${esc(x)}">`).join('')}</datalist>
+        <div class="imp-actions">${existing ? `<label class="check"><input type="checkbox" id="imp-replace"> Replace my current menu (${existing} dish${existing === 1 ? '' : 'es'})</label>` : ''}
+          <button class="btn lg" id="imp-go">Import ${rows.length} dish${rows.length === 1 ? '' : 'es'}</button></div></div>`;
+      box.querySelectorAll('.imp-row').forEach((el) => {
+        const r = rows[Number(el.dataset.i)];
+        el.querySelectorAll('[data-k]').forEach((inp) => { inp.oninput = () => { r[inp.dataset.k] = inp.value; }; });
+        el.querySelectorAll('[data-tag]').forEach((cb) => { cb.onchange = () => { cb.parentElement.classList.toggle('on', cb.checked); r.tags = cb.checked ? [...new Set([...r.tags, cb.dataset.tag])] : r.tags.filter((x) => x !== cb.dataset.tag); }; });
+        el.querySelector('[data-rm]').onclick = () => { rows.splice(rows.indexOf(r), 1); review(); };
+      });
+      document.getElementById('imp-go').onclick = async (e) => {
+        const items = rows.filter((r) => String(r.name).trim()); if (!items.length) { TB.toast('No dishes to import.', true); return; }
+        e.target.disabled = true;
+        try {
+          const rep = document.getElementById('imp-replace');
+          const out = await api('/api/admin/menu/import', { body: { items, replace: !!(rep && rep.checked) } });
+          TB.toast(`${out.imported} dishes added to your menu`); setupSteps().catch(() => {}); back();
+        } catch (err) { e.target.disabled = false; fail(err); }
+      };
+      box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }
 
   function menuItemModal(m, sections, section) {

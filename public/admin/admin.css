@@ -222,3 +222,26 @@ pre.code { background: #1f1b16; color: #f5e6d8; padding: 14px; border-radius: 10
   .savebar .btn { flex: 1; justify-content: center; }
   .savebar > .muted, .savebar > span.small { display: none; }
 }
+
+/* Menu import */
+.imp-drop { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 26px 16px; border: 2px dashed var(--line); border-radius: 12px; background: var(--surface-2); cursor: pointer; text-align: center; }
+.imp-drop:hover, .imp-drop.over { border-color: var(--brand); background: var(--brand-soft); }
+.imp-drop b { font-size: 16px; }
+.imp-or { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; margin: 16px 0 10px; }
+.imp-or::before, .imp-or::after { content: ''; flex: 1; border-top: 1px solid var(--line); }
+#imp-text { width: 100%; font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+.imp-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.imp-row { border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: grid; gap: 8px; background: var(--surface); }
+.imp-top { display: grid; grid-template-columns: minmax(0, 1fr) 90px auto; gap: 8px; align-items: center; }
+.imp-top input[data-k=name] { font-weight: 600; }
+.imp-mid { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 8px; }
+.imp-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.dchip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 9px; border: 1px solid var(--line); border-radius: 999px; font-size: 12.5px; cursor: pointer; user-select: none; color: var(--muted); }
+.dchip input { display: none; }
+.dchip.on { background: #ecfdf3; border-color: #86efac; color: #166534; }
+.imp-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: flex-end; margin-top: 14px; position: sticky; bottom: 0; background: var(--surface); padding: 10px 0; }
+@media (max-width: 600px) {
+  .imp-mid { grid-template-columns: 1fr; }
+  .imp-top { grid-template-columns: minmax(0, 1fr) 76px auto; }
+  .imp-actions .btn { width: 100%; justify-content: center; }
+}

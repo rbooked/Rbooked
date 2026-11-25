@@ -297,3 +297,20 @@ test('home page always has restaurants to show; only Rbooked staff can feature',
   assert.ok(f.data.length >= 1, 'newest restaurants fill in when none are featured');
   assert.strictEqual((await call('GET', '/api/admin/platform/restaurants')).status, 403);
 });
+
+test('menu import: pasted text becomes dishes with sections, prices and diet tags', async () => {
+  const { parseText } = require('../public/js/menu-import');
+  const items = parseText('STARTERS\nEdamame (VG) ..... $6\nMAINS\nKung Pao Tofu - peanuts, chili 🌶 15.50\nBrownie 7');
+  assert.deepStrictEqual(items.map((i) => [i.section, i.name, i.price]), [['Starters', 'Edamame', '6'], ['Mains', 'Kung Pao Tofu', '15.50'], ['Mains', 'Brownie', '7']]);
+  const before = (await call('GET', '/api/admin/menu')).data.length;
+  const r = await call('POST', '/api/admin/menu/import', { items });
+  assert.strictEqual(r.status, 201); assert.strictEqual(r.data.imported, 3);
+  const menu = (await call('GET', '/api/admin/menu')).data;
+  assert.strictEqual(menu.length, before + 3);
+  const ed = menu.find((m) => m.name === 'Edamame');
+  assert.strictEqual(ed.price_cents, 600); assert.ok(ed.tags.includes('vegan') && ed.tags.includes('vegetarian'));
+  assert.ok(menu.find((m) => m.name === 'Kung Pao Tofu').tags.includes('spicy'));
+  const rep = await call('POST', '/api/admin/menu/import', { items: [{ name: 'Only Dish', price: '9' }], replace: true });
+  assert.strictEqual(rep.status, 201);
+  assert.strictEqual((await call('GET', '/api/admin/menu')).data.length, 1);
+});

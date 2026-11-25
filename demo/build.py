@@ -10,7 +10,7 @@ files = {
   'for-restaurants.html': 'for-restaurants.html', 'login.html': 'login.html', 'embed.html': 'embed.html',
   'admin/index.html': 'admin.html', 'admin/admin.js': 'admin/admin.js', 'admin/admin.css': 'admin/admin.css',
   'css/app.css': 'css/app.css', 'js/common.js': 'js/common.js', 'js/booking.js': 'js/booking.js', 'js/matcher.js': 'js/matcher.js',
-  'js/samples.js': 'js/samples.js', 'js/places.js': 'js/places.js',
+  'js/samples.js': 'js/samples.js', 'js/places.js': 'js/places.js', 'js/menu-import.js': 'js/menu-import.js',
 }
 REPL = [
   ('href="/css/', 'href="css/'), ('src="/js/', 'src="js/'),

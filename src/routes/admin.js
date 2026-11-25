@@ -463,6 +463,22 @@ router.post('/menu', wrap(async (req, res) => {
   const info = run(`INSERT INTO menu_items (restaurant_id, ${keys.join(',')}) VALUES (?, ${keys.map(() => '?').join(',')})`, rid, ...keys.map((k) => f[k]));
   res.status(201).json(one('SELECT * FROM menu_items WHERE id = ?', info.lastInsertRowid));
 }));
+// Import many dishes at once (from a pasted menu, spreadsheet, PDF or photo, read in the browser).
+router.post('/menu/import', wrap(async (req, res) => {
+  const rid = req.restaurant.id;
+  const list = (Array.isArray(req.body.items) ? req.body.items : []).slice(0, 500).map((b) => ({ section: 'Menu', ...cleanMenuItem(b) })).filter((f) => f.name);
+  if (!list.length) throw new BookingError('No dishes to import.');
+  tx(() => {
+    if (req.body.replace) run('DELETE FROM menu_items WHERE restaurant_id = ?', rid);
+    let order = (one('SELECT MAX(sort_order) AS m FROM menu_items WHERE restaurant_id = ?', rid).m ?? -1) + 1;
+    for (const f of list) {
+      delete f.sort_order; f.sort_order = order++;
+      const keys = Object.keys(f);
+      run(`INSERT INTO menu_items (restaurant_id, ${keys.join(',')}) VALUES (?, ${keys.map(() => '?').join(',')})`, rid, ...keys.map((k) => f[k]));
+    }
+  });
+  res.status(201).json({ imported: list.length });
+}));
 router.put('/menu/order', wrap(async (req, res) => {
   const ids = (Array.isArray(req.body.ids) ? req.body.ids : []).map(Number);
   tx(() => ids.forEach((id, i) => run('UPDATE menu_items SET sort_order = ? WHERE id = ? AND restaurant_id = ?', i, id, req.restaurant.id)));
