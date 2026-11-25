@@ -18,6 +18,8 @@ module.exports = {
     user: e.SMTP_USER || '',
     pass: e.SMTP_PASS || '',
   },
+  // Rbooked staff who can feature restaurants (comma-separated emails; set in Cloudflare, not in the repo).
+  platformAdmins: String(e.PLATFORM_ADMIN_EMAILS || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean),
   resendApiKey: e.RESEND_API_KEY || '',
   emailFrom: e.EMAIL_FROM || 'Rbooked <reservations@example.com>',
   stripe: {

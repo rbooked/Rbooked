@@ -34,8 +34,22 @@ const SETTINGS = ['name', 'cuisine', 'price_level', 'description', 'phone', 'ema
   'auto_no_show', 'send_no_show_email', 'cancellation_policy', 'accent_color', 'tags', 'turn_times', 'website_url', 'logo_url', 'hours'];
 const { parseTags, parseTurns, formatTurns, parseMenuTags, parseHours } = require('../../public/js/matcher');
 
+const isPlatformAdmin = (req) => config.platformAdmins.includes(String(req.user.email || '').toLowerCase());
+
+// ---------- Rbooked staff: choose featured restaurants ----------
+router.get('/platform/restaurants', wrap(async (req, res) => {
+  if (!isPlatformAdmin(req)) throw new BookingError('Not allowed.', 403);
+  res.json(all(`SELECT r.id, r.slug, r.name, r.cuisine, r.city, r.state, r.featured, r.created_at,
+    (SELECT COUNT(*) FROM reservations x WHERE x.restaurant_id = r.id) AS reservations FROM restaurants r ORDER BY r.id DESC`));
+}));
+router.put('/platform/restaurants/:id', wrap(async (req, res) => {
+  if (!isPlatformAdmin(req)) throw new BookingError('Not allowed.', 403);
+  run('UPDATE restaurants SET featured = ? WHERE id = ?', req.body.featured ? 1 : 0, Number(req.params.id));
+  res.json({ ok: true });
+}));
+
 router.get('/restaurant', wrap(async (req, res) => {
-  res.json({ restaurant: pick(req.restaurant, ['id', 'slug', 'featured', ...SETTINGS]), user: req.user, billing: billing.billingSummary(req.restaurant), baseUrl: config.baseUrl });
+  res.json({ restaurant: pick(req.restaurant, ['id', 'slug', 'featured', ...SETTINGS]), user: { ...req.user, platformAdmin: isPlatformAdmin(req) }, billing: billing.billingSummary(req.restaurant), baseUrl: config.baseUrl });
 }));
 
 router.put('/restaurant', wrap(async (req, res) => {

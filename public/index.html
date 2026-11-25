@@ -212,7 +212,7 @@
       let where = /^\d{5}$/.test(zip) ? `near ${zip}` : '';
       if (!rows.length && q.has('zip')) { q.delete('zip'); rows = await api('/api/public/featured?' + q); where = 'across Rbooked'; }
       document.getElementById('featured-where').textContent = where ? `· ${where}` : '';
-      document.getElementById('featured').innerHTML = rows.map((r) => mini(r, f.party.value, r.slots, 'Featured')).join('');
+      document.getElementById('featured').innerHTML = rows.map((r) => mini(r, f.party.value, r.slots, r.featured ? 'Featured' : 'New')).join('');
       document.getElementById('featured-wrap').classList.toggle('hidden', !rows.length);
     } catch { document.getElementById('featured-wrap').classList.add('hidden'); }
   }

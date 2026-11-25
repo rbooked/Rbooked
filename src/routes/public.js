@@ -104,9 +104,10 @@ router.get('/featured', wrap(async (req, res) => {
   const zip = String(req.query.zip || '').trim();
   const party = Math.max(1, Math.min(20, Number(req.query.party) || 2));
   const wantTime = /^\d{2}:\d{2}$/.test(req.query.time || '') ? req.query.time : '19:00';
-  let list;
-  if (/^\d{5}$/.test(zip)) list = (await nearby(zip, 50)).list.filter((x) => x.r.featured);
-  else list = all('SELECT * FROM restaurants WHERE featured = 1').filter(isBookable).map((r) => ({ r, miles: null }));
+  // Featured restaurants first; then the newest ones, so the home page is never empty.
+  const pool = /^\d{5}$/.test(zip) ? (await nearby(zip, 50)).list
+    : all('SELECT * FROM restaurants ORDER BY id DESC').filter(isBookable).map((r) => ({ r, miles: null }));
+  const list = [...pool.filter((x) => x.r.featured), ...pool.filter((x) => !x.r.featured).sort((a, b) => b.r.id - a.r.id)].slice(0, 6);
   res.json(list.slice(0, 12).map(({ r, miles }) => {
     const date = dateFor(req.query.date, r);
     return { ...publicRestaurant(r), miles, date, slots: closest(openTimes(r, date, party), wantTime, 3) };

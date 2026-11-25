@@ -377,7 +377,8 @@
   });
   on('GET', '/api/public/featured', (q) => {
     const zip = String(q.zip || '').trim(); const party = partyOf(q); const want = wantTime(q);
-    const list = /^\d{5}$/.test(zip) ? nearby(zip, 50).list.filter((x) => x.r.featured) : db.restaurants.filter((r) => r.featured && isBookable(r)).map((r) => ({ r, miles: null }));
+    const pool = /^\d{5}$/.test(zip) ? nearby(zip, 50).list : db.restaurants.filter((r) => isBookable(r)).map((r) => ({ r, miles: null }));
+    const list = [...pool.filter((x) => x.r.featured), ...pool.filter((x) => !x.r.featured).sort((a, b) => b.r.id - a.r.id)].slice(0, 6);
     return list.slice(0, 12).map(({ r, miles: mi }) => { const date = dateFor(q.date, r); return { ...pub(r), miles: mi, date, slots: closest(openTimes(r, date, party), want, 3) }; });
   });
   on('GET', '/api/public/pick', (q) => {

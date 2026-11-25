@@ -29,6 +29,7 @@
     const r = S.me.restaurant;
     document.getElementById('rest-name').textContent = r.name;
     document.getElementById('user-name').textContent = S.me.user.name;
+    document.getElementById('nav-platform').hidden = !S.me.user.platformAdmin;
     document.getElementById('public-link').href = `/restaurant?slug=${r.slug}`;
     if (r.accent_color) document.documentElement.style.setProperty('--brand', r.accent_color);
     S.date = nowLocal().date;
@@ -56,7 +57,7 @@
   const VIEWS = {
     reservations: ['Reservations', viewReservations], floor: ['Floor plan & tables', viewFloor], services: ['Services & hours', viewServices],
     guests: ['Address book', viewGuests], widget: ['Website widget', viewWidget], settings: ['Settings', viewSettings],
-    billing: ['Billing', viewBilling], emails: ['Email log', viewEmails], welcome: ['Welcome', viewWelcome],
+    billing: ['Billing', viewBilling], emails: ['Email log', viewEmails], welcome: ['Welcome', viewWelcome], platform: ['Featured restaurants', viewPlatform],
     profile: ['Restaurant profile', viewProfile], 'menu-items': ['Menu', viewMenu],
   };
   function route() {
@@ -1283,6 +1284,22 @@
   }
 
   // ---------------- Email log ----------------
+  // Rbooked staff only: pick which restaurants are featured on the home page.
+  async function viewPlatform() {
+    const rows = await api('/api/admin/platform/restaurants');
+    view.innerHTML = `<div class="card"><h2>Featured on the home page</h2>
+      <p class="small muted">Featured restaurants show first. If none are featured, the newest restaurants fill the spot.</p>
+      <div class="table-wrap"><table class="data"><thead><tr><th>Restaurant</th><th>Bookings</th><th>Featured</th></tr></thead><tbody>
+      ${rows.map((r) => `<tr><td><a href="/restaurant?slug=${encodeURIComponent(r.slug)}" target="_blank" rel="noopener">${esc(r.name)}</a><div class="small muted">${esc(r.cuisine)} · ${esc(r.city)}, ${esc(r.state)}</div></td><td>${r.reservations}</td>
+        <td><label class="check"><input type="checkbox" data-feat="${r.id}" ${r.featured ? 'checked' : ''} aria-label="Feature ${esc(r.name)}"></label></td></tr>`).join('') || '<tr><td colspan="3" class="muted">No restaurants yet.</td></tr>'}
+      </tbody></table></div></div>`;
+    view.querySelectorAll('[data-feat]').forEach((el) => {
+      el.onchange = async () => {
+        try { await api(`/api/admin/platform/restaurants/${el.dataset.feat}`, { method: 'PUT', body: { featured: el.checked } }); TB.toast(el.checked ? 'Featured on the home page' : 'Removed from featured'); } catch (e) { el.checked = !el.checked; fail(e); }
+      };
+    });
+  }
+
   async function viewEmails() {
     const rows = await api('/api/admin/emails');
     view.innerHTML = `<div class="card" style="padding:0"><div class="table-wrap"><table class="data">

@@ -290,3 +290,10 @@ test('cuisine and state come from fixed lists; time zone follows the ZIP code', 
   await call('PUT', '/api/admin/restaurant', { zip: '79901', state: 'TX', city: 'El Paso' });
   assert.strictEqual((await call('GET', '/api/admin/restaurant')).data.restaurant.timezone, 'America/Denver');
 });
+
+test('home page always has restaurants to show; only Rbooked staff can feature', async () => {
+  run('UPDATE restaurants SET featured = 0');
+  const f = await call('GET', '/api/public/featured', null, false);
+  assert.ok(f.data.length >= 1, 'newest restaurants fill in when none are featured');
+  assert.strictEqual((await call('GET', '/api/admin/platform/restaurants')).status, 403);
+});
