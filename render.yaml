@@ -1,0 +1,32 @@
+# Render Blueprint: one web service plus a persistent disk for the SQLite database and uploaded photos.
+services:
+  - type: web
+    name: rbooked
+    runtime: docker
+    plan: starter
+    healthCheckPath: /healthz
+    disk:
+      name: rbooked-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: BASE_URL
+        value: https://rbooked.com
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DATABASE_PATH
+        value: /data/rbooked.db
+      - key: EMAIL_FROM
+        value: "Rbooked <reservations@rbooked.com>"
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
