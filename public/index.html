@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/app.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%229%22 fill=%22%23c2410c%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2218%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Georgia%22%3ET%3C/text%3E%3C/svg%3E">
+<title>Tablebird · Book a table near you</title>
+<meta name="description" content="Find restaurants near your ZIP code and book a table instantly.">
+</head>
+<body>
+<header class="site-header"><div class="container">
+  <a class="logo" href="/"><span class="logo-mark">T</span>Tablebird</a>
+  <nav class="nav"><a href="/" class="hide-sm">Find a table</a><a href="/for-restaurants">For restaurants</a><a href="/login" id="nav-login">Restaurant login</a></nav>
+</div></header>
+<section class="hero">
+  <div class="container">
+    <h1>Find a table near you, tonight or any night.</h1>
+    <p>Enter your ZIP code to see nearby restaurants and the times they have open. Book in seconds, no account needed.</p>
+    <form class="search-bar" id="search">
+      <div><label for="zip" class="hidden">ZIP code</label><input id="zip" name="zip" inputmode="numeric" maxlength="5" placeholder="ZIP code" required pattern="\d{5}" aria-label="ZIP code"></div>
+      <input id="date" name="date" type="date" aria-label="Date">
+      <select id="time" name="time" aria-label="Time"></select>
+      <select id="party" name="party" aria-label="Party size"></select>
+      <button class="btn lg" type="submit">Find a table</button>
+    </form>
+  </div>
+</section>
+<main class="container results">
+  <div class="results-head" id="results-head"></div>
+  <div id="results"></div>
+  <div id="empty" class="card hidden"></div>
+  <section class="section" id="how">
+    <h2 class="serif" style="font-size:30px">How it works</h2>
+    <div class="features">
+      <div class="card feature"><h3>1. Search by ZIP</h3><p class="muted">See restaurants within 25 miles, sorted by distance, with real open times.</p></div>
+      <div class="card feature"><h3>2. Pick a time</h3><p class="muted">Tap a time slot. Tables are held live, so what you see is what you get.</p></div>
+      <div class="card feature"><h3>3. Get it by email</h3><p class="muted">Instant confirmation, a calendar invite, and a reminder before you go. Cancel or change anytime.</p></div>
+    </div>
+  </section>
+</main>
+<footer class="footer"><div class="container row"><span>© Tablebird</span><span class="spacer"></span><a href="/for-restaurants">List your restaurant</a><a href="/login">Restaurant login</a></div></footer>
+<script src="/js/common.js"></script>
+<script>
+(function () {
+  const { api, esc } = TB;
+  const f = document.getElementById('search');
+  const params = new URLSearchParams(location.search);
+  f.date.value = params.get('date') || TB.today();
+  f.date.min = TB.today();
+  f.time.innerHTML = TB.timeOptions(params.get('time') || '19:00');
+  f.party.innerHTML = TB.partyOptions(params.get('party') || 2, 20);
+  f.zip.value = params.get('zip') || localStorageGet('tb_zip') || '';
+
+  function localStorageGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
+  function localStorageSet(k, v) { try { localStorage.setItem(k, v); } catch { /* ignore */ } }
+
+  f.onsubmit = (e) => { e.preventDefault(); search(true); };
+
+  async function search(push) {
+    const zip = f.zip.value.trim();
+    if (!/^\d{5}$/.test(zip)) { TB.toast('Please enter a 5-digit ZIP code.', true); return; }
+    localStorageSet('tb_zip', zip);
+    const q = new URLSearchParams({ zip, date: f.date.value, time: f.time.value, party: f.party.value });
+    if (push) history.replaceState(null, '', '?' + q);
+    const head = document.getElementById('results-head');
+    const list = document.getElementById('results');
+    const empty = document.getElementById('empty');
+    head.textContent = 'Searching…'; list.innerHTML = ''; empty.classList.add('hidden');
+    try {
+      const data = await api('/api/public/search?' + q);
+      const where = data.origin ? `${data.origin.city}, ${data.origin.state}` : zip;
+      head.innerHTML = `<b>${data.results.length}</b> restaurant${data.results.length === 1 ? '' : 's'} near ${esc(where)} · ${TB.date(f.date.value)} · ${data.party} ${data.party === 1 ? 'person' : 'people'}`;
+      if (!data.results.length) {
+        empty.classList.remove('hidden');
+        empty.innerHTML = `<h3>No restaurants on Tablebird near ${esc(zip)} yet.</h3>
+          <p class="muted">Know a great spot? <a href="/for-restaurants">Restaurants can join free for 30 days.</a></p>
+          <p class="muted small">Demo data lives in ZIPs 10011, 94110, 97205, 60607 and 78701.</p>`;
+      }
+      list.innerHTML = data.results.map((r) => {
+        const link = (t) => `/restaurant?slug=${encodeURIComponent(r.slug)}&date=${r.date}&party=${data.party}${t ? `&time=${t}` : ''}`;
+        return `<article class="card r-card">
+          <a href="${link()}" class="r-thumb" style="${TB.thumbStyle(r)}" aria-hidden="true" tabindex="-1">${r.image_url ? '' : esc(TB.initials(r.name))}</a>
+          <div>
+            <h3><a href="${link()}">${esc(r.name)}</a></h3>
+            <div class="r-meta">${esc(r.cuisine)} · ${TB.price(r.price_level)} · ${esc(r.city)}${r.miles != null ? ` · ${r.miles} mi` : ''}</div>
+            <div class="r-meta">${esc(r.address)}, ${esc(r.zip)} · <a href="tel:${esc(r.phone)}">${esc(r.phone)}</a></div>
+            <div class="slots">${r.closed ? '<span class="muted small">Closed this day</span>'
+              : r.slots.length ? r.slots.map((t) => `<a class="slot" style="background:${esc(r.accent_color)}" href="${link(t)}">${TB.time(t)}</a>`).join('')
+              : '<span class="muted small">No tables near this time. <a href="' + link() + '">See all times</a></span>'}</div>
+          </div></article>`;
+      }).join('');
+    } catch (err) {
+      head.textContent = '';
+      empty.classList.remove('hidden');
+      empty.innerHTML = `<div class="alert error">${esc(err.message)}</div>`;
+    }
+  }
+  if (f.zip.value && params.get('zip')) search(false);
+})();
+</script>
+</body>
+</html>

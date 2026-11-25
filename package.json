@@ -1,0 +1,21 @@
+{
+  "name": "tablebird",
+  "version": "1.0.0",
+  "description": "Restaurant reservation platform with embeddable booking widget",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node --no-warnings src/server.js",
+    "dev": "node --no-warnings --watch src/server.js",
+    "seed": "node --no-warnings src/seed.js",
+    "test": "node --no-warnings --test test/*.test.js"
+  },
+  "dependencies": {
+    "express": "^4.22.3",
+    "nodemailer": "^10.6.1",
+    "stripe": "^23.2.0"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "private": true
+}
