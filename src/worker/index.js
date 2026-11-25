@@ -54,12 +54,15 @@ export class RbookedDB extends DurableObject {
 
   async fetch(request) {
     this.setup();
-    return this.express.handle(this.app, request);
+    const response = await this.express.handle(this.app, request);
+    await require('../email.js').flush(); // finish sending booking emails before the request ends
+    return response;
   }
 
   async runJobs() {
     this.setup();
     await require('../jobs.js').runAll();
+    await require('../email.js').flush();
   }
 }
 

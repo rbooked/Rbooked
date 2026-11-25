@@ -87,7 +87,18 @@ function icsFor(r, res) {
   ].join('\r\n');
 }
 
-async function send({ to, subject, html, kind, reservationId = null, attachments }) {
+// Emails still being sent. The Cloudflare worker waits for these before it answers, so a send that was
+// started in the background (a booking confirmation, say) isn't cut off when the request ends.
+const pending = new Set();
+async function flush(ms = 10000) {
+  if (!pending.size) return;
+  let t; await Promise.race([Promise.allSettled([...pending]), new Promise((r) => { t = setTimeout(r, ms); })]); clearTimeout(t);
+}
+function send(opts) {
+  const p = sendNow(opts).finally(() => pending.delete(p));
+  pending.add(p); return p;
+}
+async function sendNow({ to, subject, html, kind, reservationId = null, attachments }) {
   let status = 'outbox';
   let error = null;
   try {
@@ -206,4 +217,4 @@ async function sendTrialEnding(restaurant, to, daysLeft) {
   });
 }
 
-module.exports = { sendReservationEmail, sendWelcome, sendTrialEnding, send, esc };
+module.exports = { flush, sendReservationEmail, sendWelcome, sendTrialEnding, send, esc };
