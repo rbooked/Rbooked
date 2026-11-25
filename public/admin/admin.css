@@ -317,3 +317,7 @@ body.rf-dragging, body.rf-dragging * { cursor: grabbing !important; }
 #rf-canvas .ftable { cursor: pointer; }
 .rf-move-bar { background: var(--brand); color: #fff; border: none; }
 .rf-move-bar .btn { color: #fff; }
+
+.rf-item.done { opacity: .55; border-left-color: #9ca3af; }
+.rf-item.cancelled .rf-item-main b, .rf-item.no_show .rf-item-main b { text-decoration: line-through; }
+@media (min-width: 761px) { .rf-list { max-height: calc(100vh - 220px); } }

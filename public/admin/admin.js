@@ -816,8 +816,8 @@
   function renderResFloor(body, rows, floor) {
     const now = nowLocal();
     const isToday = S.date === now.date;
-    if (!S.rfTime) S.rfTime = isToday ? hhmm(Math.floor(now.minutes / 15) * 15) : '19:00';
-    if (S.rfFollowNow && isToday) S.rfTime = hhmm(Math.floor(now.minutes / 5) * 5);
+    // Tables show who's there right now (today) or their first booking (other days). No time slider.
+    S.rfTime = isToday ? hhmm(now.minutes) : '00:00';
     const areas = floor.areas.slice();
     if (floor.tables.some((t) => !t.area_id)) areas.push({ id: 0, name: 'Unassigned' });
     if (S.rfArea === undefined || !areas.some((a) => a.id === S.rfArea)) S.rfArea = areas.length ? areas[0].id : 0;
@@ -841,9 +841,6 @@
     const covers = live.filter((x) => x.status !== 'completed' && toMin(x.time) <= t0 && toMin(x.time) + x.duration_minutes > t0).reduce((a, x) => a + x.party_size, 0);
     body.innerHTML = `<div class="rf-bar">
         <div class="seg" id="rf-areas">${areas.map((a) => `<button data-a="${a.id}" class="${a.id === S.rfArea ? 'on' : ''}">${esc(a.name)}</button>`).join('')}</div>
-        <label class="rf-time"><span class="muted small">Showing</span><b id="rf-tlabel">${TB.time(S.rfTime)}</b>
-          <input type="range" id="rf-range" min="${10 * 60}" max="${23 * 60 + 45}" step="15" value="${t0}" aria-label="Time on the floor plan"></label>
-        ${isToday ? `<button class="btn secondary sm ${S.rfFollowNow ? 'on' : ''}" id="rf-now">● Now</button>` : ''}
         <span class="muted small"><b>${free}</b> free tables · <b>${covers}</b> guests in house</span>
         <span class="spacer"></span>
         <button class="btn ${S.rfCombine ? '' : 'secondary'} sm" id="rf-combine">⛓ ${S.rfCombine ? 'Done combining' : 'Combine tables'}</button>
@@ -868,17 +865,19 @@
       const p = document.getElementById('rf-panel');
       const t = floor.tables.find((z) => z.id === S.rfTable);
       if (!t) {
-        const today = rows.filter((x) => ['confirmed', 'seated'].includes(x.status)).sort((a, b) => a.time.localeCompare(b.time));
+        const today = rows.slice().sort((a, b) => a.time.localeCompare(b.time) || a.id - b.id);
+        const movable = (x) => ['confirmed', 'seated'].includes(x.status);
         const seatLabel = (x) => (x.combo_id ? (combos.get(x.combo_id) || {}).name : (floor.tables.find((z) => z.id === x.table_id) || {}).label) || '';
-        p.innerHTML = `<div class="row"><h2 style="margin:0">Reservations</h2><span class="spacer"></span><span class="muted small">${today.length}</span></div>
+        p.innerHTML = `<div class="row"><h2 style="margin:0">All reservations</h2><span class="spacer"></span><span class="muted small">${today.length} · ${today.filter(movable).reduce((a, x) => a + x.party_size, 0)} guests</span></div>
           <p class="muted small" style="margin:4px 0 10px">Tap a name, then tap a table to move it. Or press and drag it onto a table.</p>
-          <div class="rf-list">${today.map((x) => `<button type="button" class="rf-item ${x.status} ${S.rfMove === x.id ? 'moving' : ''}" data-x="${x.id}" aria-pressed="${S.rfMove === x.id}">
+          <div class="rf-list">${today.map((x) => `<button type="button" class="rf-item ${x.status} ${S.rfMove === x.id ? 'moving' : ''} ${movable(x) ? '' : 'done'}" data-x="${x.id}" aria-pressed="${S.rfMove === x.id}">
             <span class="rf-at">${TB.time(x.time)}</span>
-            <span class="rf-item-main"><b>${esc(x.guest_name)}</b><span class="small muted">${x.party_size} ${x.party_size === 1 ? 'guest' : 'guests'}${x.status === 'seated' ? ' · Seated' : ''}</span></span>
+            <span class="rf-item-main"><b>${esc(x.guest_name)}</b><span class="small muted">${x.party_size} ${x.party_size === 1 ? 'guest' : 'guests'}${x.status === 'confirmed' ? '' : ` · ${STATUS_LABEL[x.status]}`}</span></span>
             <span class="rf-tbl ${seatLabel(x) ? '' : 'none'}">${seatLabel(x) ? esc(seatLabel(x)) : 'No table'}</span></button>`).join('') || '<p class="muted small">No reservations for this day yet.</p>'}</div>
           <div class="rf-len"><h3 class="rf-h">Reservation length</h3><p class="small muted" style="margin:0">${turnSummary()} <a href="#services">Change</a></p></div>`;
         p.querySelectorAll('.rf-item').forEach((el) => {
           const x = rows.find((r) => r.id === Number(el.dataset.x));
+          if (!movable(x)) { el.onclick = () => resAction('edit', x); return; }
           el.onclick = () => { if (el.dataset.dragged) return; S.rfMove = S.rfMove === x.id ? null : x.id; renderResFloor(body, rows, floor); };
           el.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') dragRes(e, x, el); });
           longPressDrag(el, x);
@@ -900,7 +899,7 @@
       const later = st.list.filter((x) => x !== st.cur && x !== st.next && toMin(x.time) > t0);
       p.innerHTML = `<div class="row"><h2 style="margin:0">Table ${esc(t.label)}</h2><span class="spacer"></span><button class="btn ghost sm" id="rf-x" aria-label="Close">✕</button></div>
         <p class="muted small" style="margin:4px 0 12px">${t.min_seats}-${t.max_seats} seats · ${esc(area)}${t.online_bookable ? '' : ' · staff only'}</p>
-        <h3 class="rf-h">At ${TB.time(S.rfTime)}</h3>${st.cur ? card(st.cur, st.cur.status === 'seated' ? 'Seated' : 'Booked') : '<p class="rf-free">Free</p>'}
+        ${isToday ? `<h3 class="rf-h">Right now</h3>${st.cur ? card(st.cur, st.cur.status === 'seated' ? 'Seated' : 'Booked') : '<p class="rf-free">Free</p>'}` : ''}
         <h3 class="rf-h">Next reservation</h3>${st.next ? `<p class="rf-when">${TB.time(st.next.time)} <span class="muted">· in ${inMin(nextIn)}</span></p>${card(st.next, 'Next')}` : '<p class="muted small">Nothing else booked on this table today.</p>'}
         ${later.length ? `<h3 class="rf-h">Later</h3>${later.map((x) => `<div class="rf-later"><b>${TB.time(x.time)}</b> ${esc(x.guest_name)} · ${x.party_size}</div>`).join('')}` : ''}
         ${joins.length ? `<h3 class="rf-h">Combines with</h3>${joins.map((c) => `<div class="rf-later">⛓ <b>${esc(c.name)}</b> · ${c.min_seats}-${c.max_seats} seats</div>`).join('')}` : ''}
@@ -914,11 +913,6 @@
     panel();
 
     body.querySelectorAll('#rf-areas button').forEach((b) => { b.onclick = () => { S.rfArea = Number(b.dataset.a); S.rfTable = null; renderResFloor(body, rows, floor); }; });
-    const range = document.getElementById('rf-range');
-    range.oninput = () => { document.getElementById('rf-tlabel').textContent = TB.time(hhmm(Number(range.value))); };
-    range.onchange = () => { S.rfTime = hhmm(Number(range.value)); S.rfFollowNow = false; renderResFloor(body, rows, floor); };
-    const nowBtn = document.getElementById('rf-now');
-    if (nowBtn) nowBtn.onclick = () => { S.rfFollowNow = true; S.rfTime = null; renderResFloor(body, rows, floor); };
     document.getElementById('rf-combine').onclick = () => { S.rfCombine = !S.rfCombine; S.rfSel = []; renderResFloor(body, rows, floor); };
     if (S.rfCombine) {
       document.getElementById('rf-clear').onclick = () => { S.rfSel = []; renderResFloor(body, rows, floor); };
@@ -961,12 +955,12 @@
         }
         ev.preventDefault();
         ghost.style.left = `${ev.clientX + 12}px`; ghost.style.top = `${ev.clientY + 12}px`;
-        const t = tableAt(ev.clientX, ev.clientY);
-        if (t !== over) { if (over) over.classList.remove('drop-hl'); over = t; if (over) over.classList.add('drop-hl'); }
-        // Scroll the page when dragging near the top or bottom edge (phones: the list sits under the room).
+        const hover = () => { const t = tableAt(ev.clientX, ev.clientY); if (t !== over) { if (over) over.classList.remove('drop-hl'); over = t; if (over) over.classList.add('drop-hl'); } };
+        hover();
+        // Scroll the page when dragging near the top or bottom edge, and keep the highlighted table in step.
         cancelAnimationFrame(raf);
-        const edge = ev.clientY < 70 ? -12 : ev.clientY > innerHeight - 70 ? 12 : 0;
-        if (edge) { const step = () => { window.scrollBy(0, edge); raf = requestAnimationFrame(step); }; raf = requestAnimationFrame(step); }
+        const edge = ev.clientY < 50 ? -10 : ev.clientY > innerHeight - 50 ? 10 : 0;
+        if (edge) { const step = () => { const y = scrollY; window.scrollBy(0, edge); if (scrollY === y) return; hover(); raf = requestAnimationFrame(step); }; raf = requestAnimationFrame(step); }
       };
       const up = (ev) => {
         document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', up);
@@ -975,7 +969,7 @@
         ghost.remove(); src.classList.remove('dragging'); document.body.classList.remove('rf-dragging');
         if (over) over.classList.remove('drop-hl');
         src.dataset.dragged = '1'; setTimeout(() => { delete src.dataset.dragged; }, 50);
-        const t = ev.type === 'pointerup' ? tableAt(ev.clientX, ev.clientY) : null;
+        const t = ev.type === 'pointerup' ? (tableAt(ev.clientX, ev.clientY) || over) : null;
         if (t) moveTo(x, Number(t.dataset.id));
       };
       document.addEventListener('pointermove', move, { passive: false }); document.addEventListener('pointerup', up); document.addEventListener('pointercancel', up);
@@ -996,11 +990,11 @@
           if (!live) { if (Math.hypot(p0.clientX - sx, p0.clientY - sy) > 8) end(); return; }
           ev.preventDefault();
           ghost.style.left = `${p0.clientX + 12}px`; ghost.style.top = `${p0.clientY - 40}px`;
-          const t = tableAt(p0.clientX, p0.clientY);
-          if (t !== over) { if (over) over.classList.remove('drop-hl'); over = t; if (over) over.classList.add('drop-hl'); }
+          const hover = () => { const t = tableAt(p0.clientX, p0.clientY); if (t !== over) { if (over) over.classList.remove('drop-hl'); over = t; if (over) over.classList.add('drop-hl'); } };
+          hover();
           cancelAnimationFrame(raf);
           const edge = p0.clientY < 80 ? -12 : p0.clientY > innerHeight - 80 ? 12 : 0;
-          if (edge) { const step = () => { window.scrollBy(0, edge); raf = requestAnimationFrame(step); }; raf = requestAnimationFrame(step); }
+          if (edge) { const step = () => { const y = scrollY; window.scrollBy(0, edge); if (scrollY === y) return; hover(); raf = requestAnimationFrame(step); }; raf = requestAnimationFrame(step); }
         };
         const end = (ev) => {
           clearTimeout(timer); cancelAnimationFrame(raf);
