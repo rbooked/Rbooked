@@ -284,7 +284,7 @@ pre.code { background: #1f1b16; color: #f5e6d8; padding: 14px; border-radius: 10
 }
 
 /* Floor plan + reservation list: drag (or Move, then tap) a reservation onto a table */
-@media (min-width: 760px) and (max-width: 1100px) { .floor-wrap { grid-template-columns: minmax(0, 1fr) 280px; } #rf-panel { position: sticky; } }
+@media (min-width: 760px) and (max-width: 1100px) { #rf-panel { position: sticky; } }
 .rf-list { display: grid; gap: 6px; max-height: 60vh; overflow: auto; margin-bottom: 6px; }
 .rf-item { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--line); border-left: 4px solid #2563eb; border-radius: 10px; padding: 8px 8px 8px 6px; cursor: grab; user-select: none; -webkit-user-select: none; }
 .rf-item.seated { border-left-color: #16a34a; }
@@ -299,3 +299,21 @@ pre.code { background: #1f1b16; color: #f5e6d8; padding: 14px; border-radius: 10
 body.rf-dragging, body.rf-dragging * { cursor: grabbing !important; }
 .rf-move-bar { display: flex; align-items: center; gap: 8px; position: sticky; top: 8px; z-index: 5; }
 @media (max-width: 760px) { .rf-item .btn.sm { min-height: 40px; } .rf-list { max-height: none; } }
+
+/* Reservation list on the left of the room (on top on phones), OpenTable-style rows */
+.rf-wrap { grid-template-columns: 320px minmax(0, 1fr); }
+.rf-wrap > #rf-panel { order: -1; }
+@media (max-width: 1100px) { .rf-wrap { grid-template-columns: 280px minmax(0, 1fr); } }
+@media (max-width: 760px) { .rf-wrap { grid-template-columns: minmax(0, 1fr); } #rf-panel { position: static; } .rf-list { max-height: 38vh; overflow: auto; } }
+.rf-item { width: 100%; text-align: left; font: inherit; color: inherit; padding: 10px 10px 10px 12px; gap: 10px; cursor: pointer; touch-action: manipulation; -webkit-touch-callout: none; }
+.rf-item:hover { border-color: var(--brand); }
+.rf-item.moving { background: var(--brand-soft); border-color: var(--brand); border-left-color: var(--brand); }
+.rf-at { font-weight: 700; font-size: 14px; min-width: 64px; font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) { .rf-len { display: none; } }
+.rf-item-main b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rf-tbl { font-weight: 700; font-size: 13px; background: var(--surface-2); border-radius: 8px; padding: 4px 8px; white-space: nowrap; }
+.rf-tbl.none { background: #fef3c7; color: #92400e; font-weight: 600; }
+.rf-item.moving .rf-tbl { background: #fff; }
+#rf-canvas .ftable { cursor: pointer; }
+.rf-move-bar { background: var(--brand); color: #fff; border: none; }
+.rf-move-bar .btn { color: #fff; }

@@ -850,7 +850,7 @@
       </div>
       ${S.rfCombine ? `<div class="alert rf-combine-bar"><span>${sel.length ? `<b>${sel.map((id) => esc((floor.tables.find((t) => t.id === id) || {}).label)).join(' + ')}</b> · up to ${sel.reduce((a, id) => a + ((floor.tables.find((t) => t.id === id) || {}).max_seats || 0), 0)} seats` : 'Tap the tables you push together for big parties.'}</span>
         <span class="spacer"></span><button class="btn sm" id="rf-make" ${sel.length < 2 ? 'disabled' : ''}>Create combination</button><button class="btn ghost sm" id="rf-clear">Clear</button></div>` : ''}
-      <div class="floor-wrap">
+      <div class="floor-wrap rf-wrap">
         <div><div class="canvas-scroll"><div class="canvas rf" id="rf-canvas">${tables.map((t) => {
           const [w, h] = tableSize(t); const st = state(t);
           const cls = st.cur ? `busy-${st.cur.status}` : st.next && toMin(st.next.time) - t0 <= 30 ? 'soon' : '';
@@ -871,18 +871,19 @@
         const today = rows.filter((x) => ['confirmed', 'seated'].includes(x.status)).sort((a, b) => a.time.localeCompare(b.time));
         const seatLabel = (x) => (x.combo_id ? (combos.get(x.combo_id) || {}).name : (floor.tables.find((z) => z.id === x.table_id) || {}).label) || '';
         p.innerHTML = `<div class="row"><h2 style="margin:0">Reservations</h2><span class="spacer"></span><span class="muted small">${today.length}</span></div>
-          <p class="muted small" style="margin:4px 0 10px">Drag a reservation onto a table to move it, or tap <b>Move</b> and then a table. Tap a table to see who's next.</p>
-          <div class="rf-list">${today.map((x) => `<div class="rf-item ${x.status} ${S.rfMove === x.id ? 'moving' : ''}" data-x="${x.id}">
-            <span class="rf-grip" aria-hidden="true">⠿</span>
-            <span class="rf-item-main"><b>${TB.time(x.time)}</b> ${esc(x.guest_name)} · ${x.party_size}
-              <span class="small ${seatLabel(x) ? 'muted' : 'rf-unseated'}">${seatLabel(x) ? `Table ${esc(seatLabel(x))}` : 'No table yet'}${x.status === 'seated' ? ' · Seated' : ''}</span></span>
-            <button class="btn secondary sm" data-move="${x.id}">${S.rfMove === x.id ? 'Cancel' : 'Move'}</button></div>`).join('') || '<p class="muted small">No reservations for this day yet.</p>'}</div>
-          <h3 class="rf-h">Reservation length</h3><p class="small muted" style="margin:0">${turnSummary()} <a href="#services">Change</a></p>`;
-        p.querySelectorAll('[data-move]').forEach((b) => { b.onclick = (e) => { e.stopPropagation(); const id = Number(b.dataset.move); S.rfMove = S.rfMove === id ? null : id; renderResFloor(body, rows, floor); }; });
+          <p class="muted small" style="margin:4px 0 10px">Tap a name, then tap a table to move it. Or press and drag it onto a table.</p>
+          <div class="rf-list">${today.map((x) => `<button type="button" class="rf-item ${x.status} ${S.rfMove === x.id ? 'moving' : ''}" data-x="${x.id}" aria-pressed="${S.rfMove === x.id}">
+            <span class="rf-at">${TB.time(x.time)}</span>
+            <span class="rf-item-main"><b>${esc(x.guest_name)}</b><span class="small muted">${x.party_size} ${x.party_size === 1 ? 'guest' : 'guests'}${x.status === 'seated' ? ' · Seated' : ''}</span></span>
+            <span class="rf-tbl ${seatLabel(x) ? '' : 'none'}">${seatLabel(x) ? esc(seatLabel(x)) : 'No table'}</span></button>`).join('') || '<p class="muted small">No reservations for this day yet.</p>'}</div>
+          <div class="rf-len"><h3 class="rf-h">Reservation length</h3><p class="small muted" style="margin:0">${turnSummary()} <a href="#services">Change</a></p></div>`;
         p.querySelectorAll('.rf-item').forEach((el) => {
           const x = rows.find((r) => r.id === Number(el.dataset.x));
-          el.addEventListener('pointerdown', (e) => { if (!e.target.closest('button')) dragRes(e, x, el); });
+          el.onclick = () => { if (el.dataset.dragged) return; S.rfMove = S.rfMove === x.id ? null : x.id; renderResFloor(body, rows, floor); };
+          el.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') dragRes(e, x, el); });
+          longPressDrag(el, x);
         });
+        const sel0 = p.querySelector('.rf-item.moving'); if (sel0) sel0.scrollIntoView({ block: 'nearest' });
         return;
       }
       const st = state(t);
@@ -949,7 +950,7 @@
     };
     // Drag a reservation (from the list, or off a table with a mouse) and drop it on a table. Works with touch and mouse.
     function dragRes(e, x, src) {
-      if (!x || S.rfCombine || (e.pointerType !== 'mouse' && !e.target.closest('.rf-grip'))) return;
+      if (!x || S.rfCombine) return;
       const sx = e.clientX; const sy = e.clientY; let ghost = null; let over = null; let raf = null;
       const tableAt = (cx, cy) => { const el = document.elementFromPoint(cx, cy); return el && el.closest('#rf-canvas .ftable'); };
       const move = (ev) => {
@@ -979,11 +980,46 @@
       };
       document.addEventListener('pointermove', move, { passive: false }); document.addEventListener('pointerup', up); document.addEventListener('pointercancel', up);
     }
+    // Phones and tablets: press and hold a name for a moment, then drag it onto a table. A quick swipe still scrolls.
+    function longPressDrag(el, x) {
+      el.addEventListener('touchstart', (e) => {
+        if (e.touches.length !== 1 || S.rfCombine) return;
+        const t0 = e.touches[0]; const sx = t0.clientX; const sy = t0.clientY; let live = false; let ghost = null; let over = null; let raf = null;
+        const tableAt = (cx, cy) => { const z = document.elementFromPoint(cx, cy); return z && z.closest('#rf-canvas .ftable'); };
+        const timer = setTimeout(() => {
+          live = true; if (navigator.vibrate) navigator.vibrate(15);
+          ghost = document.createElement('div'); ghost.className = 'rf-ghost'; ghost.textContent = `${TB.time(x.time)} ${x.guest_name} · ${x.party_size}`;
+          ghost.style.left = `${sx + 12}px`; ghost.style.top = `${sy - 40}px`; document.body.appendChild(ghost); el.classList.add('dragging');
+        }, 280);
+        const move = (ev) => {
+          const p0 = ev.touches[0];
+          if (!live) { if (Math.hypot(p0.clientX - sx, p0.clientY - sy) > 8) end(); return; }
+          ev.preventDefault();
+          ghost.style.left = `${p0.clientX + 12}px`; ghost.style.top = `${p0.clientY - 40}px`;
+          const t = tableAt(p0.clientX, p0.clientY);
+          if (t !== over) { if (over) over.classList.remove('drop-hl'); over = t; if (over) over.classList.add('drop-hl'); }
+          cancelAnimationFrame(raf);
+          const edge = p0.clientY < 80 ? -12 : p0.clientY > innerHeight - 80 ? 12 : 0;
+          if (edge) { const step = () => { window.scrollBy(0, edge); raf = requestAnimationFrame(step); }; raf = requestAnimationFrame(step); }
+        };
+        const end = (ev) => {
+          clearTimeout(timer); cancelAnimationFrame(raf);
+          document.removeEventListener('touchmove', move); document.removeEventListener('touchend', end); document.removeEventListener('touchcancel', end);
+          if (!live) return;
+          if (ev && ev.cancelable) ev.preventDefault();
+          ghost.remove(); el.classList.remove('dragging'); if (over) over.classList.remove('drop-hl');
+          el.dataset.dragged = '1'; setTimeout(() => { delete el.dataset.dragged; }, 400);
+          if (over && ev && ev.type === 'touchend') moveTo(x, Number(over.dataset.id));
+        };
+        document.addEventListener('touchmove', move, { passive: false }); document.addEventListener('touchend', end); document.addEventListener('touchcancel', end);
+      }, { passive: true });
+      el.addEventListener('contextmenu', (e) => e.preventDefault());
+    }
     if (S.rfMove) {
       const mx = rows.find((r) => r.id === S.rfMove);
       if (mx) body.querySelector('.floor-wrap').insertAdjacentHTML('beforebegin', `<div class="alert rf-move-bar"><span>Tap a table for <b>${esc(mx.guest_name)} · ${mx.party_size}</b></span><span class="spacer"></span><button class="btn ghost sm" id="rf-move-x">Cancel</button></div>`);
       const mb = document.getElementById('rf-move-x'); if (mb) mb.onclick = () => { S.rfMove = null; renderResFloor(body, rows, floor); };
-      if (window.innerWidth < 1100) { const c = document.getElementById('rf-canvas'); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+
     }
     body.querySelectorAll('#rf-canvas .ftable').forEach((el) => {
       const st = state(floor.tables.find((z) => z.id === Number(el.dataset.id)));
