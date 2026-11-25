@@ -49,39 +49,6 @@ router.put('/platform/restaurants/:id', wrap(async (req, res) => {
 }));
 
 // Owner starts over: everything about the restaurant is wiped and set up fresh. The login stays the same.
-// Change the login email and/or password. Needs the current password.
-router.put('/account/login', wrap(async (req, res) => {
-  const auth = require('../auth');
-  const u = one('SELECT id, name, email, password_hash FROM users WHERE id = ?', req.user.id);
-  if (!u || !auth.verifyPassword(String(req.body.password || ''), u.password_hash)) throw new BookingError('Your current password is not right.', 401);
-  const f = {};
-  if (req.body.email !== undefined) {
-    const em = String(req.body.email).trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) throw new BookingError('Enter a valid email.');
-    if (em !== u.email) {
-      if (one('SELECT id FROM users WHERE email = ? AND id != ?', em, u.id)) throw new BookingError('Another account already uses that email.');
-      f.email = em;
-    }
-  }
-  if (req.body.new_password) {
-    if (String(req.body.new_password).length < 8) throw new BookingError('Your new password needs at least 8 characters.');
-    f.password_hash = auth.hashPassword(String(req.body.new_password));
-  }
-  if (!Object.keys(f).length) return res.json({ ok: true, email: u.email, changed: [] });
-  run(`UPDATE users SET ${Object.keys(f).map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, ...Object.values(f), u.id);
-  const changed = [f.email && 'email', f.password_hash && 'password'].filter(Boolean);
-  const to = [...new Set([u.email, f.email].filter(Boolean))];
-  for (const addr of to) email.sendLoginChanged(req.restaurant, { name: u.name, oldEmail: u.email, newEmail: f.email || u.email }, changed, addr).catch(() => {});
-  res.json({ ok: true, email: f.email || u.email, changed });
-}));
-
-router.post('/account/reset', wrap(async (req, res) => {
-  if (req.user.role !== 'owner') throw new BookingError('Only the owner can start over.', 403);
-  const u = one('SELECT password_hash FROM users WHERE id = ?', req.user.id);
-  if (!u || !require('../auth').verifyPassword(String(req.body.password || ''), u.password_hash)) throw new BookingError('That password is not right.', 401);
-  resetRestaurant(req.restaurant.id);
-  res.json({ ok: true });
-}));
 /** Wipe a restaurant back to a fresh start (new trial, starter setup). Logins are kept. */
 function resetRestaurant(rid) {
   tx(() => {

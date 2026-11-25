@@ -353,18 +353,6 @@ test('dish options and smart AI menu reading (with a fallback when AI is off)', 
   assert.ok(require('../src/ai-menu').chunks('a\n'.repeat(9000), 5000).length >= 3);
 });
 
-test('start over wipes the restaurant but keeps the login', async () => {
-  assert.strictEqual((await call('POST', '/api/admin/account/reset', { password: 'wrong-pass' })).status, 401);
-  const r = await call('POST', '/api/admin/account/reset', { password: 'password123' });
-  assert.strictEqual(r.status, 200, JSON.stringify(r.data));
-  const me = await call('GET', '/api/admin/restaurant');
-  assert.strictEqual(me.status, 200, 'still logged in');
-  assert.strictEqual(me.data.restaurant.name, 'My restaurant');
-  assert.strictEqual((await call('GET', '/api/admin/menu')).data.length, 0);
-  assert.strictEqual((await call('GET', '/api/admin/floor')).data.tables.length, 6, 'fresh starter tables');
-  assert.strictEqual((await call('POST', '/api/auth/login', { email: 'owner@test.local', password: 'password123' })).status, 200);
-});
-
 test('staff key can reset a restaurant and keep its logins', async () => {
   const req = (method, path, key) => fetch(`${base}${path}`, { method, headers: key ? { Authorization: `Bearer ${key}` } : {} });
   delete process.env.STAFF_API_KEY;
@@ -380,17 +368,13 @@ test('staff key can reset a restaurant and keep its logins', async () => {
     assert.ok(out.ok && out.logins_kept >= 1);
     const me = await call('GET', '/api/admin/restaurant');
     assert.strictEqual(me.status, 200); assert.strictEqual(me.data.restaurant.name, 'My restaurant');
+    assert.strictEqual((await call('POST', '/api/admin/account/reset', { password: 'password123' })).status, 404, 'owners cannot start over themselves');
+    const put = (body) => fetch(`${base}/api/staff/users/email`, { method: 'PUT', headers: { Authorization: `Bearer ${'k'.repeat(40)}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    assert.strictEqual((await put({ from: 'nobody@x.com', to: 'a@b.com' })).status, 404);
+    assert.strictEqual((await put({ from: 'owner@test.local', to: 'Management@QueenMamasKitchen.com' })).status, 200);
+    assert.strictEqual((await call('GET', '/api/admin/restaurant')).data.user.email, 'management@queenmamaskitchen.com');
+    assert.strictEqual((await put({ from: 'management@queenmamaskitchen.com', to: 'owner@test.local' })).status, 200);
   } finally { delete process.env.STAFF_API_KEY; }
-});
-
-test('owner can change the login email and password', async () => {
-  assert.strictEqual((await call('PUT', '/api/admin/account/login', { password: 'nope', email: 'x@example.com' })).status, 401);
-  const r = await call('PUT', '/api/admin/account/login', { password: 'password123', email: 'Management@QueenMamasKitchen.com', new_password: 'newpass1234' });
-  assert.strictEqual(r.status, 200, JSON.stringify(r.data)); assert.strictEqual(r.data.email, 'management@queenmamaskitchen.com');
-  assert.deepStrictEqual(r.data.changed, ['email', 'password']);
-  const back = await call('PUT', '/api/admin/account/login', { password: 'newpass1234', new_password: 'password123' });
-  assert.strictEqual(back.status, 200);
-  assert.strictEqual((await call('GET', '/api/admin/restaurant')).data.user.email, 'management@queenmamaskitchen.com');
 });
 
 test('gallery and likes: diners heart restaurants, dishes and food photos', async () => {

@@ -206,18 +206,6 @@ async function sendWelcome(restaurant, user) {
   });
 }
 
-async function sendLoginChanged(restaurant, who, changed, to) {
-  const what = changed.length === 2 ? 'login email and password' : changed[0] === 'email' ? 'login email' : 'password';
-  return send({
-    to, kind: 'login_changed', subject: `Your Rbooked ${what} was changed`,
-    html: layout(null, `Your ${what} was changed`, `
-      <p>Hi ${esc(who.name)}, the ${what} for <b>${esc(restaurant.name)}</b> on Rbooked was just changed.</p>
-      ${changed.includes('email') ? `<p>You now log in with <b>${esc(who.newEmail)}</b> (before: ${esc(who.oldEmail)}).</p>` : ''}
-      <p>If you didn't do this, reply to this email right away.</p>
-      <p>${button(`${config.baseUrl}/login`, 'Log in')}</p>`),
-  });
-}
-
 async function sendTrialEnding(restaurant, to, daysLeft) {
   return send({
     to, kind: 'trial_ending',
@@ -229,4 +217,4 @@ async function sendTrialEnding(restaurant, to, daysLeft) {
   });
 }
 
-module.exports = { flush, sendLoginChanged, sendReservationEmail, sendWelcome, sendTrialEnding, send, esc };
+module.exports = { flush, sendReservationEmail, sendWelcome, sendTrialEnding, send, esc };

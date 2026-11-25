@@ -3,7 +3,7 @@
 // (32+ characters) is set in Cloudflare. Calls send it as "Authorization: Bearer <key>".
 const express = require('express');
 const crypto = require('crypto');
-const { one, all } = require('../db');
+const { one, all, run } = require('../db');
 const { wrap } = require('./public');
 
 const router = express.Router();
@@ -31,6 +31,17 @@ router.post('/restaurants/:id/reset', wrap(async (req, res) => {
   if (!r) return res.status(404).json({ error: 'No such restaurant' });
   require('./admin').resetRestaurant(r.id);
   res.json({ ok: true, reset: r.name, logins_kept: one('SELECT COUNT(*) AS n FROM users WHERE restaurant_id = ?', r.id).n });
+}));
+
+// Change a login's email (support request from the owner).
+router.put('/users/email', wrap(async (req, res) => {
+  const from = String(req.body.from || '').trim().toLowerCase(); const to = String(req.body.to || '').trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return res.status(400).json({ error: 'Enter a valid new email.' });
+  const u = one('SELECT id FROM users WHERE email = ?', from);
+  if (!u) return res.status(404).json({ error: `No login uses ${from}.` });
+  if (one('SELECT id FROM users WHERE email = ? AND id != ?', to, u.id)) return res.status(409).json({ error: 'Another login already uses that email.' });
+  run('UPDATE users SET email = ? WHERE id = ?', to, u.id);
+  res.json({ ok: true, from, to });
 }));
 
 module.exports = router;

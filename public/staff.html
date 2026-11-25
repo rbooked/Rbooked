@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<link rel="stylesheet" href="/css/app.css">
+<title>Rbooked support</title>
+<style>
+  .st { max-width: 760px; margin: 24px auto; padding: 0 16px; display: grid; gap: 16px; }
+  .st input { width: 100%; font-size: 16px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+  .st label { display: block; font-weight: 600; margin: 8px 0 4px; }
+  .st-row { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .st-row:last-child { border-bottom: none; }
+  .st-out { font-size: 14px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<main class="st">
+  <h1 class="serif" style="margin:0">Rbooked support</h1>
+  <div class="card">
+    <label for="key">Support key</label>
+    <input id="key" type="password" autocomplete="off" placeholder="The STAFF_API_KEY you saved in Cloudflare">
+    <p class="small muted">Kept only in this browser tab. Nothing works without it.</p>
+    <button class="btn" id="load">Show restaurants</button>
+    <div class="st-out" id="msg" role="status"></div>
+  </div>
+  <div class="card">
+    <h2>Change a login email</h2>
+    <form id="email-form">
+      <label for="from">Current login email</label><input id="from" type="email" required>
+      <label for="to">New login email</label><input id="to" type="email" required>
+      <button class="btn" style="margin-top:12px">Change login email</button>
+      <div class="st-out" id="email-out" role="status"></div>
+    </form>
+  </div>
+  <div class="card"><h2>Restaurants</h2><div id="list" class="muted small">Enter the key and press Show restaurants.</div></div>
+</main>
+<script src="/js/common.js"></script>
+<script>
+(function () {
+  const keyIn = document.getElementById('key');
+  try { keyIn.value = sessionStorage.getItem('rb_staff') || ''; } catch { /* */ }
+  const call = async (method, path, body) => {
+    try { sessionStorage.setItem('rb_staff', keyIn.value.trim()); } catch { /* */ }
+    const r = await fetch(path, { method, headers: { Authorization: `Bearer ${keyIn.value.trim()}`, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+    let d = null; try { d = await r.json(); } catch { /* */ }
+    if (!r.ok) throw new Error(r.status === 404 && !d ? 'Support tools are off.' : r.status === 404 && d && d.error === 'Not found' ? 'Support tools are off: add STAFF_API_KEY (32+ characters) in Cloudflare first.' : (d && d.error) || `Error ${r.status}`);
+    return d;
+  };
+  const esc = TB.esc; const msg = document.getElementById('msg');
+  async function load() {
+    msg.textContent = 'Loading…';
+    try {
+      const rows = await call('GET', '/api/staff/restaurants'); msg.textContent = '';
+      document.getElementById('list').innerHTML = rows.map((r) => `<div class="st-row"><div><b>${esc(r.name)}</b> <span class="muted small">${esc([r.city, r.state].filter(Boolean).join(', '))} · ${r.dishes} dishes</span><div class="small">Login: ${esc(r.logins || '')}</div></div>
+        <button class="btn danger sm" data-reset="${r.id}" data-name="${esc(r.name)}">Reset…</button></div>`).join('') || 'No restaurants yet.';
+      document.querySelectorAll('[data-reset]').forEach((b) => { b.onclick = async () => {
+        if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Tap again to erase everything'; setTimeout(() => { b.dataset.armed = ''; b.textContent = 'Reset…'; }, 5000); return; }
+        b.disabled = true;
+        try { const out = await call('POST', `/api/staff/restaurants/${b.dataset.reset}/reset`); await load(); msg.textContent = `${out.reset} was reset. Login kept.`; } catch (e) { msg.textContent = e.message; b.disabled = false; }
+      }; });
+    } catch (e) { msg.textContent = e.message; }
+  }
+  document.getElementById('load').onclick = load;
+  document.getElementById('email-form').onsubmit = async (e) => {
+    e.preventDefault(); const out = document.getElementById('email-out'); out.textContent = 'Saving…';
+    try { const r = await call('PUT', '/api/staff/users/email', { from: document.getElementById('from').value, to: document.getElementById('to').value }); out.textContent = `Done. That account now logs in with ${r.to} (same password).`; if (document.querySelector('.st-row')) load(); } catch (err) { out.textContent = err.message; }
+  };
+}());
+</script>
+</body>
+</html>

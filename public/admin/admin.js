@@ -1542,41 +1542,8 @@
         TB.toast('Settings saved');
       } catch (err) { fail(err); }
     };
-    // Login: change the email you log in with, or your password.
-    view.insertAdjacentHTML('beforeend', `<div class="card" style="margin-top:16px" id="login-card"><h2>Your login</h2>
-      <p class="small muted">You log in with <b id="login-email">${esc(S.me.user.email)}</b>. Booking alerts go to the restaurant email in your profile.</p>
-      <form id="login-form"><div class="grid-2"><div class="field"><label for="lg-email">Login email</label><input id="lg-email" type="email" autocomplete="email" value="${esc(S.me.user.email)}" required></div>
-        <div class="field"><label for="lg-new">New password <span class="muted small">(leave empty to keep it)</span></label><input id="lg-new" type="password" autocomplete="new-password" minlength="8"></div></div>
-        <div class="field"><label for="lg-pw">Current password</label><input id="lg-pw" type="password" autocomplete="current-password" required></div>
-        <button class="btn" type="submit">Save login</button></form></div>`);
-    document.getElementById('login-form').onsubmit = async (e) => {
-      e.preventDefault(); const btn = e.target.querySelector('button'); btn.disabled = true;
-      try {
-        const out = await api('/api/admin/account/login', { method: 'PUT', body: { email: document.getElementById('lg-email').value, new_password: document.getElementById('lg-new').value, password: document.getElementById('lg-pw').value } });
-        S.me.user.email = out.email; document.getElementById('login-email').textContent = out.email;
-        document.getElementById('lg-pw').value = ''; document.getElementById('lg-new').value = '';
-        TB.toast(out.changed.length ? `Saved. You now log in with ${out.email}` : 'Nothing changed');
-      } catch (err) { fail(err); } finally { btn.disabled = false; }
-    };
-    // Start over: wipe the restaurant (profile, menu, photos, tables, reservations, guests) but keep this login.
-    view.insertAdjacentHTML('beforeend', `<div class="card danger-zone" style="margin-top:16px"><h2>Start over</h2>
-      <p class="small muted">Erase your restaurant profile, menu, photos, tables, services, reservations and guests, and set it up again from scratch. Your login email and password stay the same. This can't be undone.</p>
-      <button type="button" class="btn danger" id="reset-all">Start over…</button></div>`);
-    document.getElementById('reset-all').onclick = () => {
-      const close = TB.modal(`<h2>Erase everything and start over?</h2>
-        <p class="small">Your profile, menu, photos, tables, services, reservations and guest list will be deleted. Your login stays the same.</p>
-        <form id="reset-form"><div class="field"><label for="reset-pw">Enter your password to confirm</label><input id="reset-pw" type="password" autocomplete="current-password" required></div>
-        <div class="row"><button class="btn danger" type="submit">Erase and start over</button><button class="btn secondary" type="button" data-close>Cancel</button></div></form>`, (root) => {
-        root.querySelector('#reset-form').onsubmit = async (e) => {
-          e.preventDefault(); const btn = e.target.querySelector('button[type=submit]'); btn.disabled = true;
-          try {
-            await api('/api/admin/account/reset', { body: { password: root.querySelector('#reset-pw').value } });
-            if (typeof close === 'function') close();
-            location.hash = '#welcome'; location.reload();
-          } catch (err) { btn.disabled = false; fail(err); }
-        };
-      });
-    };
+    view.insertAdjacentHTML('beforeend', `<div class="card" style="margin-top:16px"><h2>Login and account</h2>
+      <p class="small muted" style="margin:0">You log in with <b>${esc(S.me.user.email)}</b>. To change your login email, or for anything else about your account, email <a href="mailto:rbookedsupport@gmail.com">rbookedsupport@gmail.com</a>.</p></div>`);
   }
 
   // ---------------- Billing ----------------
