@@ -21,7 +21,14 @@ module.exports = {
   // Rbooked staff who can feature restaurants (comma-separated emails; set in Cloudflare, not in the repo).
   platformAdmins: String(e.PLATFORM_ADMIN_EMAILS || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean),
   resendApiKey: e.RESEND_API_KEY || '',
-  emailFrom: e.EMAIL_FROM || 'Rbooked <reservations@example.com>',
+  // Mail goes out from the verified rbooked.com domain. A personal address (like Gmail) set as EMAIL_FROM can't
+  // be sent from, so it becomes the Reply-To instead: replies still reach that inbox.
+  ...(() => {
+    const from = e.EMAIL_FROM || 'Rbooked <reservations@rbooked.com>';
+    const personal = /@(gmail|googlemail|yahoo|outlook|hotmail|icloud|aol)\./i.test(from);
+    const addr = (/<([^>]+)>/.exec(from) || [null, from])[1].trim();
+    return { emailFrom: personal ? 'Rbooked <reservations@rbooked.com>' : from, replyTo: e.EMAIL_REPLY_TO || (personal ? addr : '') };
+  })(),
   stripe: {
     secretKey: e.STRIPE_SECRET_KEY || '',
     webhookSecret: e.STRIPE_WEBHOOK_SECRET || '',

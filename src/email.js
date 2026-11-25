@@ -24,7 +24,7 @@ async function deliver({ to, subject, html, attachments }) {
       method: 'POST',
       headers: { Authorization: `Bearer ${config.resendApiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        from: config.emailFrom, to: [to], subject, html,
+        from: config.emailFrom, to: [to], subject, html, ...(config.replyTo ? { reply_to: config.replyTo } : {}),
         attachments: (attachments || []).map((a) => ({ filename: a.filename, content: Buffer.from(a.content).toString('base64') })),
       }),
     });
@@ -33,7 +33,7 @@ async function deliver({ to, subject, html, attachments }) {
   }
   const t = smtpTransport();
   if (!t) return false;
-  await t.sendMail({ from: config.emailFrom, to, subject, html, attachments });
+  await t.sendMail({ from: config.emailFrom, to, subject, html, attachments, ...(config.replyTo ? { replyTo: config.replyTo } : {}) });
   return true;
 }
 

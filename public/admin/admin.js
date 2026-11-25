@@ -1543,7 +1543,7 @@
       <thead><tr><th>Sent (UTC)</th><th>Type</th><th>To</th><th>Subject</th><th>Status</th></tr></thead>
       <tbody>${rows.map((e) => `<tr><td>${esc(e.created_at)}</td><td>${esc(e.kind.replace('_', ' '))}</td><td>${esc(e.to_addr)}</td>
         <td><a href="/api/admin/emails/${e.id}" target="_blank" rel="noopener">${esc(e.subject)}</a></td>
-        <td><span class="badge ${e.status === 'failed' ? 'cancelled' : e.status === 'sent' ? 'seated' : ''}">${e.status === 'outbox' ? 'not sent (no SMTP)' : esc(e.status)}</span>${e.error ? `<div class="small muted">${esc(e.error)}</div>` : ''}</td></tr>`).join('')
+        <td><span class="badge ${e.status === 'failed' ? 'cancelled' : e.status === 'sent' ? 'seated' : ''}">${e.status === 'outbox' ? 'not sent (email key missing)' : esc(e.status)}</span>${e.error ? `<div class="small muted">${esc(e.error)}</div>` : ''}</td></tr>`).join('')
         || '<tr><td colspan="5" class="muted">No emails yet.</td></tr>'}</tbody></table></div></div>`;
   }
 

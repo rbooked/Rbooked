@@ -19,7 +19,8 @@
   "vars": {
     "NODE_ENV": "production",
     "BASE_URL": "https://rbooked.com",
-    "EMAIL_FROM": "Rbooked <reservations@rbooked.com>"
+    "EMAIL_FROM": "Rbooked <reservations@rbooked.com>",
+    "EMAIL_REPLY_TO": "rbookedsupport@gmail.com" // guest replies go here
   },
   "keep_vars": true, // keep variables added in the Cloudflare dashboard when GitHub deploys
   "observability": { "enabled": true }
