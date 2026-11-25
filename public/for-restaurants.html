@@ -39,6 +39,12 @@
       <div class="card">
         <h2 class="serif" style="font-size:26px">Create your restaurant account</h2>
         <p class="muted">No credit card required to sign up. We'll set up a starter floor plan and dinner service you can edit.</p>
+        <div class="find-box" id="find-box">
+          <b>🔎 Find your restaurant</b>
+          <p class="muted small" style="margin:2px 0 10px">Search by name and we'll fill in your address, phone, website, hours and cuisine. You can change anything.</p>
+          <form class="find-row" id="find-form"><input id="f-q" placeholder="Restaurant name" aria-label="Restaurant name" autocomplete="organization"><input id="f-near" placeholder="City or ZIP" aria-label="City or ZIP"><button class="btn" type="submit">Search</button></form>
+          <div id="f-results" class="find-results" role="list"></div>
+        </div>
         <form id="signup-form" novalidate>
           <div class="field"><label for="s-rname">Restaurant name</label><input id="s-rname" name="restaurant_name" required></div>
           <div class="grid-2">
@@ -95,12 +101,44 @@
       if (p && p['state abbreviation']) stSel.value = p['state abbreviation'];
     } catch { /* offline: keep what we have */ }
   });
+  // ----- Find your restaurant (OpenStreetMap) -----
+  let found = null;
+  const fr = document.getElementById('f-results');
+  const fillForm = (p) => {
+    found = p;
+    const set = (id, v) => { const el = document.getElementById(id); if (v && el) el.value = v; };
+    set('s-rname', p.name); set('s-phone', p.phone); set('s-addr', p.address); set('s-zip', p.zip); set('s-city', p.city);
+    if (p.state) stSel.value = p.state;
+    if (p.cuisine) document.getElementById('s-cuisine').value = p.cuisine;
+    const hrs = p.hours ? 'hours' : ''; const got = ['address', p.phone && 'phone', p.website_url && 'website', hrs, p.cuisine && 'cuisine'].filter(Boolean);
+    fr.innerHTML = `<div class="alert ok">Filled in ${TB.esc(p.name)}: ${got.join(', ')}. Check the details below${p.cuisine ? '' : ' and pick your cuisine'}.</div>`;
+    document.getElementById('s-name').focus();
+  };
+  document.getElementById('find-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const q = document.getElementById('f-q').value.trim(); const near = document.getElementById('f-near').value.trim();
+    if (q.length < 2) { fr.innerHTML = '<p class="muted small">Type your restaurant name.</p>'; return; }
+    fr.innerHTML = '<p class="muted small">Searching…</p>';
+    try {
+      const { results } = await TB.api(`/api/public/place-search?${new URLSearchParams({ q, near })}`);
+      if (!results.length) { fr.innerHTML = '<p class="muted small">No match found. Try adding your city, or just fill in the form below.</p>'; return; }
+      fr.innerHTML = results.map((p, i) => `<button type="button" class="find-item" data-i="${i}" role="listitem"><b>${TB.esc(p.name)}</b><span class="muted small">${TB.esc([p.address, p.city, p.state].filter(Boolean).join(', ') || p.label)}</span>${p.cuisine ? `<span class="tagchip">${TB.esc(p.cuisine)}</span>` : ''}</button>`).join('')
+        + '<p class="muted small" style="margin:6px 0 0">Not listed? Fill in the form below.</p>';
+      fr.querySelectorAll('.find-item').forEach((b) => { b.onclick = () => fillForm(results[Number(b.dataset.i)]); });
+    } catch (err) { fr.innerHTML = `<p class="muted small">${TB.esc(err.message)}</p>`; }
+  };
+
   document.getElementById('signup-form').onsubmit = async (e) => {
     e.preventDefault();
     const btn = e.target.querySelector('button[type=submit]');
     btn.disabled = true; btn.textContent = 'Creating your account…';
     try {
       await TB.api('/api/auth/signup', { body: TB.formData(e.target) });
+      // Save what we found (website, hours) to the new profile. Not required; ignore failures.
+      if (found && (found.website_url || found.hours)) {
+        const extra = {}; if (found.website_url) extra.website_url = found.website_url; if (found.hours) extra.hours = found.hours;
+        await TB.api('/api/admin/restaurant', { method: 'PUT', body: extra }).catch(() => {});
+      }
       location.href = '/admin/#welcome';
     } catch (err) {
       document.getElementById('s-err').innerHTML = `<div class="alert error" style="margin-bottom:12px">${TB.esc(err.message)}</div>`;

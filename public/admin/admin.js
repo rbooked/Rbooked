@@ -123,7 +123,10 @@
     const hadHours = !!TBMatch.parseHours(r.hours);
     const pct = Math.round((done / steps.length) * 100);
     view.innerHTML = `
-      ${S.welcome ? `<div class="card welcome"><h2 class="serif">Welcome to Rbooked, ${esc(r.name)}! 🎉</h2><p style="margin:0">${S.me.billing.billingOff ? 'Your account is ready.' : 'Your 14-day free trial has started.'} First, build your restaurant profile: this is what guests see when they find you.</p></div>` : ''}
+      ${S.welcome ? `<div class="card welcome"><h2 class="serif">Welcome to Rbooked${r.name && r.name !== 'My restaurant' ? `, ${esc(r.name)}` : ''}! 🎉</h2><p style="margin:0">${S.me.billing.billingOff ? 'Your account is ready.' : 'Your 14-day free trial has started.'} Start by finding your restaurant below, then add photos and your menu. This is what guests see when they find you.</p></div>` : ''}
+      <div class="card find-card"><div class="row"><b>🔎 Find your restaurant online</b><span class="muted small">Fill in your address, phone, website, hours and cuisine in one step.</span></div>
+        <form class="find-row" id="pf-form" style="margin-top:10px"><input id="pf-q" placeholder="Restaurant name" value="${r.name === 'My restaurant' ? '' : esc(r.name)}" aria-label="Restaurant name"><input id="pf-near" placeholder="City or ZIP" value="${esc(r.city || r.zip || '')}" aria-label="City or ZIP"><button class="btn secondary" type="submit">Search</button></form>
+        <div id="pf-results" class="find-results"></div></div>
       <div class="card setup ${done === steps.length ? 'complete' : ''}">
         <div class="row"><h2 style="margin:0">${done === steps.length ? '✅ Your restaurant is ready for guests' : 'Get your restaurant ready'}</h2><span class="spacer"></span><b>${done} of ${steps.length}</b></div>
         <div class="progress"><i style="width:${pct}%"></i></div>
@@ -170,6 +173,32 @@
       </div>
       <div class="savebar"><button class="btn lg" type="submit">Save profile</button><span class="muted small">Changes show on your guest page right away.</span></div>
       </form>`;
+    // Find your restaurant (OpenStreetMap): pick a result to fill the profile.
+    document.getElementById('pf-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const box = document.getElementById('pf-results');
+      const q = document.getElementById('pf-q').value.trim(); const near = document.getElementById('pf-near').value.trim();
+      if (q.length < 2) { box.innerHTML = '<p class="muted small">Type your restaurant name.</p>'; return; }
+      box.innerHTML = '<p class="muted small">Searching…</p>';
+      try {
+        const { results } = await api(`/api/public/place-search?${new URLSearchParams({ q, near })}`);
+        if (!results.length) { box.innerHTML = '<p class="muted small">No match found. Try adding your city, or fill in the details below.</p>'; return; }
+        box.innerHTML = results.map((p, i) => `<button type="button" class="find-item" data-i="${i}"><b>${esc(p.name)}</b><span class="muted small">${esc([p.address, p.city, p.state].filter(Boolean).join(', ') || p.label)}</span></button>`).join('');
+        box.querySelectorAll('.find-item').forEach((b) => {
+          b.onclick = async () => {
+            const p = results[Number(b.dataset.i)];
+            const body = { name: p.name };
+            for (const k of ['phone', 'address', 'city', 'state', 'zip', 'cuisine', 'website_url']) if (p[k]) body[k] = p[k];
+            if (p.hours) body.hours = p.hours;
+            try {
+              await api('/api/admin/restaurant', { method: 'PUT', body });
+              S.me = await api('/api/admin/restaurant'); document.getElementById('rest-name').textContent = S.me.restaurant.name;
+              TB.toast(`Filled in from ${p.name}. Check the details and save.`); viewProfile().catch(fail);
+            } catch (err) { fail(err); }
+          };
+        });
+      } catch (err) { box.innerHTML = `<p class="muted small">${esc(err.message)}</p>`; }
+    };
     S.welcome = false;
     view.querySelectorAll('[data-jump]').forEach((a) => { a.onclick = (e) => { const el = document.getElementById(a.dataset.jump); if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1200); } }; });
     view.querySelectorAll('.h-row [data-open]').forEach((c) => { c.onchange = () => c.closest('.h-row').classList.toggle('closed', !c.checked); });
@@ -1365,6 +1394,25 @@
         document.documentElement.style.setProperty('--brand', S.me.restaurant.accent_color);
         TB.toast('Settings saved');
       } catch (err) { fail(err); }
+    };
+    // Start over: wipe the restaurant (profile, menu, photos, tables, reservations, guests) but keep this login.
+    view.insertAdjacentHTML('beforeend', `<div class="card danger-zone" style="margin-top:16px"><h2>Start over</h2>
+      <p class="small muted">Erase your restaurant profile, menu, photos, tables, services, reservations and guests, and set it up again from scratch. Your login email and password stay the same. This can't be undone.</p>
+      <button type="button" class="btn danger" id="reset-all">Start over…</button></div>`);
+    document.getElementById('reset-all').onclick = () => {
+      const close = TB.modal(`<h2>Erase everything and start over?</h2>
+        <p class="small">Your profile, menu, photos, tables, services, reservations and guest list will be deleted. Your login stays the same.</p>
+        <form id="reset-form"><div class="field"><label for="reset-pw">Enter your password to confirm</label><input id="reset-pw" type="password" autocomplete="current-password" required></div>
+        <div class="row"><button class="btn danger" type="submit">Erase and start over</button><button class="btn secondary" type="button" data-close>Cancel</button></div></form>`, (root) => {
+        root.querySelector('#reset-form').onsubmit = async (e) => {
+          e.preventDefault(); const btn = e.target.querySelector('button[type=submit]'); btn.disabled = true;
+          try {
+            await api('/api/admin/account/reset', { body: { password: root.querySelector('#reset-pw').value } });
+            if (typeof close === 'function') close();
+            location.hash = '#welcome'; location.reload();
+          } catch (err) { btn.disabled = false; fail(err); }
+        };
+      });
     };
   }
 

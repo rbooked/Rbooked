@@ -253,3 +253,13 @@ table.data tr:hover td { background: #fcfaf7; }
 /* iPhone zooms into fields under 16px; keep them at 16px on phones. */
 @media (max-width: 700px) { input, select, textarea { font-size: 16px !important; } }
 .search-bar > div { display: flex; } .search-bar > div > input { flex: 1; min-height: 48px; }
+
+/* Find your restaurant (signup) */
+.find-box { background: var(--brand-soft); border: 1px solid #f6cfb6; border-radius: 12px; padding: 14px; margin: 4px 0 18px; }
+.find-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 8px; }
+.find-results { display: grid; gap: 6px; margin-top: 10px; }
+.find-results:empty { display: none; }
+.find-item { display: grid; gap: 2px; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer; font: inherit; color: inherit; }
+.find-item:hover { border-color: var(--brand); }
+.find-item .tagchip { justify-self: start; margin-top: 4px; }
+@media (max-width: 560px) { .find-row { grid-template-columns: 1fr 1fr; } .find-row .btn { grid-column: span 2; } }

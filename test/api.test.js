@@ -314,3 +314,26 @@ test('menu import: pasted text becomes dishes with sections, prices and diet tag
   assert.strictEqual(rep.status, 201);
   assert.strictEqual((await call('GET', '/api/admin/menu')).data.length, 1);
 });
+
+test('find your restaurant: OpenStreetMap results become profile details', () => {
+  const L = require('../src/place-lookup');
+  const p = L.fromNominatim({ osm_type: 'node', osm_id: 5, lat: '30.27', lon: '-97.74', type: 'restaurant', name: 'Taco Spot',
+    address: { house_number: '12', road: 'Congress Ave', city: 'Austin', 'ISO3166-2-lvl4': 'US-TX', postcode: '78701' },
+    extratags: { cuisine: 'mexican;tex-mex', opening_hours: 'Mo-Fr 11:00-21:00; Sa 10:00-23:00; Su off', 'contact:phone': '+1 512 555 0100', website: 'tacospot.com' } });
+  assert.deepStrictEqual([p.name, p.address, p.city, p.state, p.zip, p.cuisine, p.website_url], ['Taco Spot', '12 Congress Ave', 'Austin', 'TX', '78701', 'Mexican', 'https://tacospot.com']);
+  assert.strictEqual(p.hours[0].closed, true);
+  assert.deepStrictEqual(p.hours[6], { closed: false, open: '10:00', close: '23:00' });
+  assert.deepStrictEqual(p.hours[1], { closed: false, open: '11:00', close: '21:00' });
+});
+
+test('start over wipes the restaurant but keeps the login', async () => {
+  assert.strictEqual((await call('POST', '/api/admin/account/reset', { password: 'wrong-pass' })).status, 401);
+  const r = await call('POST', '/api/admin/account/reset', { password: 'password123' });
+  assert.strictEqual(r.status, 200, JSON.stringify(r.data));
+  const me = await call('GET', '/api/admin/restaurant');
+  assert.strictEqual(me.status, 200, 'still logged in');
+  assert.strictEqual(me.data.restaurant.name, 'My restaurant');
+  assert.strictEqual((await call('GET', '/api/admin/menu')).data.length, 0);
+  assert.strictEqual((await call('GET', '/api/admin/floor')).data.tables.length, 6, 'fresh starter tables');
+  assert.strictEqual((await call('POST', '/api/auth/login', { email: 'owner@test.local', password: 'password123' })).status, 200);
+});

@@ -48,6 +48,24 @@ router.put('/platform/restaurants/:id', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// Owner starts over: everything about the restaurant is wiped and set up fresh. The login stays the same.
+router.post('/account/reset', wrap(async (req, res) => {
+  if (req.user.role !== 'owner') throw new BookingError('Only the owner can start over.', 403);
+  const u = one('SELECT password_hash FROM users WHERE id = ?', req.user.id);
+  if (!u || !require('../auth').verifyPassword(String(req.body.password || ''), u.password_hash)) throw new BookingError('That password is not right.', 401);
+  const rid = req.restaurant.id;
+  tx(() => {
+    run('DELETE FROM email_log WHERE reservation_id IN (SELECT id FROM reservations WHERE restaurant_id = ?)', rid);
+    for (const t of ['reservations', 'table_combos', 'guests', 'menu_items', 'images', 'closures', 'shifts', 'tables', 'areas']) run(`DELETE FROM ${t} WHERE restaurant_id = ?`, rid);
+    run(`UPDATE restaurants SET name = 'My restaurant', cuisine = '', price_level = 2, description = '', phone = '', address = '', city = '',
+      image_url = '', logo_url = '', website_url = '', hours = '', tags = '', accent_color = '#c2410c', featured = 0, trial_notice_sent = 0,
+      turn_times = '2:90,4:120,6:180,99:210', trial_ends_at = ?, subscription_status = 'trialing' WHERE id = ?`,
+    new Date(Date.now() + config.plan.trialDays * 86400000).toISOString(), rid);
+    require('./auth').starterSetup(rid);
+  });
+  res.json({ ok: true });
+}));
+
 router.get('/restaurant', wrap(async (req, res) => {
   res.json({ restaurant: pick(req.restaurant, ['id', 'slug', 'featured', ...SETTINGS]), user: { ...req.user, platformAdmin: isPlatformAdmin(req) }, billing: billing.billingSummary(req.restaurant), baseUrl: config.baseUrl });
 }));
