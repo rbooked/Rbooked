@@ -1,0 +1,26 @@
+// Cloudflare Workers config for the hosted site (free plan, no credit card needed).
+// Deploy: Cloudflare dashboard > Workers & Pages > Create > Import a repository, or `npx wrangler deploy`.
+{
+  "name": "rbooked",
+  "main": "src/worker/index.js",
+  "compatibility_date": "2025-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "directory": "./public" },
+  "durable_objects": {
+    "bindings": [{ "name": "DB", "class_name": "RbookedDB" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RbookedDB"] }],
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "alias": {
+    "express": "./src/worker/mini-express.js",
+    "nodemailer": "./src/worker/no-smtp.js"
+  },
+  "vars": {
+    "NODE_ENV": "production",
+    "BASE_URL": "https://rbooked.com",
+    "EMAIL_FROM": "Rbooked <reservations@rbooked.com>"
+  },
+  "observability": { "enabled": true }
+  // Secrets (set in the dashboard under Settings > Variables and Secrets):
+  //   RESEND_API_KEY, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, and optionally SESSION_SECRET
+}

@@ -2,6 +2,7 @@
 const path = require('path');
 const express = require('express');
 const config = require('./config');
+require('./db-node'); // no-op when another engine (Cloudflare) is already plugged in
 const { all, one } = require('./db');
 const billing = require('./billing');
 const jobs = require('./jobs');
@@ -80,15 +81,16 @@ if (!config.isProduction) {
 
 app.get('/healthz', (req, res) => res.json({ ok: true }));
 
-app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'] }));
+// On Cloudflare the same folder is served as static assets before requests reach the app.
+app.use(express.static(path.join(typeof __dirname === 'string' ? __dirname : '.', '..', 'public'), { extensions: ['html'] }));
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 
 if (require.main === module) {
   app.listen(config.port, () => {
     console.log(`Rbooked running at ${config.baseUrl} (port ${config.port})`);
-    console.log(`Email: ${config.smtp.host ? `SMTP ${config.smtp.host}` : 'outbox mode, see /dev/outbox'}`);
-    console.log(`Billing: ${billing.stripe ? 'Stripe' : 'demo mode (no STRIPE_SECRET_KEY)'}`);
+    console.log(`Email: ${config.resendApiKey ? 'Resend' : config.smtp.host ? `SMTP ${config.smtp.host}` : 'outbox mode, see /dev/outbox'}`);
+    console.log(`Billing: ${billing.stripe() ? 'Stripe' : 'demo mode (no STRIPE_SECRET_KEY)'}`);
   });
   jobs.start();
 }

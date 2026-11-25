@@ -7,7 +7,9 @@
     "start": "node --no-warnings src/server.js",
     "dev": "node --no-warnings --watch src/server.js",
     "seed": "node --no-warnings src/seed.js",
-    "test": "node --no-warnings --test test/*.test.js"
+    "test": "node --no-warnings --test test/*.test.js",
+    "cf:dev": "wrangler dev",
+    "cf:deploy": "wrangler deploy"
   },
   "dependencies": {
     "express": "^4.22.3",
@@ -17,5 +19,8 @@
   "engines": {
     "node": ">=22.13"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "wrangler": "^4.168.0"
+  }
 }

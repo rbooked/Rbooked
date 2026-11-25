@@ -12,6 +12,7 @@ if (process.argv.includes('--reset')) {
   }
 }
 
+require('./db-node');
 const { one, run, tx } = require('./db');
 const { hashPassword } = require('./auth');
 const { zonedToUtc, nowInZone, addDays } = require('./time');

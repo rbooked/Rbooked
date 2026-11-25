@@ -1,14 +1,10 @@
 'use strict';
-const path = require('path');
-const fs = require('fs');
-const { DatabaseSync } = require('node:sqlite');
-const config = require('./config');
+// Database layer. The same SQL runs on two engines:
+//  - Node.js: built-in node:sqlite (see db-node.js), used by `npm start`, tests and self-hosting.
+//  - Cloudflare: a SQLite-backed Durable Object (see worker/index.js), used for the free hosted site.
+// A driver provides exec(sql), one/all/run(sql, ...params) and tx(fn).
 
-fs.mkdirSync(path.dirname(path.resolve(config.databasePath)), { recursive: true });
-const db = new DatabaseSync(path.resolve(config.databasePath));
-db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
-
-db.exec(`
+const SCHEMA = `
 CREATE TABLE IF NOT EXISTS restaurants (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   slug TEXT UNIQUE NOT NULL,
@@ -214,33 +210,39 @@ CREATE TABLE IF NOT EXISTS zip_cache (
   city TEXT,
   state TEXT
 );
-`);
+`;
 
-// Lightweight migrations for databases created by earlier versions.
-const cols = new Set(db.prepare('PRAGMA table_info(restaurants)').all().map((c) => c.name));
-if (!cols.has('tags')) db.exec("ALTER TABLE restaurants ADD COLUMN tags TEXT DEFAULT ''");
-const rcols = new Set(db.prepare('PRAGMA table_info(reservations)').all().map((c) => c.name));
-if (!rcols.has('combo_id')) db.exec('ALTER TABLE reservations ADD COLUMN combo_id INTEGER');
-if (!rcols.has('guest_id')) db.exec('ALTER TABLE reservations ADD COLUMN guest_id INTEGER');
-if (!cols.has('turn_times')) db.exec("ALTER TABLE restaurants ADD COLUMN turn_times TEXT DEFAULT '2:90,4:120,6:180,99:210'");
-for (const [c, def] of [['website_url', "''"], ['logo_url', "''"], ['hours', "''"]]) if (!cols.has(c)) db.exec(`ALTER TABLE restaurants ADD COLUMN ${c} TEXT DEFAULT ${def}`);
-if (!cols.has('featured')) db.exec('ALTER TABLE restaurants ADD COLUMN featured INTEGER DEFAULT 0');
+let driver = null;
 
-/** Run fn inside a transaction. */
-function tx(fn) {
-  db.exec('BEGIN IMMEDIATE');
+function migrate(d) {
+  // Lightweight migrations for databases created by earlier versions.
+  let cols; let rcols;
   try {
-    const out = fn();
-    db.exec('COMMIT');
-    return out;
-  } catch (e) {
-    db.exec('ROLLBACK');
-    throw e;
-  }
+    cols = new Set(d.all('PRAGMA table_info(restaurants)').map((c) => c.name));
+    rcols = new Set(d.all('PRAGMA table_info(reservations)').map((c) => c.name));
+  } catch { return; } // engine without PRAGMA support: the schema above is already current
+  if (!cols.has('tags')) d.exec("ALTER TABLE restaurants ADD COLUMN tags TEXT DEFAULT ''");
+  if (!rcols.has('combo_id')) d.exec('ALTER TABLE reservations ADD COLUMN combo_id INTEGER');
+  if (!rcols.has('guest_id')) d.exec('ALTER TABLE reservations ADD COLUMN guest_id INTEGER');
+  if (!cols.has('turn_times')) d.exec("ALTER TABLE restaurants ADD COLUMN turn_times TEXT DEFAULT '2:90,4:120,6:180,99:210'");
+  for (const [c, def] of [['website_url', "''"], ['logo_url', "''"], ['hours', "''"]]) if (!cols.has(c)) d.exec(`ALTER TABLE restaurants ADD COLUMN ${c} TEXT DEFAULT ${def}`);
+  if (!cols.has('featured')) d.exec('ALTER TABLE restaurants ADD COLUMN featured INTEGER DEFAULT 0');
 }
 
-const one = (sql, ...p) => db.prepare(sql).get(...p);
-const all = (sql, ...p) => db.prepare(sql).all(...p);
-const run = (sql, ...p) => db.prepare(sql).run(...p);
+/** Plug in a database engine and make sure the schema exists. */
+function init(d) {
+  driver = d;
+  d.exec(SCHEMA);
+  migrate(d);
+  return d;
+}
+const ready = () => !!driver;
+const need = () => { if (!driver) throw new Error('Database not initialised'); return driver; };
 
-module.exports = { db, tx, one, all, run };
+/** Run fn inside a transaction. */
+const tx = (fn) => need().tx(fn);
+const one = (sql, ...p) => need().one(sql, ...p);
+const all = (sql, ...p) => need().all(sql, ...p);
+const run = (sql, ...p) => need().run(sql, ...p);
+
+module.exports = { init, ready, tx, one, all, run, SCHEMA };

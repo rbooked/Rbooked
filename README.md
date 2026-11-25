@@ -120,18 +120,25 @@ The widget is an auto-resizing iframe, so it never conflicts with the host site'
 
 ## Deploying
 
-Any host that runs Node 22 and gives you a **persistent disk** for the SQLite file works: Render, Railway, Fly.io, a DigitalOcean droplet, and so on.
+### Free: Cloudflare Workers (no credit card)
+The repo is ready for Cloudflare's free plan. Static pages are served from `public/`, and the API runs in one
+SQLite-backed Durable Object (`src/worker/index.js`) that uses the same routes and SQL as the Node.js server.
+A cron trigger runs reminders, auto no-shows and trial notices every 5 minutes. Config is in `wrangler.jsonc`.
 
-**Docker**
-```bash
-docker build -t rbooked .
-docker run -d -p 3000:3000 -v rbooked-data:/data --env-file .env rbooked
-docker exec -it <container> node src/seed.js   # optional demo data
-```
+1. Cloudflare dashboard > **Workers & Pages** > **Create** > **Import a repository** > pick this repo. Leave the build
+   command empty; the deploy command is `npx wrangler deploy`.
+2. Worker > **Settings** > **Domains & Routes** > add `rbooked.com` and `www.rbooked.com` as custom domains
+   (the domain must use Cloudflare nameservers).
+3. Worker > **Settings** > **Variables and Secrets**: add `RESEND_API_KEY` (email) and, when ready for payments,
+   `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` (webhook URL: `https://rbooked.com/api/stripe/webhook`).
+   `SESSION_SECRET` is optional; one is generated and stored automatically.
 
-**Render / Railway**: create a Web Service from this folder with build command `npm ci` and start command `npm start`. Attach a disk mounted at `/data` and set `DATABASE_PATH=/data/rbooked.db`, `NODE_ENV=production`, `BASE_URL` and the email and Stripe variables.
+Free-plan limits are generous for a launch (100,000 requests a day). Local preview: `npm run cf:dev`.
+Email uses Resend's HTTP API on Cloudflare (SMTP isn't available there).
 
-Put it behind HTTPS (the platforms above do this for you); session cookies are marked `Secure` when `BASE_URL` starts with `https`. Back up the SQLite file regularly, for example with a nightly copy or Litestream. To grow past one server, switch `src/db.js` to Postgres; all SQL lives in the `src/` modules.
+### Any Node.js host
+`npm start` with Node 22.13+ (or the included `Dockerfile`), with `DATABASE_PATH` on persistent storage.
+Email can use `RESEND_API_KEY` or SMTP settings.
 
 ## Project layout
 

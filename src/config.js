@@ -1,11 +1,9 @@
 'use strict';
-const path = require('path');
-const fs = require('fs');
-
-const envFile = path.join(__dirname, '..', '.env');
-if (fs.existsSync(envFile) && typeof process.loadEnvFile === 'function') {
-  process.loadEnvFile(envFile);
-}
+// Load a local .env file when running under Node.js (on Cloudflare, settings come from the dashboard).
+try {
+  const envFile = require('path').join(__dirname, '..', '.env');
+  if (typeof process.loadEnvFile === 'function' && require('fs').existsSync(envFile)) process.loadEnvFile(envFile);
+} catch { /* not on Node.js */ }
 
 const e = process.env;
 module.exports = {
@@ -20,6 +18,7 @@ module.exports = {
     user: e.SMTP_USER || '',
     pass: e.SMTP_PASS || '',
   },
+  resendApiKey: e.RESEND_API_KEY || '',
   emailFrom: e.EMAIL_FROM || 'Rbooked <reservations@example.com>',
   stripe: {
     secretKey: e.STRIPE_SECRET_KEY || '',

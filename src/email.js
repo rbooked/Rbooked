@@ -1,17 +1,40 @@
 'use strict';
-const nodemailer = require('nodemailer');
 const config = require('./config');
 const { run } = require('./db');
 const { prettyDate, prettyTime, zonedToUtc } = require('./time');
 
-let transport = null;
-if (config.smtp.host) {
-  transport = nodemailer.createTransport({
-    host: config.smtp.host,
-    port: config.smtp.port,
-    secure: config.smtp.secure,
-    auth: config.smtp.user ? { user: config.smtp.user, pass: config.smtp.pass } : undefined,
-  });
+// Email goes out through Resend's HTTP API (works everywhere, free tier), or SMTP on Node.js.
+// With neither configured, emails are only logged ("outbox" mode).
+let smtp;
+function smtpTransport() {
+  if (smtp !== undefined) return smtp;
+  smtp = null;
+  if (config.smtp.host) {
+    const moduleName = 'nodemailer'; // loaded by name: Node.js only
+    smtp = require(moduleName).createTransport({
+      host: config.smtp.host, port: config.smtp.port, secure: config.smtp.secure,
+      auth: config.smtp.user ? { user: config.smtp.user, pass: config.smtp.pass } : undefined,
+    });
+  }
+  return smtp;
+}
+async function deliver({ to, subject, html, attachments }) {
+  if (config.resendApiKey) {
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${config.resendApiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: config.emailFrom, to: [to], subject, html,
+        attachments: (attachments || []).map((a) => ({ filename: a.filename, content: Buffer.from(a.content).toString('base64') })),
+      }),
+    });
+    if (!r.ok) throw new Error(`Resend ${r.status}: ${(await r.text()).slice(0, 200)}`);
+    return true;
+  }
+  const t = smtpTransport();
+  if (!t) return false;
+  await t.sendMail({ from: config.emailFrom, to, subject, html, attachments });
+  return true;
 }
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -67,17 +90,13 @@ function icsFor(r, res) {
 async function send({ to, subject, html, kind, reservationId = null, attachments }) {
   let status = 'outbox';
   let error = null;
-  if (transport) {
-    try {
-      await transport.sendMail({ from: config.emailFrom, to, subject, html, attachments });
-      status = 'sent';
-    } catch (e) {
-      status = 'failed';
-      error = String(e.message || e);
-      console.error('[email] failed', to, subject, error);
-    }
-  } else {
-    console.log(`[email:outbox] ${kind} -> ${to}: ${subject}`);
+  try {
+    if (await deliver({ to, subject, html, attachments })) status = 'sent';
+    else console.log(`[email:outbox] ${kind} -> ${to}: ${subject}`);
+  } catch (e) {
+    status = 'failed';
+    error = String(e.message || e);
+    console.error('[email] failed', to, subject, error);
   }
   run('INSERT INTO email_log (reservation_id, to_addr, subject, html, kind, status, error) VALUES (?,?,?,?,?,?,?)',
     reservationId, to, subject, html, kind, status, error);

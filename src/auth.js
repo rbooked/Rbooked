@@ -6,16 +6,24 @@ const config = require('./config');
 const COOKIE = 'tb_session';
 const SESSION_DAYS = 14;
 
+// Passwords: PBKDF2-SHA256 (works on Node.js and Cloudflare). Older scrypt hashes still verify on Node.js.
+const ITER = 100000;
 function hashPassword(pw) {
   const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(pw, salt, 64).toString('hex');
-  return `${salt}:${hash}`;
+  return `pbkdf2$${ITER}$${salt}$${crypto.pbkdf2Sync(pw, salt, ITER, 32, 'sha256').toString('hex')}`;
 }
 function verifyPassword(pw, stored) {
-  const [salt, hash] = String(stored).split(':');
-  if (!salt || !hash) return false;
-  const test = crypto.scryptSync(pw, salt, 64);
-  const ref = Buffer.from(hash, 'hex');
+  const s = String(stored);
+  let test; let ref;
+  if (s.startsWith('pbkdf2$')) {
+    const [, iter, salt, hash] = s.split('$');
+    if (!salt || !hash) return false;
+    test = crypto.pbkdf2Sync(pw, salt, Number(iter), 32, 'sha256'); ref = Buffer.from(hash, 'hex');
+  } else {
+    const [salt, hash] = s.split(':');
+    if (!salt || !hash || !crypto.scryptSync) return false;
+    test = crypto.scryptSync(pw, salt, 64); ref = Buffer.from(hash, 'hex');
+  }
   return ref.length === test.length && crypto.timingSafeEqual(ref, test);
 }
 

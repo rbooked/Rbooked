@@ -395,7 +395,7 @@ router.get('/billing', wrap(async (req, res) => res.json(billing.billingSummary(
 router.post('/billing/checkout', wrap(async (req, res) => res.json({ url: await billing.createCheckout(req.restaurant, req.user) })));
 router.post('/billing/portal', wrap(async (req, res) => res.json({ url: await billing.createPortal(req.restaurant) })));
 router.post('/billing/simulate', wrap(async (req, res) => {
-  if (billing.stripe || config.isProduction) throw new BookingError('Only available in demo mode.', 403);
+  if (billing.stripe() || config.isProduction) throw new BookingError('Only available in demo mode.', 403);
   const status = req.body.status === 'expired' ? 'trialing' : 'active';
   if (req.body.status === 'expired') run(`UPDATE restaurants SET subscription_status='trialing', trial_ends_at=? WHERE id=?`, new Date(Date.now() - 1000).toISOString(), req.restaurant.id);
   else run('UPDATE restaurants SET subscription_status = ? WHERE id = ?', status, req.restaurant.id);
