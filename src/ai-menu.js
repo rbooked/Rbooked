@@ -5,7 +5,9 @@
 // so callers fall back to the built-in reader.
 const menuImport = require('../public/js/menu-import');
 
-const MODELS = ['@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/meta/llama-3.1-8b-instruct-fast'];
+// The small model first: it answers in a few seconds. The large one only if the small one fails.
+const MODELS = ['@cf/meta/llama-3.1-8b-instruct-fast', '@cf/meta/llama-3.3-70b-instruct-fp8-fast'];
+const DEADLINE_MS = 20000; // past this, use the built-in reader instead of making the owner wait
 const TAGS = ['vegetarian', 'vegan', 'gluten_free', 'dairy_free', 'nut_free', 'halal', 'spicy'];
 
 const SCHEMA = {
@@ -39,7 +41,7 @@ const PROMPT = `You turn restaurant menu text into structured dishes. The text w
 Return JSON: {"items":[...]} in menu order.`;
 
 /** Split long text on line breaks into chunks the model can handle. */
-function chunks(text, size = 5000, max = 6) {
+function chunks(text, size = 2500, max = 12) {
   const out = []; let cur = '';
   for (const line of String(text).split('\n')) {
     if (cur.length + line.length + 1 > size && cur) { out.push(cur); cur = ''; if (out.length >= max) break; }
@@ -56,7 +58,7 @@ async function runChunk(ai, text) {
       const r = await ai.run(model, {
         messages: [{ role: 'system', content: PROMPT }, { role: 'user', content: `Menu text:\n"""\n${text}\n"""` }],
         response_format: { type: 'json_schema', json_schema: SCHEMA },
-        max_tokens: 6000, temperature: 0.1,
+        max_tokens: 3500, temperature: 0.1,
       });
       let data = r && r.response !== undefined ? r.response : r;
       if (typeof data === 'string') { const m = /\{[\s\S]*\}/.exec(data); data = m ? JSON.parse(m[0]) : null; }
@@ -90,9 +92,11 @@ async function aiParseMenu(text) {
   const body = String(text || '').trim().slice(0, 30000);
   if (body.length < 20) return [];
   try {
-    const all = [];
-    for (const c of chunks(body)) all.push(...await runChunk(ai, c));
-    return tidy(all);
+    // All parts of the menu at once, in parallel, with a time limit.
+    let timer;
+    const late = new Promise((_, no) => { timer = setTimeout(() => no(new Error('too slow')), DEADLINE_MS); });
+    const parts = await Promise.race([Promise.all(chunks(body).map((c) => runChunk(ai, c))), late]).finally(() => clearTimeout(timer));
+    return tidy(parts.flat());
   } catch (e) {
     console.error('[ai-menu]', e && e.message);
     return null;

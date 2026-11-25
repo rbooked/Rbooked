@@ -397,14 +397,19 @@
     }
     return out;
   }
-  // AI reads the menu when it's available (sections, prices, sizes, add-ons); otherwise the built-in reader does.
+  // Smart reading on the server (sections, prices, sizes, add-ons). If it's slow or unavailable, the quick
+  // built-in reader is used, so the owner never waits more than ~25 seconds.
   async function smartRead(text, status) {
     if (!String(text || '').trim()) return [];
-    if (status) status('Reading your menu with AI… (up to a minute for a long menu)');
+    const t0 = Date.now(); const steps = ['Finding sections', 'Reading dishes and prices', 'Picking up sizes and add-ons', 'Tidying up'];
+    const tick = () => { const s = Math.floor((Date.now() - t0) / 1000); if (status) status(`${steps[Math.min(steps.length - 1, Math.floor(s / 5))]}… ${s}s`); };
+    tick(); const iv = setInterval(tick, 1000);
+    const ctl = new AbortController(); const stop = setTimeout(() => ctl.abort(), 25000);
     try {
-      const r = await api('/api/admin/menu/ai-parse', { body: { text } });
-      if (r.ai && r.items.length) return r.items;
-    } catch { /* fall back */ }
+      const r = await fetch(`${TB.base}/api/admin/menu/read`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }), signal: ctl.signal });
+      const d = r.ok ? await r.json() : null;
+      if (d && d.smart && d.items.length) return d.items;
+    } catch { /* slow or offline: quick reader below */ } finally { clearInterval(iv); clearTimeout(stop); }
     return TBMenuImport.parseText(text);
   }
   async function readMenuFile(file, status) {

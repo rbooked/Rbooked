@@ -670,7 +670,7 @@
     const m = { id: nextId(), restaurant_id: r.id, description: '', price_cents: null, tags: '', available: 1, sort_order: mine.length ? Math.max(...mine.map((x) => x.sort_order)) + 1 : 0, created_at: nowSql(), ...f };
     db.menu.push(m); return m;
   });
-  on('POST', '/api/admin/menu/ai-parse', () => ({ ai: false, items: [] }));
+  on('POST', '/api/admin/menu/read', () => ({ smart: false, items: [] }));
   on('POST', '/api/admin/menu/import', (q, b) => {
     const { r } = me(); const list = (b.items || []).slice(0, 500).map((x) => ({ section: 'Menu', ...cleanMenuItem(x) })).filter((f) => f.name);
     if (!list.length) throw new E('No dishes to import.');

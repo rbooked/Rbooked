@@ -482,11 +482,11 @@ router.post('/menu', wrap(async (req, res) => {
   const info = run(`INSERT INTO menu_items (restaurant_id, ${keys.join(',')}) VALUES (?, ${keys.map(() => '?').join(',')})`, rid, ...keys.map((k) => f[k]));
   res.status(201).json(one('SELECT * FROM menu_items WHERE id = ?', info.lastInsertRowid));
 }));
-// Read messy menu text (from a PDF, photo or paste) with AI. { ai: false } means use the built-in reader.
-router.post('/menu/ai-parse', wrap(async (req, res) => {
+// Smart reading of messy menu text (from a PDF, photo or paste). { smart: false } means use the built-in reader.
+router.post('/menu/read', wrap(async (req, res) => {
   const ai = require('../ai-menu');
   const items = await ai.aiParseMenu(String(req.body.text || ''));
-  res.json(items ? { ai: true, items } : { ai: false, items: [] });
+  res.json(items ? { smart: true, items } : { smart: false, items: [] });
 }));
 // Import many dishes at once (from a pasted menu, spreadsheet, PDF or photo, read in the browser).
 router.post('/menu/import', wrap(async (req, res) => {

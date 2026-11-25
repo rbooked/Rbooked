@@ -324,7 +324,7 @@ test('dish options and smart AI menu reading (with a fallback when AI is off)', 
 
   // No AI binding: the endpoint says so and the browser uses the built-in reader.
   delete globalThis.__rbAI;
-  assert.deepStrictEqual((await call('POST', '/api/admin/menu/ai-parse', { text: 'MAINS\nSaleeg 24.95\nMandi 22' })).data, { ai: false, items: [] });
+  assert.deepStrictEqual((await call('POST', '/api/admin/menu/read', { text: 'MAINS\nSaleeg 24.95\nMandi 22' })).data, { smart: false, items: [] });
 
   let seen = 0;
   globalThis.__rbAI = { run: async (model, input) => { seen++; assert.ok(input.messages[1].content.includes('S a l e e g')); return { response: { items: [
@@ -332,8 +332,8 @@ test('dish options and smart AI menu reading (with a fallback when AI is off)', 
     { section: 'Mains', name: 'Saleeg', price: '24.95' },
     { section: 'Drinks', name: 'Vegan Mango Lassi', price: '5' }] } }; } };
   try {
-    const r = await call('POST', '/api/admin/menu/ai-parse', { text: 'MAINS\nS a l e e g $ 2 4 . 9 5\nVegan Mango Lassi 5' });
-    assert.strictEqual(r.data.ai, true); assert.strictEqual(seen, 1);
+    const r = await call('POST', '/api/admin/menu/read', { text: 'MAINS\nS a l e e g $ 2 4 . 9 5\nVegan Mango Lassi 5' });
+    assert.strictEqual(r.data.smart, true); assert.strictEqual(seen, 1);
     assert.strictEqual(r.data.items.length, 2, 'duplicates dropped');
     const [sal, lassi] = r.data.items;
     assert.strictEqual(sal.price, '24.95'); assert.deepStrictEqual(sal.tags, ['halal']);
@@ -341,7 +341,7 @@ test('dish options and smart AI menu reading (with a fallback when AI is off)', 
     assert.ok(lassi.tags.includes('vegetarian') && lassi.tags.includes('dairy_free'));
     // A failing model means null, so the browser falls back.
     globalThis.__rbAI = { run: async () => { throw new Error('quota'); } };
-    assert.strictEqual((await call('POST', '/api/admin/menu/ai-parse', { text: 'MAINS\nSaleeg 24.95\nMandi 22' })).data.ai, false);
+    assert.strictEqual((await call('POST', '/api/admin/menu/read', { text: 'MAINS\nSaleeg 24.95\nMandi 22' })).data.smart, false);
 
     await call('POST', '/api/admin/menu/import', { items: [{ ...sal, options: M.optionsText(sal.options) }], replace: true });
     const saved = (await call('GET', '/api/admin/menu')).data[0];
