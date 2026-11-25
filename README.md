@@ -78,10 +78,11 @@ How billing works:
 - **Featured restaurants** appear on the home page, near the diner's ZIP when one is known. Featured is set by the platform (`restaurants.featured`), so it can later become a paid add-on.
 
 **Restaurants (dashboard at `/admin/`)**
-- **Reservations**: a day view with list and **timeline** (tables × time) modes, plus stats for covers, seated, no-shows and cancellations. Staff can seat, complete, mark no-show, cancel (with optional guest email), edit, reassign tables, resend email, take phone bookings and seat walk-ins. Each guest shows history tags (visits and no-shows) and a "Late" flag.
+- **Reservations**: a live day view (refreshes every 30 seconds, with an "Up next" strip of arrivals) with list and **timeline** (tables × time) modes. On the timeline, drag a booking to another table or time to move it (15-minute snap). Also plus stats for covers, seated, no-shows and cancellations. Staff can seat, complete, mark no-show, cancel (with optional guest email), edit, reassign tables, resend email, take phone bookings and seat walk-ins. Each guest shows history tags (visits and no-shows) and a "Late" flag.
 - **Floor plan & tables**: rooms or areas; drag-and-drop tables; shapes (square, round, long, booth, bar); **min and max seats with chairs drawn around each table**; rotation; online-bookable and active flags. A live view shows which tables are booked or seated at any time.
 - **Services & hours**: per service, set the days, first and last seating, slot interval, table turn time, and **max covers per slot** (pacing). Closed dates and holidays can be added too.
-- **Guests**: a CRM-style list with reservations, visits, no-shows and cancellations per guest.
+- **Table combinations**: join two or more tables (for example T4 + T5) into one seating with its own min and max seats and online-bookable flag. A combination blocks every table in it, and appears in the table pickers on reservations.
+- **Address book**: every guest who books is added automatically (matched by email, then phone). Staff can add contacts by hand and keep tags (VIP, Allergy, Regular…), notes, birthday and marketing opt-in. Each contact shows visits, no-shows, cancellations, the next booking and full history, and staff can book them in one tap. Tags and notes show on the guest's reservations.
 - **Website widget**: copy-paste snippets (inline, floating button, iframe, direct link) with a live preview.
 - **Settings**: profile, tags that describe the restaurant (vegan, classy, outdoor seating…), brand color, max online party size, booking window, minimum notice, reminder timing, cancellation policy, and no-show automation (grace period and whether to email the guest).
 - **Billing** and the **Email log**.
@@ -90,9 +91,9 @@ How billing works:
 For each active service on that weekday, slots run from the first to the last seating at the service's interval. A slot is open if all three of these hold:
 1. It is inside the booking window and respects the minimum notice.
 2. The service's covers-per-slot limit isn't exceeded.
-3. An active, online-bookable table with `min_seats ≤ party ≤ max_seats` has no overlapping booking during the turn time.
+3. An active, online-bookable table (or table combination) with `min_seats ≤ party ≤ max_seats` has no overlapping booking during the turn time.
 
-The smallest table that fits is assigned. Bookings are re-checked inside a database transaction, so two guests can't take the same table.
+The smallest single table that fits is assigned. Tables are only joined when no single table works. Bookings are re-checked inside a database transaction, so two guests can't take the same table.
 
 **Background jobs** (every `JOB_INTERVAL_SECONDS`)
 - Reminder emails go out N hours before the booking (set per restaurant, default 24).

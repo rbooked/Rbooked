@@ -164,9 +164,9 @@ router.post('/reservations/:token/modify', wrap(async (req, res) => {
   if (party > r.max_party_size) throw new BookingError(`For parties over ${r.max_party_size}, please call ${r.phone}.`);
   const slot = findSlot(r, date, time, party, { ignoreReservationId: rv.id });
   if (!slot) throw new BookingError('That time is not available. Please pick another.', 409);
-  run(`UPDATE reservations SET date=?, time=?, party_size=?, table_id=?, shift_id=?, duration_minutes=?, starts_at_utc=?,
+  run(`UPDATE reservations SET date=?, time=?, party_size=?, table_id=?, combo_id=?, shift_id=?, duration_minutes=?, starts_at_utc=?,
        reminder_sent_at=NULL, updated_at=datetime('now') WHERE id=?`,
-  date, time, party, slot.tableId, slot.shiftId, slot.duration, zonedToUtc(date, time, r.timezone).toISOString(), rv.id);
+  date, time, party, slot.tableId, slot.comboId || null, slot.shiftId, slot.duration, zonedToUtc(date, time, r.timezone).toISOString(), rv.id);
   const updated = one('SELECT * FROM reservations WHERE id = ?', rv.id);
   email.sendReservationEmail('updated', r, updated).catch(() => {});
   res.json(guestView(updated, r));

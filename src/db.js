@@ -113,6 +113,8 @@ CREATE TABLE IF NOT EXISTS reservations (
   manage_token TEXT UNIQUE NOT NULL,  -- secret used in guest manage/cancel link
   restaurant_id INTEGER NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
   table_id INTEGER REFERENCES tables(id) ON DELETE SET NULL,
+  combo_id INTEGER REFERENCES table_combos(id) ON DELETE SET NULL,
+  guest_id INTEGER REFERENCES guests(id) ON DELETE SET NULL,
   shift_id INTEGER REFERENCES shifts(id) ON DELETE SET NULL,
   date TEXT NOT NULL,       -- local date YYYY-MM-DD
   time TEXT NOT NULL,       -- local time HH:MM
@@ -135,6 +137,34 @@ CREATE TABLE IF NOT EXISTS reservations (
 );
 CREATE INDEX IF NOT EXISTS idx_res_rest_date ON reservations(restaurant_id, date);
 CREATE INDEX IF NOT EXISTS idx_res_starts ON reservations(starts_at_utc);
+
+-- Tables that can be pushed together for larger parties (e.g. T3 + T4 = 8 seats)
+CREATE TABLE IF NOT EXISTS table_combos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  restaurant_id INTEGER NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  table_ids TEXT NOT NULL,            -- comma list of table ids
+  min_seats INTEGER NOT NULL DEFAULT 1,
+  max_seats INTEGER NOT NULL DEFAULT 8,
+  online_bookable INTEGER NOT NULL DEFAULT 1,
+  active INTEGER NOT NULL DEFAULT 1
+);
+
+-- Restaurant's guest address book
+CREATE TABLE IF NOT EXISTS guests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  restaurant_id INTEGER NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  email TEXT DEFAULT '',
+  phone TEXT DEFAULT '',
+  birthday TEXT DEFAULT '',           -- MM-DD or YYYY-MM-DD
+  tags TEXT DEFAULT '',               -- comma list, e.g. VIP,Regular,Allergy
+  notes TEXT DEFAULT '',              -- allergies, preferences, favorite table…
+  marketing_opt_in INTEGER DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_guests_rest ON guests(restaurant_id, email);
 
 CREATE TABLE IF NOT EXISTS email_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -160,6 +190,9 @@ CREATE TABLE IF NOT EXISTS zip_cache (
 // Lightweight migrations for databases created by earlier versions.
 const cols = new Set(db.prepare('PRAGMA table_info(restaurants)').all().map((c) => c.name));
 if (!cols.has('tags')) db.exec("ALTER TABLE restaurants ADD COLUMN tags TEXT DEFAULT ''");
+const rcols = new Set(db.prepare('PRAGMA table_info(reservations)').all().map((c) => c.name));
+if (!rcols.has('combo_id')) db.exec('ALTER TABLE reservations ADD COLUMN combo_id INTEGER');
+if (!rcols.has('guest_id')) db.exec('ALTER TABLE reservations ADD COLUMN guest_id INTEGER');
 if (!cols.has('featured')) db.exec('ALTER TABLE restaurants ADD COLUMN featured INTEGER DEFAULT 0');
 
 /** Run fn inside a transaction. */

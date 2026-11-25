@@ -169,3 +169,53 @@ test('admin API requires login and is scoped to own restaurant', async () => {
   const r = await call('GET', '/api/admin/reservations', null, false);
   assert.strictEqual(r.status, 401);
 });
+
+test('table combinations seat larger parties and block their member tables', async () => {
+  const floor = await call('GET', '/api/admin/floor');
+  const byLabel = Object.fromEntries(floor.data.tables.map((t) => [t.label, t]));
+  // Take the big P9 table out so the party can only fit on joined tables.
+  await call('PUT', `/api/admin/tables/${byLabel.P9.id}`, { active: false });
+  const c = await call('POST', '/api/admin/combos', { table_ids: [byLabel.T4.id, byLabel.T5.id] });
+  assert.strictEqual(c.status, 201);
+  assert.strictEqual(c.data.name, 'T4 + T5');
+  assert.strictEqual(c.data.max_seats, byLabel.T4.max_seats + byLabel.T5.max_seats);
+  const bad = await call('POST', '/api/admin/combos', { table_ids: [byLabel.T4.id] });
+  assert.strictEqual(bad.status, 400);
+  const day = addDays(tomorrow, 3);
+  const party = c.data.max_seats;
+  const av = await call('GET', `/api/admin/availability?date=${day}&party=${party}`);
+  const slot = av.data.slots.find((s) => s.time === '19:00');
+  assert.ok(slot.available);
+  assert.strictEqual(slot.comboId, c.data.id);
+  const b = await call('POST', '/api/admin/reservations', { date: day, time: '19:00', party_size: party, name: 'Big Party', email: 'big@example.com', phone: '5557778888', source: 'phone' });
+  assert.strictEqual(b.status, 201);
+  assert.strictEqual(b.data.combo_id, c.data.id);
+  // T4 is now taken by the combination, so a direct booking on it conflicts.
+  const clash = await call('POST', '/api/admin/reservations', { date: day, time: '19:30', party_size: 2, name: 'Two', email: 'two@example.com', phone: '5557778889', table_id: byLabel.T4.id, source: 'phone' });
+  assert.strictEqual(clash.status, 409);
+  const list = await call('GET', `/api/admin/reservations?date=${day}`);
+  assert.strictEqual(list.data.reservations.find((x) => x.guest_email === 'big@example.com').table_label, 'T4 + T5');
+});
+
+test('address book collects guests and keeps staff notes', async () => {
+  const book = await call('GET', '/api/admin/guests?q=big@example.com');
+  assert.strictEqual(book.data.guests.length, 1);
+  const g = book.data.guests[0];
+  assert.strictEqual(g.reservations, 1);
+  assert.ok(g.next_visit);
+  const u = await call('PUT', `/api/admin/guests/${g.id}`, { notes: 'Likes the corner', tags: 'VIP, Regular' });
+  assert.strictEqual(u.data.tags, 'VIP,Regular');
+  const tagged = await call('GET', '/api/admin/guests?tag=VIP');
+  assert.ok(tagged.data.guests.some((x) => x.id === g.id));
+  assert.ok(tagged.data.tags.includes('VIP'));
+  const detail = await call('GET', `/api/admin/guests/${g.id}`);
+  assert.strictEqual(detail.data.reservations.length, 1);
+  const n = await call('POST', '/api/admin/guests', { name: 'Walk Up', phone: '555 000 1234' });
+  assert.strictEqual(n.status, 201);
+  const dup = await call('POST', '/api/admin/guests', { name: 'Again', email: 'big@example.com' });
+  assert.strictEqual(dup.status, 409);
+  // A later booking with the same email links to the same contact.
+  await call('POST', '/api/public/restaurants/test-bistro/reservations', { date: addDays(tomorrow, 4), time: '18:00', party_size: 2, name: 'Big Party', email: 'big@example.com', phone: '5557778888' }, false);
+  assert.strictEqual((await call('GET', `/api/admin/guests/${g.id}`)).data.reservations.length, 2);
+  assert.strictEqual((await call('DELETE', `/api/admin/guests/${n.data.id}`)).status, 200);
+});

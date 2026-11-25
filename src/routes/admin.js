@@ -2,7 +2,7 @@
 const express = require('express');
 const { one, all, run, tx } = require('../db');
 const { requireAuth } = require('../auth');
-const { getAvailability, isTableFree } = require('../availability');
+const { getAvailability, isSeatingFree } = require('../availability');
 const { createReservation, cancelReservation, markNoShow, BookingError } = require('../reservations');
 const billing = require('../billing');
 const email = require('../email');
@@ -60,7 +60,9 @@ router.get('/reservations', wrap(async (req, res) => {
   const from = String(req.query.from || req.query.date || nowInZone(r.timezone).date);
   const to = String(req.query.to || from);
   const q = String(req.query.q || '').trim().toLowerCase();
-  let rows = all(`SELECT res.*, t.label AS table_label FROM reservations res LEFT JOIN tables t ON t.id = res.table_id
+  let rows = all(`SELECT res.*, COALESCE(t.label, c.name) AS table_label, g.tags AS guest_tags, g.notes AS guest_notes
+                  FROM reservations res LEFT JOIN tables t ON t.id = res.table_id LEFT JOIN table_combos c ON c.id = res.combo_id
+                  LEFT JOIN guests g ON g.id = res.guest_id
                   WHERE res.restaurant_id = ? AND res.date BETWEEN ? AND ? ORDER BY res.date, res.time`, r.id, from, to);
   if (q) rows = rows.filter((x) => `${x.guest_name} ${x.guest_email} ${x.guest_phone} ${x.code}`.toLowerCase().includes(q));
   // Guest history: visits & no-shows by email
@@ -109,13 +111,15 @@ router.post('/reservations', wrap(async (req, res) => {
 router.patch('/reservations/:id', wrap(async (req, res) => {
   const r = req.restaurant;
   const rv = owned('reservations', req.params.id, r.id);
-  const f = pick(req.body, ['guest_name', 'guest_email', 'guest_phone', 'notes', 'internal_notes', 'occasion', 'party_size', 'table_id', 'date', 'time', 'duration_minutes', 'status']);
+  const f = pick(req.body, ['guest_name', 'guest_email', 'guest_phone', 'notes', 'internal_notes', 'occasion', 'party_size', 'table_id', 'combo_id', 'date', 'time', 'duration_minutes', 'status']);
   if (f.status && !['confirmed', 'seated', 'completed'].includes(f.status)) throw new BookingError('Use the cancel / no-show actions for that status.');
-  const moved = ['table_id', 'date', 'time', 'duration_minutes'].some((k) => f[k] !== undefined && String(f[k]) !== String(rv[k]));
+  // A reservation sits at one table OR one combination.
+  if (f.combo_id) f.table_id = null; else if (f.table_id !== undefined) f.combo_id = null;
+  const moved = ['table_id', 'combo_id', 'date', 'time', 'duration_minutes'].some((k) => f[k] !== undefined && String(f[k]) !== String(rv[k]));
   const next = { ...rv, ...f };
-  if (moved && next.table_id) {
-    owned('tables', next.table_id, r.id);
-    if (!req.body.force && !isTableFree(r.id, next.table_id, next.date, next.time, Number(next.duration_minutes), rv.id)) {
+  if (moved && (next.table_id || next.combo_id)) {
+    if (next.combo_id) owned('table_combos', next.combo_id, r.id); else owned('tables', next.table_id, r.id);
+    if (!req.body.force && !isSeatingFree(r.id, { tableId: next.table_id, comboId: next.combo_id }, next.date, next.time, Number(next.duration_minutes), rv.id)) {
       throw new BookingError('That table is already booked around that time.', 409);
     }
   }
@@ -123,7 +127,8 @@ router.patch('/reservations/:id', wrap(async (req, res) => {
   f.updated_at = new Date().toISOString().replace('T', ' ').slice(0, 19);
   update('reservations', rv.id, r.id, f);
   const updated = one('SELECT * FROM reservations WHERE id = ?', rv.id);
-  if ((f.date || f.time || f.party_size) && req.body.notify !== false && updated.status === 'confirmed') {
+  const changed = (f.date && f.date !== rv.date) || (f.time && f.time !== rv.time) || (f.party_size && Number(f.party_size) !== rv.party_size);
+  if (changed && req.body.notify !== false && updated.status === 'confirmed') {
     email.sendReservationEmail('updated', r, updated).catch(() => {});
   }
   res.json(updated);
@@ -151,6 +156,7 @@ router.get('/floor', wrap(async (req, res) => {
   res.json({
     areas: all('SELECT * FROM areas WHERE restaurant_id = ? ORDER BY sort_order, id', rid),
     tables: all('SELECT * FROM tables WHERE restaurant_id = ? ORDER BY label', rid),
+    combos: all('SELECT * FROM table_combos WHERE restaurant_id = ? ORDER BY max_seats, name', rid),
   });
 }));
 
@@ -204,6 +210,50 @@ router.put('/floor/layout', wrap(async (req, res) => {
 router.delete('/tables/:id', wrap(async (req, res) => {
   owned('tables', req.params.id, req.restaurant.id);
   run('DELETE FROM tables WHERE id = ?', req.params.id);
+  // Drop combinations that used this table.
+  for (const c of all('SELECT id, table_ids FROM table_combos WHERE restaurant_id = ?', req.restaurant.id)) {
+    if (c.table_ids.split(',').map(Number).includes(Number(req.params.id))) run('DELETE FROM table_combos WHERE id = ?', c.id);
+  }
+  res.json({ ok: true });
+}));
+
+// ---------- Table combinations ----------
+function cleanCombo(b, rid) {
+  const f = pick(b, ['name', 'table_ids', 'min_seats', 'max_seats', 'online_bookable', 'active']);
+  if (f.table_ids !== undefined) {
+    const ids = [...new Set((Array.isArray(f.table_ids) ? f.table_ids : String(f.table_ids).split(',')).map(Number).filter(Boolean))];
+    const mine = new Set(all('SELECT id FROM tables WHERE restaurant_id = ?', rid).map((t) => t.id));
+    if (ids.length < 2) throw new BookingError('Pick at least two tables to combine.');
+    if (!ids.every((id) => mine.has(id))) throw new BookingError('Table not found.');
+    f.table_ids = ids.join(',');
+  }
+  for (const k of ['min_seats', 'max_seats']) if (f[k] !== undefined) f[k] = Math.max(1, Math.round(Number(f[k]) || 1));
+  for (const k of ['online_bookable', 'active']) if (f[k] !== undefined) f[k] = f[k] ? 1 : 0;
+  return f;
+}
+router.post('/combos', wrap(async (req, res) => {
+  const rid = req.restaurant.id;
+  const f = { online_bookable: 1, active: 1, ...cleanCombo(req.body, rid) };
+  if (!f.table_ids) throw new BookingError('Pick at least two tables to combine.');
+  const members = all(`SELECT label, min_seats, max_seats FROM tables WHERE id IN (${f.table_ids})`);
+  f.name = String(f.name || members.map((t) => t.label).join(' + '));
+  if (f.max_seats === undefined) f.max_seats = members.reduce((a, t) => a + t.max_seats, 0);
+  if (f.min_seats === undefined) f.min_seats = Math.max(1, Math.max(...members.map((t) => t.max_seats)) + 1);
+  if (f.max_seats < f.min_seats) throw new BookingError('Max seats must be at least min seats.');
+  const keys = Object.keys(f);
+  const info = run(`INSERT INTO table_combos (restaurant_id, ${keys.join(',')}) VALUES (?, ${keys.map(() => '?').join(',')})`, rid, ...keys.map((k) => f[k]));
+  res.status(201).json(one('SELECT * FROM table_combos WHERE id = ?', info.lastInsertRowid));
+}));
+router.put('/combos/:id', wrap(async (req, res) => {
+  const c = owned('table_combos', req.params.id, req.restaurant.id);
+  const f = cleanCombo(req.body, req.restaurant.id);
+  if ((f.max_seats ?? c.max_seats) < (f.min_seats ?? c.min_seats)) throw new BookingError('Max seats must be at least min seats.');
+  update('table_combos', c.id, req.restaurant.id, f);
+  res.json(one('SELECT * FROM table_combos WHERE id = ?', c.id));
+}));
+router.delete('/combos/:id', wrap(async (req, res) => {
+  owned('table_combos', req.params.id, req.restaurant.id);
+  run('DELETE FROM table_combos WHERE id = ?', req.params.id);
   res.json({ ok: true });
 }));
 
@@ -254,14 +304,64 @@ router.delete('/closures/:id', wrap(async (req, res) => {
 }));
 
 // ---------- Guests & email log ----------
+const GUEST_FIELDS = ['name', 'email', 'phone', 'birthday', 'tags', 'notes', 'marketing_opt_in'];
+function cleanGuestRow(b) {
+  const f = pick(b, GUEST_FIELDS);
+  for (const k of ['name', 'email', 'phone', 'birthday', 'notes']) if (f[k] !== undefined) f[k] = String(f[k]).trim().slice(0, k === 'notes' ? 2000 : 200);
+  if (f.email) f.email = f.email.toLowerCase();
+  if (f.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) throw new BookingError('Enter a valid email or leave it blank.');
+  if (f.tags !== undefined) f.tags = (Array.isArray(f.tags) ? f.tags : String(f.tags).split(',')).map((t) => String(t).trim()).filter(Boolean).slice(0, 12).join(',');
+  if (f.marketing_opt_in !== undefined) f.marketing_opt_in = f.marketing_opt_in ? 1 : 0;
+  return f;
+}
+const GUEST_STATS = `SELECT g.*, COUNT(r.id) AS reservations,
+    COALESCE(SUM(r.status IN ('completed','seated')),0) AS visits, COALESCE(SUM(r.status='no_show'),0) AS no_shows,
+    COALESCE(SUM(r.status='cancelled'),0) AS cancellations, MAX(CASE WHEN r.status != 'cancelled' THEN r.date END) AS last_date,
+    MIN(CASE WHEN r.status IN ('confirmed') AND r.date >= ? THEN r.date || ' ' || r.time END) AS next_visit
+  FROM guests g LEFT JOIN reservations r ON r.guest_id = g.id`;
+
+// Address book: every guest who booked, plus contacts staff added by hand.
 router.get('/guests', wrap(async (req, res) => {
-  const q = `%${String(req.query.q || '').toLowerCase()}%`;
-  res.json(all(`SELECT guest_email AS email, MAX(guest_name) AS name, MAX(guest_phone) AS phone, COUNT(*) AS reservations,
-      SUM(status IN ('completed','seated')) AS visits, SUM(status='no_show') AS no_shows, SUM(status='cancelled') AS cancellations,
-      MAX(date) AS last_date
-    FROM reservations WHERE restaurant_id = ? AND guest_email != 'walkin@guest.local'
-      AND (LOWER(guest_name) LIKE ? OR LOWER(guest_email) LIKE ? OR guest_phone LIKE ?)
-    GROUP BY guest_email ORDER BY last_date DESC LIMIT 200`, req.restaurant.id, q, q, q));
+  const rid = req.restaurant.id;
+  const today = nowInZone(req.restaurant.timezone).date;
+  const q = String(req.query.q || '').toLowerCase().trim();
+  const tag = String(req.query.tag || '').trim();
+  let rows = all(`${GUEST_STATS} WHERE g.restaurant_id = ? GROUP BY g.id ORDER BY g.name COLLATE NOCASE`, today, rid);
+  if (q) rows = rows.filter((g) => `${g.name} ${g.email} ${g.phone} ${g.tags} ${g.notes}`.toLowerCase().includes(q));
+  if (tag) rows = rows.filter((g) => g.tags.split(',').includes(tag));
+  const tags = [...new Set(all('SELECT tags FROM guests WHERE restaurant_id = ?', rid).flatMap((g) => g.tags.split(',').filter(Boolean)))].sort();
+  res.json({ guests: rows, tags });
+}));
+router.get('/guests/:id', wrap(async (req, res) => {
+  const rid = req.restaurant.id;
+  owned('guests', req.params.id, rid);
+  const g = one(`${GUEST_STATS} WHERE g.id = ? GROUP BY g.id`, nowInZone(req.restaurant.timezone).date, req.params.id);
+  const reservations = all(`SELECT r.id, r.code, r.date, r.time, r.party_size, r.status, r.source, r.notes, COALESCE(t.label, c.name) AS table_label
+    FROM reservations r LEFT JOIN tables t ON t.id = r.table_id LEFT JOIN table_combos c ON c.id = r.combo_id
+    WHERE r.guest_id = ? ORDER BY r.date DESC, r.time DESC`, g.id);
+  res.json({ guest: g, reservations });
+}));
+router.post('/guests', wrap(async (req, res) => {
+  const f = cleanGuestRow(req.body);
+  if (!f.name) throw new BookingError('Name is required.');
+  if (f.email && one('SELECT id FROM guests WHERE restaurant_id = ? AND email = ?', req.restaurant.id, f.email)) throw new BookingError('A guest with that email is already in your address book.', 409);
+  const keys = Object.keys(f);
+  const info = run(`INSERT INTO guests (restaurant_id, ${keys.join(',')}) VALUES (?, ${keys.map(() => '?').join(',')})`, req.restaurant.id, ...keys.map((k) => f[k]));
+  res.status(201).json(one('SELECT * FROM guests WHERE id = ?', info.lastInsertRowid));
+}));
+router.put('/guests/:id', wrap(async (req, res) => {
+  const g = owned('guests', req.params.id, req.restaurant.id);
+  const f = cleanGuestRow(req.body);
+  if (f.name === '') throw new BookingError('Name is required.');
+  f.updated_at = new Date().toISOString().replace('T', ' ').slice(0, 19);
+  update('guests', g.id, req.restaurant.id, f);
+  res.json(one('SELECT * FROM guests WHERE id = ?', g.id));
+}));
+router.delete('/guests/:id', wrap(async (req, res) => {
+  owned('guests', req.params.id, req.restaurant.id);
+  run('UPDATE reservations SET guest_id = NULL WHERE guest_id = ?', req.params.id);
+  run('DELETE FROM guests WHERE id = ?', req.params.id);
+  res.json({ ok: true });
 }));
 
 router.get('/emails', wrap(async (req, res) => {

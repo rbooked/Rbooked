@@ -1,7 +1,7 @@
 'use strict';
 const crypto = require('crypto');
 const { one, all, run, tx } = require('./db');
-const { findSlot, isTableFree } = require('./availability');
+const { findSlot, isSeatingFree, anyFreeSeating } = require('./availability');
 const { zonedToUtc } = require('./time');
 const email = require('./email');
 
@@ -31,6 +31,24 @@ function cleanGuest(d) {
   };
 }
 
+const WALK_IN_EMAIL = 'walkin@guest.local';
+
+/** Find or create the guest in the restaurant's address book (matched by email, then phone). */
+function upsertGuest(restaurantId, g) {
+  if (g.guest_email === WALK_IN_EMAIL) return null;
+  const digits = g.guest_phone.replace(/\D/g, '');
+  let row = one('SELECT * FROM guests WHERE restaurant_id = ? AND LOWER(email) = ?', restaurantId, g.guest_email);
+  if (!row && digits.length >= 7) {
+    row = all('SELECT * FROM guests WHERE restaurant_id = ?', restaurantId).find((x) => x.phone.replace(/\D/g, '') === digits);
+  }
+  if (row) {
+    run(`UPDATE guests SET name = COALESCE(NULLIF(name,''), ?), email = COALESCE(NULLIF(email,''), ?), phone = COALESCE(NULLIF(phone,''), ?), updated_at = datetime('now') WHERE id = ?`,
+      g.guest_name, g.guest_email, g.guest_phone, row.id);
+    return row.id;
+  }
+  return Number(run('INSERT INTO guests (restaurant_id, name, email, phone) VALUES (?,?,?,?)', restaurantId, g.guest_name, g.guest_email, g.guest_phone).lastInsertRowid);
+}
+
 /**
  * Create a reservation. For guests (online/widget), the slot is re-validated
  * inside a transaction so two people can't grab the same table.
@@ -47,38 +65,47 @@ function createReservation(restaurant, data, opts = {}) {
 
   const res = tx(() => {
     let tableId = null;
+    let comboId = null;
     let shiftId = null;
     let duration = 90;
-    if (opts.admin && data.table_id) {
-      const table = one('SELECT * FROM tables WHERE id = ? AND restaurant_id = ?', data.table_id, restaurant.id);
-      if (!table) throw new BookingError('Table not found.');
+    if (opts.admin && (data.table_id || data.combo_id)) {
+      // Staff picked a specific table or table combination.
       duration = Number(data.duration_minutes) || 90;
-      if (!data.force && !isTableFree(restaurant.id, table.id, date, time, duration)) {
-        throw new BookingError(`Table ${table.label} is already booked around that time.`, 409);
+      let label;
+      if (data.combo_id) {
+        const c = one('SELECT * FROM table_combos WHERE id = ? AND restaurant_id = ?', data.combo_id, restaurant.id);
+        if (!c) throw new BookingError('Table combination not found.');
+        comboId = c.id; label = c.name;
+      } else {
+        const t = one('SELECT * FROM tables WHERE id = ? AND restaurant_id = ?', data.table_id, restaurant.id);
+        if (!t) throw new BookingError('Table not found.');
+        tableId = t.id; label = `Table ${t.label}`;
       }
-      tableId = table.id;
+      if (!data.force && !isSeatingFree(restaurant.id, { tableId, comboId }, date, time, duration)) {
+        throw new BookingError(`${label} is already booked around that time.`, 409);
+      }
       const slot = findSlot(restaurant, date, time, party, { admin: true });
       shiftId = slot ? slot.shiftId : null;
     } else {
       let slot = findSlot(restaurant, date, time, party, { admin: !!opts.admin });
       if (!slot && opts.admin) {
-        // Staff bookings (walk-ins, off-grid times): take any free table that fits.
+        // Staff bookings (walk-ins, off-grid times): take any free table or combination that fits.
         const dur = Number(data.duration_minutes) || 90;
-        const t = all(`SELECT id FROM tables WHERE restaurant_id = ? AND active = 1 AND min_seats <= ? AND max_seats >= ? ORDER BY max_seats, id`,
-          restaurant.id, party, party).find((tb) => isTableFree(restaurant.id, tb.id, date, time, dur));
-        if (t) slot = { tableId: t.id, shiftId: null, duration: dur };
+        const o = anyFreeSeating(restaurant.id, party, date, time, dur);
+        if (o) slot = { tableId: o.tableId, comboId: o.comboId, shiftId: null, duration: dur };
       }
       if (!slot) throw new BookingError('Sorry, that time was just taken. Please pick another time.', 409);
-      tableId = slot.tableId; shiftId = slot.shiftId; duration = slot.duration;
+      tableId = slot.tableId; comboId = slot.comboId || null; shiftId = slot.shiftId; duration = slot.duration;
     }
+    const guestId = upsertGuest(restaurant.id, guest);
     const code = newCode();
     const token = crypto.randomBytes(20).toString('hex');
     const startsUtc = zonedToUtc(date, time, restaurant.timezone).toISOString();
     const info = run(
-      `INSERT INTO reservations (code, manage_token, restaurant_id, table_id, shift_id, date, time, starts_at_utc,
+      `INSERT INTO reservations (code, manage_token, restaurant_id, table_id, combo_id, guest_id, shift_id, date, time, starts_at_utc,
         duration_minutes, party_size, guest_name, guest_email, guest_phone, notes, occasion, internal_notes, source, status)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      code, token, restaurant.id, tableId, shiftId, date, time, startsUtc, duration, party,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      code, token, restaurant.id, tableId, comboId, guestId, shiftId, date, time, startsUtc, duration, party,
       guest.guest_name, guest.guest_email, guest.guest_phone, guest.notes, guest.occasion,
       String(data.internal_notes || ''), source, source === 'walk_in' ? 'seated' : 'confirmed',
     );
@@ -111,4 +138,4 @@ function markNoShow(restaurant, reservation, notify = true) {
   return updated;
 }
 
-module.exports = { createReservation, cancelReservation, markNoShow, BookingError };
+module.exports = { upsertGuest, WALK_IN_EMAIL, createReservation, cancelReservation, markNoShow, BookingError };

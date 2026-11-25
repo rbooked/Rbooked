@@ -2,7 +2,7 @@
    It answers the same /api/... calls the real server does, keeps data in this
    browser's storage, and records every email in a demo inbox. */
 (function () {
-  const KEY = 'rbooked_demo_v2';
+  const KEY = 'rbooked_demo_v3';
   const mem = {};
   const store = {
     get() { try { return JSON.parse(localStorage.getItem(KEY)); } catch { return mem.db || null; } },
@@ -67,7 +67,7 @@
   const LAST = ['Johnson', 'Kim', 'Garcia', 'Patel', 'Nguyen', 'Brown', 'Rossi', 'Cohen', 'Okafor', 'Silva', 'Lee', 'Martin'];
 
   function seed() {
-    const db = { seq: 1, restaurants: [], users: [], areas: [], tables: [], shifts: [], closures: [], reservations: [], emails: [], session: null };
+    const db = { seq: 1, restaurants: [], users: [], areas: [], tables: [], shifts: [], closures: [], reservations: [], emails: [], combos: [], guests: [], session: null };
     const id = () => db.seq++;
     RESTAURANTS.forEach(([name, cuisine, price, zip, address, tz, description, color], idx) => {
       const z = ZIPS[zip];
@@ -82,7 +82,7 @@
       };
       db.restaurants.push(r);
       starterFloor(db, r, true, id);
-      if (idx === 0) db.users.push({ id: id(), restaurant_id: r.id, name: 'Demo Owner', email: 'demo@rbooked.test', password: 'demo1234' });
+      if (idx === 0) { const u = { id: id(), restaurant_id: r.id, name: 'Demo Owner', email: 'demo@rbooked.test', password: 'demo1234' }; db.users.push(u); db.session = u.id; }
       const today = nowInZone(tz).date;
       const tbls = db.tables.filter((t) => t.restaurant_id === r.id && t.online_bookable);
       for (let d = 0; d < 4; d++) {
@@ -103,7 +103,20 @@
         });
       }
     });
+    // Address book: one contact per guest who booked, with a few staff notes.
+    const NOTES = [['VIP,Regular', 'Prefers a booth. Likes the house red.'], ['Allergy', 'Severe nut allergy. Tell the kitchen.'], ['Regular', 'Celebrates anniversary every spring.'], ['', ''], ['VIP', 'Food writer. Comp a dessert.'], ['', '']];
+    db.reservations.forEach((x) => { x.combo_id = null; x.guest_id = upsertGuestIn(db, x.restaurant_id, x, id); });
+    db.guests.forEach((g, i) => { [g.tags, g.notes] = NOTES[i % NOTES.length]; });
     return db;
+  }
+  function upsertGuestIn(d, rid, g, id) {
+    if (g.guest_email === 'walkin@guest.local') return null;
+    const digits = String(g.guest_phone || '').replace(/\D/g, '');
+    let row = d.guests.find((x) => x.restaurant_id === rid && x.email && x.email.toLowerCase() === g.guest_email);
+    if (!row && digits.length >= 7) row = d.guests.find((x) => x.restaurant_id === rid && x.phone.replace(/\D/g, '') === digits);
+    if (row) { row.name = row.name || g.guest_name; row.email = row.email || g.guest_email; row.phone = row.phone || g.guest_phone; row.updated_at = nowSql(); return row.id; }
+    const n = { id: id(), restaurant_id: rid, name: g.guest_name, email: g.guest_email, phone: g.guest_phone, birthday: '', tags: '', notes: '', marketing_opt_in: 0, created_at: nowSql(), updated_at: nowSql() };
+    d.guests.push(n); return n.id;
   }
 
   function starterFloor(db, r, full, id) {
@@ -123,6 +136,10 @@
       db.tables.push({ id: id(), restaurant_id: r.id, area_id: area, label, min_seats: mn, max_seats: mx, shape, x, y, rotation: 0, online_bookable: label === 'Bar' ? 0 : 1, active: 1 });
     }
     if (full) {
+      const tid = (l) => db.tables.find((t) => t.restaurant_id === r.id && t.label === l).id;
+      for (const [name, labels, mn, mx] of [['T1 + T2', ['T1', 'T2'], 3, 4], ['T4 + T5', ['T4', 'T5'], 5, 8], ['P1 + P2', ['P1', 'P2'], 5, 8], ['T6 + B1', ['T6', 'B1'], 10, 16]]) {
+        db.combos.push({ id: id(), restaurant_id: r.id, name, table_ids: labels.map(tid).join(','), min_seats: mn, max_seats: mx, online_bookable: mx > 10 ? 0 : 1, active: 1 });
+      }
       db.shifts.push({ id: id(), restaurant_id: r.id, name: 'Lunch', days: '1,2,3,4,5', start_time: '11:30', end_time: '14:00', slot_interval: 15, turn_minutes: 75, max_covers_per_slot: 12, active: 1 });
       db.shifts.push({ id: id(), restaurant_id: r.id, name: 'Dinner', days: '0,1,2,3,4,5,6', start_time: '17:00', end_time: '21:30', slot_interval: 15, turn_minutes: 90, max_covers_per_slot: 16, active: 1 });
       db.shifts.push({ id: id(), restaurant_id: r.id, name: 'Weekend brunch', days: '0,6', start_time: '10:00', end_time: '13:30', slot_interval: 30, turn_minutes: 75, max_covers_per_slot: 0, active: 1 });
@@ -132,7 +149,7 @@
   }
 
   let db = store.get();
-  if (!db || !db.restaurants) { db = seed(); store.set(db); }
+  if (!db || !db.restaurants || !db.combos) { db = seed(); store.set(db); }
   const save = () => store.set(db);
   const nextId = () => db.seq++;
 
@@ -150,7 +167,20 @@
       trialDaysLeft: Math.max(0, Math.ceil(left / 86400000)), hasPaymentMethod: !!r.stripe_subscription_id, price: '$20/month', stripeEnabled: false, demoMode: true,
     };
   }
-  const tableIsFree = (tid, res, start, dur) => !res.some((r) => r.table_id === tid && toMin(r.time) < start + dur && toMin(r.time) + r.duration_minutes > start);
+  const memberIds = (c) => String(c.table_ids || '').split(',').map(Number).filter(Boolean);
+  const comboMap = (rid) => new Map(db.combos.filter((c) => c.restaurant_id === rid).map((c) => [c.id, memberIds(c)]));
+  const occupied = (x, combos) => (x.combo_id && combos.has(x.combo_id) ? combos.get(x.combo_id) : x.table_id ? [x.table_id] : []);
+  const activeRes = (rid, date, ignore = 0) => db.reservations.filter((x) => x.restaurant_id === rid && x.date === date && ACTIVE.includes(x.status) && x.id !== ignore);
+  const tablesFree = (ids, res, combos, start, dur) => !res.some((x) => toMin(x.time) < start + dur && toMin(x.time) + x.duration_minutes > start && occupied(x, combos).some((t) => ids.includes(t)));
+  function seatingOptions(rid, party, admin) {
+    const fits = (o) => o.restaurant_id === rid && o.active && o.min_seats <= party && o.max_seats >= party && (admin || o.online_bookable);
+    const bySize = (a, b) => a.max_seats - b.max_seats || a.id - b.id;
+    const active = new Map(db.tables.filter((t) => t.restaurant_id === rid).map((t) => [t.id, t.active]));
+    return [
+      ...db.tables.filter(fits).sort(bySize).map((t) => ({ tableId: t.id, comboId: null, tableIds: [t.id] })),
+      ...db.combos.filter(fits).sort(bySize).map((c) => ({ tableId: null, comboId: c.id, tableIds: memberIds(c) })).filter((c) => c.tableIds.length && c.tableIds.every((i) => active.get(i))),
+    ];
+  }
 
   function getAvailability(r, date, party, opts = {}) {
     party = Number(party);
@@ -163,25 +193,30 @@
       if (date < now.date) return out;
       if (date > addDays(now.date, r.booking_window_days)) return { ...out, outsideWindow: true };
     }
-    const tables = db.tables.filter((t) => t.restaurant_id === r.id && t.active && t.min_seats <= party && t.max_seats >= party && (opts.admin || t.online_bookable))
-      .sort((a, b) => a.max_seats - b.max_seats || a.id - b.id);
-    const res = db.reservations.filter((x) => x.restaurant_id === r.id && x.date === date && ACTIVE.includes(x.status) && x.id !== (opts.ignore || 0));
+    const options = seatingOptions(r.id, party, opts.admin);
+    const res = activeRes(r.id, date, opts.ignore || 0);
+    const combos = comboMap(r.id);
     const wd = String(weekday(date));
     db.shifts.filter((s) => s.restaurant_id === r.id && s.active && s.days.split(',').includes(wd)).sort((a, b) => a.start_time.localeCompare(b.start_time)).forEach((s) => {
       for (let t = toMin(s.start_time); t <= toMin(s.end_time); t += s.slot_interval) {
         const time = hhmm(t);
         let available = !(!opts.admin && date === now.date && t < now.minutes + r.min_notice_minutes);
         if (available && s.max_covers_per_slot > 0 && res.filter((x) => x.time === time).reduce((a, x) => a + x.party_size, 0) + party > s.max_covers_per_slot) available = false;
-        let tableId = null;
-        if (available) { const tb = tables.find((tb) => tableIsFree(tb.id, res, t, s.turn_minutes)); tableId = tb ? tb.id : null; if (!tableId) available = false; }
-        out.slots.push({ time, shiftId: s.id, shiftName: s.name, available, tableId, duration: s.turn_minutes });
+        let pick = null;
+        if (available) { pick = options.find((o) => tablesFree(o.tableIds, res, combos, t, s.turn_minutes)) || null; if (!pick) available = false; }
+        out.slots.push({ time, shiftId: s.id, shiftName: s.name, available, tableId: pick ? pick.tableId : null, comboId: pick ? pick.comboId : null, duration: s.turn_minutes });
       }
     });
     return out;
   }
   const findSlot = (r, date, time, party, opts) => getAvailability(r, date, party, opts).slots.find((s) => s.time === time && s.available) || null;
-  const isTableFree = (rid, tid, date, time, dur, ignore = 0) => tableIsFree(Number(tid),
-    db.reservations.filter((x) => x.restaurant_id === rid && x.date === date && ACTIVE.includes(x.status) && x.id !== ignore), toMin(time), dur);
+  function isSeatingFree(rid, { tableId, comboId }, date, time, dur, ignore = 0) {
+    const combos = comboMap(rid);
+    const ids = comboId ? (combos.get(Number(comboId)) || []) : [Number(tableId)];
+    return tablesFree(ids, activeRes(rid, date, ignore), combos, toMin(time), dur);
+  }
+  const anyFreeSeating = (rid, party, date, time, dur) => seatingOptions(rid, party, true).find((o) => isSeatingFree(rid, o, date, time, dur)) || null;
+  const seatLabel = (x) => (x.combo_id ? (db.combos.find((c) => c.id === x.combo_id) || {}).name : (db.tables.find((t) => t.id === x.table_id) || {}).label);
 
   // ---------- emails (recorded in the demo inbox) ----------
   function emailHtml(r, title, body) {
@@ -227,24 +262,29 @@
     if (!(party >= 1 && party <= 50)) throw new E('Invalid party size.');
     const source = opts.source || 'online';
     let slot;
-    if (opts.admin && d.table_id) {
-      const t = db.tables.find((x) => x.id === Number(d.table_id) && x.restaurant_id === r.id);
-      if (!t) throw new E('Table not found.');
-      const dur = Number(d.duration_minutes) || 90;
-      if (!d.force && !isTableFree(r.id, t.id, date, time, dur)) throw new E(`Table ${t.label} is already booked around that time.`, 409);
-      slot = { tableId: t.id, shiftId: null, duration: dur };
+    if (opts.admin && (d.table_id || d.combo_id)) {
+      const dur = Number(d.duration_minutes) || 90; let seat; let label;
+      if (d.combo_id) {
+        const c = db.combos.find((x) => x.id === Number(d.combo_id) && x.restaurant_id === r.id);
+        if (!c) throw new E('Table combination not found.'); seat = { tableId: null, comboId: c.id }; label = c.name;
+      } else {
+        const t = db.tables.find((x) => x.id === Number(d.table_id) && x.restaurant_id === r.id);
+        if (!t) throw new E('Table not found.'); seat = { tableId: t.id, comboId: null }; label = `Table ${t.label}`;
+      }
+      if (!d.force && !isSeatingFree(r.id, seat, date, time, dur)) throw new E(`${label} is already booked around that time.`, 409);
+      const s = findSlot(r, date, time, party, { admin: true });
+      slot = { ...seat, shiftId: s ? s.shiftId : null, duration: dur };
     } else {
       slot = findSlot(r, date, time, party, { admin: !!opts.admin });
       if (!slot && opts.admin) {
         const dur = Number(d.duration_minutes) || 90;
-        const t = db.tables.filter((x) => x.restaurant_id === r.id && x.active && x.min_seats <= party && x.max_seats >= party).sort((a, b) => a.max_seats - b.max_seats)
-          .find((x) => isTableFree(r.id, x.id, date, time, dur));
-        if (t) slot = { tableId: t.id, shiftId: null, duration: dur };
+        const o = anyFreeSeating(r.id, party, date, time, dur);
+        if (o) slot = { tableId: o.tableId, comboId: o.comboId, shiftId: null, duration: dur };
       }
       if (!slot) throw new E('Sorry, that time was just taken. Please pick another time.', 409);
     }
     const x = {
-      id: nextId(), code: rand(6), manage_token: token(), restaurant_id: r.id, table_id: slot.tableId, shift_id: slot.shiftId, date, time,
+      id: nextId(), code: rand(6), manage_token: token(), restaurant_id: r.id, table_id: slot.tableId, combo_id: slot.comboId || null, guest_id: upsertGuestIn(db, r.id, g, nextId), shift_id: slot.shiftId, date, time,
       starts_at_utc: zonedToUtc(date, time, r.timezone).toISOString(), duration_minutes: slot.duration, party_size: party, ...g,
       internal_notes: String(d.internal_notes || ''), source, status: source === 'walk_in' ? 'seated' : 'confirmed', created_at: nowSql(), updated_at: nowSql(),
     };
@@ -366,7 +406,7 @@
     const date = b.date || x.date; const time = b.time || x.time; const party = Number(b.party_size || x.party_size);
     const s = findSlot(r, date, time, party, { ignore: x.id });
     if (!s) throw new E('That time is not available. Please pick another.', 409);
-    Object.assign(x, { date, time, party_size: party, table_id: s.tableId, duration_minutes: s.duration, starts_at_utc: zonedToUtc(date, time, r.timezone).toISOString(), updated_at: nowSql() });
+    Object.assign(x, { date, time, party_size: party, table_id: s.tableId, combo_id: s.comboId || null, duration_minutes: s.duration, starts_at_utc: zonedToUtc(date, time, r.timezone).toISOString(), updated_at: nowSql() });
     sendEmail('updated', r, x); return guestView(x, r);
   });
   on('GET', '/api/public/reservations/:t/availability', (q, b, p) => {
@@ -425,7 +465,7 @@
     const { r } = me(); const from = q.from || q.date || nowInZone(r.timezone).date; const to = q.to || from; const s = String(q.q || '').toLowerCase();
     const rows = db.reservations.filter((x) => x.restaurant_id === r.id && x.date >= from && x.date <= to && (!s || `${x.guest_name} ${x.guest_email} ${x.guest_phone} ${x.code}`.toLowerCase().includes(s)))
       .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))
-      .map((x) => ({ ...x, table_label: (db.tables.find((t) => t.id === x.table_id) || {}).label, history: history(r.id, x.guest_email) }));
+      .map((x) => { const g = x.guest_id && db.guests.find((y) => y.id === x.guest_id); return { ...x, table_label: seatLabel(x), guest_tags: g ? g.tags : null, guest_notes: g ? g.notes : null, history: history(r.id, x.guest_email) }; });
     return { from, to, reservations: rows };
   });
   on('GET', '/api/admin/stats', (q) => {
@@ -447,11 +487,16 @@
   });
   on('PATCH', '/api/admin/reservations/:id', (q, b, p) => {
     const { r } = me(); const x = owned('reservations', p.id, r.id);
-    const f = pick(b, ['guest_name', 'guest_email', 'guest_phone', 'notes', 'internal_notes', 'occasion', 'party_size', 'table_id', 'date', 'time', 'duration_minutes', 'status']);
+    const f = pick(b, ['guest_name', 'guest_email', 'guest_phone', 'notes', 'internal_notes', 'occasion', 'party_size', 'table_id', 'combo_id', 'date', 'time', 'duration_minutes', 'status']);
     if (f.status && !['confirmed', 'seated', 'completed'].includes(f.status)) throw new E('Use the cancel / no-show actions for that status.');
+    ['table_id', 'combo_id', 'party_size', 'duration_minutes'].forEach((k) => { if (f[k] !== undefined) f[k] = f[k] === null || f[k] === '' ? null : Number(f[k]); });
+    if (f.combo_id) f.table_id = null; else if (f.table_id !== undefined) f.combo_id = null;
     const next = { ...x, ...f };
-    const moved = ['table_id', 'date', 'time', 'duration_minutes'].some((k) => f[k] !== undefined && String(f[k]) !== String(x[k]));
-    if (moved && next.table_id && !b.force && !isTableFree(r.id, next.table_id, next.date, next.time, Number(next.duration_minutes), x.id)) throw new E('That table is already booked around that time.', 409);
+    const moved = ['table_id', 'combo_id', 'date', 'time', 'duration_minutes'].some((k) => f[k] !== undefined && String(f[k]) !== String(x[k]));
+    if (moved && (next.table_id || next.combo_id)) {
+      if (next.combo_id) owned('combos', next.combo_id, r.id); else owned('tables', next.table_id, r.id);
+      if (!b.force && !isSeatingFree(r.id, { tableId: next.table_id, comboId: next.combo_id }, next.date, next.time, Number(next.duration_minutes), x.id)) throw new E('That table is already booked around that time.', 409);
+    }
     if (f.date || f.time) f.starts_at_utc = zonedToUtc(next.date, next.time, r.timezone).toISOString();
     const changed = (f.date && f.date !== x.date) || (f.time && f.time !== x.time) || (f.party_size && Number(f.party_size) !== x.party_size);
     Object.assign(x, f, { updated_at: nowSql() });
@@ -467,7 +512,7 @@
   });
   on('POST', '/api/admin/reservations/:id/resend', (q, b, p) => { const { r } = me(); const x = owned('reservations', p.id, r.id); return { status: sendEmail(x.status === 'cancelled' ? 'cancellation' : 'confirmation', r, x) }; });
 
-  on('GET', '/api/admin/floor', () => { const { r } = me(); return { areas: db.areas.filter((a) => a.restaurant_id === r.id).sort((a, b) => a.sort_order - b.sort_order || a.id - b.id), tables: db.tables.filter((t) => t.restaurant_id === r.id).sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true })) }; });
+  on('GET', '/api/admin/floor', () => { const { r } = me(); return { areas: db.areas.filter((a) => a.restaurant_id === r.id).sort((a, b) => a.sort_order - b.sort_order || a.id - b.id), tables: db.tables.filter((t) => t.restaurant_id === r.id).sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true })), combos: db.combos.filter((c) => c.restaurant_id === r.id).sort((a, b) => a.max_seats - b.max_seats || a.name.localeCompare(b.name)) }; });
   on('POST', '/api/admin/areas', (q, b) => { const { r } = me(); if (!b.name) throw new E('Area name required.'); const a = { id: nextId(), restaurant_id: r.id, name: b.name, sort_order: Number(b.sort_order) || 0 }; db.areas.push(a); return a; });
   on('PUT', '/api/admin/areas/:id', (q, b, p) => { const { r } = me(); const a = owned('areas', p.id, r.id); Object.assign(a, pick(b, ['name', 'sort_order'])); return a; });
   on('DELETE', '/api/admin/areas/:id', (q, b, p) => { const { r } = me(); owned('areas', p.id, r.id); db.areas = db.areas.filter((a) => a.id !== Number(p.id)); db.tables.forEach((t) => { if (t.area_id === Number(p.id)) t.area_id = null; }); return { ok: true }; });
@@ -486,7 +531,37 @@
     if ((f.max_seats ?? t.max_seats) < (f.min_seats ?? t.min_seats)) throw new E('Max seats must be at least min seats.'); Object.assign(t, f); return t;
   });
   on('PUT', '/api/admin/floor/layout', (q, b) => { const { r } = me(); (b.tables || []).forEach((x) => { const t = db.tables.find((y) => y.id === x.id && y.restaurant_id === r.id); if (t) Object.assign(t, pick(cleanTable(x), ['x', 'y', 'rotation'])); }); return { ok: true }; });
-  on('DELETE', '/api/admin/tables/:id', (q, b, p) => { const { r } = me(); owned('tables', p.id, r.id); db.tables = db.tables.filter((t) => t.id !== Number(p.id)); db.reservations.forEach((x) => { if (x.table_id === Number(p.id)) x.table_id = null; }); return { ok: true }; });
+  on('DELETE', '/api/admin/tables/:id', (q, b, p) => { const { r } = me(); owned('tables', p.id, r.id); db.tables = db.tables.filter((t) => t.id !== Number(p.id)); db.reservations.forEach((x) => { if (x.table_id === Number(p.id)) x.table_id = null; });
+    const gone = new Set(db.combos.filter((c) => c.restaurant_id === r.id && memberIds(c).includes(Number(p.id))).map((c) => c.id));
+    db.combos = db.combos.filter((c) => !gone.has(c.id)); db.reservations.forEach((x) => { if (gone.has(x.combo_id)) x.combo_id = null; }); return { ok: true }; });
+  const cleanCombo = (b, rid) => {
+    const f = pick(b, ['name', 'table_ids', 'min_seats', 'max_seats', 'online_bookable', 'active']);
+    if (f.name !== undefined) f.name = String(f.name).trim().slice(0, 60);
+    if (f.table_ids !== undefined) {
+      const ids = [...new Set((Array.isArray(f.table_ids) ? f.table_ids : String(f.table_ids).split(',')).map(Number).filter(Boolean))];
+      if (ids.length < 2) throw new E('Pick at least two tables to combine.');
+      if (!ids.every((i) => db.tables.some((t) => t.id === i && t.restaurant_id === rid))) throw new E('Table not found.');
+      f.table_ids = ids.join(',');
+    }
+    ['min_seats', 'max_seats'].forEach((k) => { if (f[k] !== undefined) f[k] = Math.max(1, Math.round(Number(f[k]) || 1)); });
+    ['online_bookable', 'active'].forEach((k) => { if (f[k] !== undefined) f[k] = f[k] ? 1 : 0; });
+    return f;
+  };
+  on('POST', '/api/admin/combos', (q, b) => {
+    const { r } = me(); const f = { online_bookable: 1, active: 1, ...cleanCombo(b, r.id) };
+    if (!f.table_ids) throw new E('Pick at least two tables to combine.');
+    const members = memberIds(f).map((i) => db.tables.find((t) => t.id === i));
+    f.name = f.name || members.map((t) => t.label).join(' + ');
+    if (f.max_seats === undefined) f.max_seats = members.reduce((a, t) => a + t.max_seats, 0);
+    if (f.min_seats === undefined) f.min_seats = Math.max(...members.map((t) => t.max_seats)) + 1;
+    if (f.max_seats < f.min_seats) throw new E('Max seats must be at least min seats.');
+    const c = { id: nextId(), restaurant_id: r.id, ...f }; db.combos.push(c); return c;
+  });
+  on('PUT', '/api/admin/combos/:id', (q, b, p) => {
+    const { r } = me(); const c = owned('combos', p.id, r.id); const f = cleanCombo(b, r.id);
+    if ((f.max_seats ?? c.max_seats) < (f.min_seats ?? c.min_seats)) throw new E('Max seats must be at least min seats.'); Object.assign(c, f); return c;
+  });
+  on('DELETE', '/api/admin/combos/:id', (q, b, p) => { const { r } = me(); owned('combos', p.id, r.id); db.combos = db.combos.filter((c) => c.id !== Number(p.id)); db.reservations.forEach((x) => { if (x.combo_id === Number(p.id)) x.combo_id = null; }); return { ok: true }; });
   const cleanShift = (b) => {
     const f = pick(b, ['name', 'days', 'start_time', 'end_time', 'slot_interval', 'turn_minutes', 'max_covers_per_slot', 'active']);
     if (Array.isArray(f.days)) f.days = f.days.join(',');
@@ -499,14 +574,50 @@
   on('DELETE', '/api/admin/shifts/:id', (q, b, p) => { const { r } = me(); owned('shifts', p.id, r.id); db.shifts = db.shifts.filter((s) => s.id !== Number(p.id)); return { ok: true }; });
   on('POST', '/api/admin/closures', (q, b) => { const { r } = me(); if (!/^\d{4}-\d{2}-\d{2}$/.test(b.date || '')) throw new E('Pick a date.'); const c = { id: nextId(), restaurant_id: r.id, date: b.date, reason: b.reason || '' }; db.closures.push(c); return c; });
   on('DELETE', '/api/admin/closures/:id', (q, b, p) => { const { r } = me(); owned('closures', p.id, r.id); db.closures = db.closures.filter((c) => c.id !== Number(p.id)); return { ok: true }; });
+  function guestStats(g, today) {
+    const rows = db.reservations.filter((x) => x.guest_id === g.id);
+    const live = rows.filter((x) => x.status !== 'cancelled').map((x) => x.date).sort();
+    const next = rows.filter((x) => x.status === 'confirmed' && x.date >= today).map((x) => `${x.date} ${x.time}`).sort()[0] || null;
+    return { ...g, reservations: rows.length, visits: rows.filter((x) => ['completed', 'seated'].includes(x.status)).length, no_shows: rows.filter((x) => x.status === 'no_show').length,
+      cancellations: rows.filter((x) => x.status === 'cancelled').length, last_date: live.length ? live[live.length - 1] : null, next_visit: next };
+  }
+  function cleanGuestRow(b) {
+    const f = pick(b, ['name', 'email', 'phone', 'birthday', 'tags', 'notes', 'marketing_opt_in']);
+    ['name', 'email', 'phone', 'birthday', 'notes'].forEach((k) => { if (f[k] !== undefined) f[k] = String(f[k] ?? '').trim().slice(0, k === 'notes' ? 2000 : 200); });
+    if (f.email) f.email = f.email.toLowerCase();
+    if (f.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) throw new E('Enter a valid email or leave it blank.');
+    if (f.tags !== undefined) f.tags = (Array.isArray(f.tags) ? f.tags : String(f.tags).split(',')).map((t) => String(t).trim()).filter(Boolean).slice(0, 12).join(',');
+    if (f.marketing_opt_in !== undefined) f.marketing_opt_in = f.marketing_opt_in ? 1 : 0;
+    return f;
+  }
   on('GET', '/api/admin/guests', (q) => {
-    const { r } = me(); const s = String(q.q || '').toLowerCase(); const m = new Map();
-    db.reservations.filter((x) => x.restaurant_id === r.id && x.guest_email !== 'walkin@guest.local').forEach((x) => {
-      const g = m.get(x.guest_email) || { email: x.guest_email, name: x.guest_name, phone: x.guest_phone, reservations: 0, visits: 0, no_shows: 0, cancellations: 0, last_date: x.date };
-      g.reservations++; if (['completed', 'seated'].includes(x.status)) g.visits++; if (x.status === 'no_show') g.no_shows++; if (x.status === 'cancelled') g.cancellations++;
-      if (x.date > g.last_date) g.last_date = x.date; m.set(x.guest_email, g);
-    });
-    return [...m.values()].filter((g) => !s || `${g.name} ${g.email} ${g.phone}`.toLowerCase().includes(s)).sort((a, b) => b.last_date.localeCompare(a.last_date));
+    const { r } = me(); const today = nowInZone(r.timezone).date; const s = String(q.q || '').toLowerCase().trim(); const tag = String(q.tag || '').trim();
+    const mine = db.guests.filter((g) => g.restaurant_id === r.id);
+    const guests = mine.map((g) => guestStats(g, today))
+      .filter((g) => (!s || `${g.name} ${g.email} ${g.phone} ${g.tags} ${g.notes}`.toLowerCase().includes(s)) && (!tag || g.tags.split(',').includes(tag)))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+    return { guests, tags: [...new Set(mine.flatMap((g) => g.tags.split(',').filter(Boolean)))].sort() };
+  });
+  on('GET', '/api/admin/guests/:id', (q, b, p) => {
+    const { r } = me(); const g = owned('guests', p.id, r.id);
+    const reservations = db.reservations.filter((x) => x.guest_id === g.id).sort((a, c) => (c.date + c.time).localeCompare(a.date + a.time))
+      .map((x) => ({ id: x.id, code: x.code, date: x.date, time: x.time, party_size: x.party_size, status: x.status, source: x.source, notes: x.notes, table_label: seatLabel(x) }));
+    return { guest: guestStats(g, nowInZone(r.timezone).date), reservations };
+  });
+  on('POST', '/api/admin/guests', (q, b) => {
+    const { r } = me(); const f = cleanGuestRow(b);
+    if (!f.name) throw new E('Name is required.');
+    if (f.email && db.guests.some((g) => g.restaurant_id === r.id && g.email === f.email)) throw new E('A guest with that email is already in your address book.', 409);
+    const g = { id: nextId(), restaurant_id: r.id, name: '', email: '', phone: '', birthday: '', tags: '', notes: '', marketing_opt_in: 0, created_at: nowSql(), updated_at: nowSql(), ...f };
+    db.guests.push(g); return g;
+  });
+  on('PUT', '/api/admin/guests/:id', (q, b, p) => {
+    const { r } = me(); const g = owned('guests', p.id, r.id); const f = cleanGuestRow(b);
+    if (f.name === '') throw new E('Name is required.'); Object.assign(g, f, { updated_at: nowSql() }); return g;
+  });
+  on('DELETE', '/api/admin/guests/:id', (q, b, p) => {
+    const { r } = me(); owned('guests', p.id, r.id); db.guests = db.guests.filter((g) => g.id !== Number(p.id));
+    db.reservations.forEach((x) => { if (x.guest_id === Number(p.id)) x.guest_id = null; }); return { ok: true };
   });
   on('GET', '/api/admin/emails', () => { const { r } = me(); return db.emails.filter((e) => e.restaurant_id === r.id).slice().reverse().map(({ html, ...e }) => e); });
   on('GET', '/api/admin/billing', () => billingSummary(me().r));
@@ -565,6 +676,7 @@
     const bar = document.createElement('div');
     bar.className = 'demo-bar';
     bar.innerHTML = `<span><b>Live demo.</b> Everything works, but bookings stay in your browser and emails go to the demo inbox instead of being sent.</span><span class="sp"></span>
+      ${/admin\.html/.test(location.pathname) ? `<a href="index.html" style="color:#f5e6d8">← Guest site</a>` : `<a href="admin.html" id="demo-dash" style="background:#fff;color:#1f1b16;border-radius:7px;padding:5px 10px;font-weight:700;text-decoration:none">🍽️ Open my restaurant dashboard →</a>`}
       <button type="button" id="demo-inbox">Demo inbox (<span id="demo-count">0</span>)</button><button type="button" class="alt" id="demo-reset">Reset demo</button>`;
     document.body.prepend(bar);
     const count = () => { const n = (store.get() || db).emails.length; const el = document.getElementById('demo-count'); if (el) el.textContent = n; };

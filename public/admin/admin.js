@@ -53,7 +53,7 @@
 
   const VIEWS = {
     reservations: ['Reservations', viewReservations], floor: ['Floor plan & tables', viewFloor], services: ['Services & hours', viewServices],
-    guests: ['Guests', viewGuests], widget: ['Website widget', viewWidget], settings: ['Settings', viewSettings],
+    guests: ['Address book', viewGuests], widget: ['Website widget', viewWidget], settings: ['Settings', viewSettings],
     billing: ['Billing', viewBilling], emails: ['Email log', viewEmails], welcome: ['Welcome', viewWelcome],
   };
   function route() {
@@ -82,7 +82,50 @@
       <a class="btn" href="#reservations">Go to reservations</a></div>`;
   }
 
+  // ---------------- In-page confirm / prompt (browser dialogs are blocked in some embeds) ----------------
+  function ask(message, okLabel = 'Yes', danger = false) {
+    return new Promise((resolve) => {
+      let done = false;
+      const close = TB.modal(`<h2>${esc(message)}</h2><div class="row" style="margin-top:12px"><button class="btn ${danger ? 'danger' : ''}" id="ask-ok">${esc(okLabel)}</button><button class="btn secondary" data-close>Cancel</button></div>`,
+        (m, c) => { m.querySelector('#ask-ok').onclick = () => { done = true; c(); resolve(true); }; m.querySelector('#ask-ok').focus(); });
+      const obs = new MutationObserver(() => { if (!document.body.contains(document.getElementById('ask-ok')) && !done) { done = true; obs.disconnect(); resolve(false); } });
+      obs.observe(document.body, { childList: true });
+      void close;
+    });
+  }
+  function askText(title, value = '', placeholder = '') {
+    return new Promise((resolve) => {
+      let done = false;
+      TB.modal(`<h2>${esc(title)}</h2><form id="askt"><input id="askt-v" value="${esc(value)}" placeholder="${esc(placeholder)}" required>
+        <div class="row" style="margin-top:12px"><button class="btn" type="submit">Save</button><button class="btn secondary" type="button" data-close>Cancel</button></div></form>`,
+      (m, c) => {
+        const inp = m.querySelector('#askt-v'); inp.focus(); inp.select();
+        m.querySelector('#askt').onsubmit = (e) => { e.preventDefault(); done = true; c(); resolve(inp.value.trim() || null); };
+      });
+      const obs = new MutationObserver(() => { if (!document.getElementById('askt') && !done) { done = true; obs.disconnect(); resolve(null); } });
+      obs.observe(document.body, { childList: true });
+    });
+  }
+
+  // ---------------- Seating helpers (a booking sits at one table or one combination) ----------------
+  const seatVal = (x) => (x.combo_id ? `c${x.combo_id}` : x.table_id ? `t${x.table_id}` : '');
+  const seatBody = (v) => (v && v[0] === 'c' ? { combo_id: Number(v.slice(1)), table_id: null } : v ? { table_id: Number(v.slice(1)), combo_id: null } : { table_id: null, combo_id: null });
+  const comboTables = (c) => String(c.table_ids).split(',').map(Number);
+  function seatOptions(sel, blankLabel = 'Unassigned') {
+    const f = S.floor || { tables: [], combos: [] };
+    const t = f.tables.filter((x) => x.active).map((x) => `<option value="t${x.id}"${sel === `t${x.id}` ? ' selected' : ''}>${esc(x.label)} (${x.min_seats}-${x.max_seats})</option>`).join('');
+    const c = (f.combos || []).filter((x) => x.active).map((x) => `<option value="c${x.id}"${sel === `c${x.id}` ? ' selected' : ''}>${esc(x.name)} (${x.min_seats}-${x.max_seats})</option>`).join('');
+    return `<option value="">${esc(blankLabel)}</option><optgroup label="Tables">${t}</optgroup>${c ? `<optgroup label="Combined tables">${c}</optgroup>` : ''}`;
+  }
+  async function withForce(fn, message) {
+    try { return await fn(false); } catch (e) {
+      if (e.status === 409 && await ask(`${e.message} ${message || 'Seat them there anyway?'}`, 'Yes, double-seat')) return fn(true);
+      throw e;
+    }
+  }
+
   // ---------------- Reservations ----------------
+  let refreshTimer = null;
   async function viewReservations() {
     view.innerHTML = `
       <div class="toolbar">
@@ -92,49 +135,84 @@
         <button class="btn secondary sm" id="d-today">Today</button>
         <div class="seg" role="tablist"><button data-mode="list">List</button><button data-mode="timeline">Timeline</button></div>
         <input type="search" id="d-q" placeholder="Search name, phone, code">
+        <span class="live" id="live"><i></i>Live</span>
         <span class="spacer"></span>
         <button class="btn secondary" id="walkin">+ Walk-in</button>
         <button class="btn" id="newres">+ New reservation</button>
       </div>
       <div class="stats" id="stats"></div>
+      <div id="upnext"></div>
       <div id="res-body"></div>`;
     const setDate = (d) => { S.date = d; document.getElementById('d-date').value = d; load(); };
     document.getElementById('d-prev').onclick = () => setDate(TB.addDays(S.date, -1));
     document.getElementById('d-next').onclick = () => setDate(TB.addDays(S.date, 1));
     document.getElementById('d-today').onclick = () => setDate(nowLocal().date);
     document.getElementById('d-date').onchange = (e) => setDate(e.target.value);
-    document.getElementById('d-q').oninput = () => load();
+    let qt; document.getElementById('d-q').oninput = () => { clearTimeout(qt); qt = setTimeout(load, 200); };
     document.querySelectorAll('.seg button').forEach((b) => {
       b.classList.toggle('on', b.dataset.mode === S.mode);
       b.onclick = () => { S.mode = b.dataset.mode; document.querySelectorAll('.seg button').forEach((x) => x.classList.toggle('on', x === b)); load(); };
     });
     document.getElementById('newres').onclick = () => reservationModal(null, load);
     document.getElementById('walkin').onclick = () => walkInModal(load);
+    clearInterval(refreshTimer);
+    // Keep the book live: refresh every 30s while nobody is editing.
+    refreshTimer = setInterval(() => {
+      if (!document.getElementById('res-body')) { clearInterval(refreshTimer); return; }
+      if (document.querySelector('.modal-back') || S.dragging) return;
+      load(true).catch(() => {});
+    }, 30000);
     await load();
   }
 
-  async function load() {
-    const q = (document.getElementById('d-q') || {}).value || '';
+  async function load(quiet) {
+    const qEl = document.getElementById('d-q');
+    const q = qEl ? qEl.value : '';
     const [data, stats, floor] = await Promise.all([
       api(`/api/admin/reservations?date=${S.date}&q=${encodeURIComponent(q)}`),
       api(`/api/admin/stats?date=${S.date}`),
       api('/api/admin/floor'),
     ]);
+    if (!document.getElementById('res-body')) return;
     S.floor = floor;
-    document.getElementById('stats').innerHTML = [
-      ['Reservations', data.reservations.filter((x) => !['cancelled'].includes(x.status)).length],
-      ['Covers', stats.covers || 0], ['Upcoming', stats.upcoming || 0], ['Seated', stats.seated || 0],
-      ['Completed', stats.completed || 0], ['No-shows', stats.no_shows || 0], ['Cancelled', stats.cancelled || 0],
-      ['Seats', `${stats.seats}`],
-    ].map(([k, v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join('');
+    const prev = S.lastStats;
+    S.lastStats = stats;
+    const tiles = [
+      ['Reservations', data.reservations.filter((x) => x.status !== 'cancelled').length, 'bookings'],
+      ['Covers', stats.covers || 0, 'covers'], ['Upcoming', stats.upcoming || 0, 'upcoming'], ['Seated', stats.seated || 0, 'seated'],
+      ['Completed', stats.completed || 0, 'completed'], ['No-shows', stats.no_shows || 0, 'no_shows'], ['Cancelled', stats.cancelled || 0, 'cancelled'],
+      ['Seats', stats.seats, 'seats'],
+    ];
+    document.getElementById('stats').innerHTML = tiles.map(([k, v, key]) =>
+      `<div class="stat${quiet && prev && prev[key] !== stats[key] ? ' bump' : ''}"><b>${v}</b><span>${k}</span></div>`).join('');
+    const live = document.getElementById('live');
+    if (live) live.title = `Updated ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+    renderUpNext(data.reservations);
     const body = document.getElementById('res-body');
     if (S.mode === 'timeline') return renderTimeline(body, data.reservations, floor);
-    renderList(body, data.reservations, floor);
+    renderList(body, data.reservations);
+  }
+
+  function renderUpNext(rows) {
+    const box = document.getElementById('upnext');
+    const now = nowLocal();
+    if (S.date !== now.date) { box.innerHTML = ''; return; }
+    const soon = rows.filter((x) => x.status === 'confirmed' && toMin(x.time) <= now.minutes + 120 && toMin(x.time) >= now.minutes - 60)
+      .sort((a, b) => a.time.localeCompare(b.time)).slice(0, 6);
+    if (!soon.length) { box.innerHTML = ''; return; }
+    box.innerHTML = `<div class="upnext"><span class="upnext-title">Arriving next</span>${soon.map((x) => {
+      const d = toMin(x.time) - now.minutes;
+      const when = d > 0 ? `in ${d} min` : d === 0 ? 'now' : `${-d} min late`;
+      return `<div class="arrival${d < -10 ? ' late' : ''}"><b>${TB.time(x.time)}</b> ${esc(x.guest_name)} · ${x.party_size}
+        <span class="small muted">${esc(x.table_label || 'No table')} · ${when}</span><button class="btn ok sm" data-seat="${x.id}">Seat</button></div>`;
+    }).join('')}</div>`;
+    box.querySelectorAll('[data-seat]').forEach((b) => { b.onclick = () => resAction('seat', rows.find((x) => x.id === Number(b.dataset.seat))); });
   }
 
   function guestTags(x) {
     const h = x.history || {};
     const tags = [];
+    (x.guest_tags || '').split(',').filter(Boolean).forEach((t) => tags.push(`<span class="tag ${/vip/i.test(t) ? 'vip' : /allerg/i.test(t) ? 'warn' : 'good'}">${esc(t)}</span>`));
     if (x.source) tags.push(`<span class="tag">${SOURCE_LABEL[x.source] || x.source}</span>`);
     if (x.occasion) tags.push(`<span class="tag good">${esc(x.occasion)}</span>`);
     if (h.visits > 0) tags.push(`<span class="tag good">${h.visits} visit${h.visits > 1 ? 's' : ''}</span>`);
@@ -142,10 +220,9 @@
     return `<div class="guest-tags">${tags.join('')}</div>`;
   }
 
-  function renderList(body, rows, floor) {
-    if (!rows.length) { body.innerHTML = `<div class="card"><p class="muted" style="margin:0">No reservations for ${TB.date(S.date, { weekday: 'long', month: 'long' })}.</p></div>`; return; }
+  function renderList(body, rows) {
+    if (!rows.length) { body.innerHTML = `<div class="card"><p class="muted" style="margin:0">No reservations for ${TB.date(S.date, { weekday: 'long', month: 'long' })}. Use “+ New reservation” to add one.</p></div>`; return; }
     const now = nowLocal();
-    const tableOpts = (sel) => `<option value="">Unassigned</option>${floor.tables.filter((t) => t.active).map((t) => `<option value="${t.id}"${t.id === sel ? ' selected' : ''}>${esc(t.label)} (${t.min_seats}-${t.max_seats})</option>`).join('')}`;
     body.innerHTML = `<div class="card" style="padding:0"><div class="table-wrap"><table class="data">
       <thead><tr><th>Time</th><th>Guest</th><th>Party</th><th>Table</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody>${rows.map((x) => {
@@ -153,18 +230,18 @@
         const dim = ['cancelled', 'no_show', 'completed'].includes(x.status);
         return `<tr class="${dim ? 'dim' : ''}" data-id="${x.id}">
           <td class="time-cell">${TB.time(x.time)}${late ? '<br><span class="tag warn">Late</span>' : ''}</td>
-          <td><b>${esc(x.guest_name)}</b><br><a href="tel:${esc(x.guest_phone)}">${esc(x.guest_phone)}</a> · <span class="muted">${esc(x.guest_email)}</span>
-            ${guestTags(x)}${x.notes ? `<div class="small" style="margin-top:4px">📝 ${esc(x.notes)}</div>` : ''}${x.internal_notes ? `<div class="small muted">🔒 ${esc(x.internal_notes)}</div>` : ''}
+          <td>${x.guest_id ? `<a href="#guests" class="guest-link" data-guest="${x.guest_id}"><b>${esc(x.guest_name)}</b></a>` : `<b>${esc(x.guest_name)}</b>`}<br><a href="tel:${esc(x.guest_phone)}">${esc(x.guest_phone)}</a> · <span class="muted">${esc(x.guest_email)}</span>
+            ${guestTags(x)}${x.notes ? `<div class="small" style="margin-top:4px">📝 ${esc(x.notes)}</div>` : ''}${x.guest_notes ? `<div class="small muted">📇 ${esc(x.guest_notes)}</div>` : ''}${x.internal_notes ? `<div class="small muted">🔒 ${esc(x.internal_notes)}</div>` : ''}
             <div class="small muted">#${esc(x.code)}</div></td>
           <td>${x.party_size}</td>
-          <td><select data-act="table" ${dim ? 'disabled' : ''} style="min-width:120px">${tableOpts(x.table_id)}</select></td>
+          <td><select data-act="table" ${dim ? 'disabled' : ''} style="min-width:130px" aria-label="Table">${seatOptions(seatVal(x))}</select></td>
           <td><span class="badge ${x.status}">${STATUS_LABEL[x.status]}</span></td>
           <td><div class="res-actions">
             ${x.status === 'confirmed' ? '<button class="btn ok sm" data-act="seat">Seat</button><button class="btn secondary sm" data-act="noshow">No-show</button>' : ''}
             ${x.status === 'seated' ? '<button class="btn secondary sm" data-act="complete">Complete</button>' : ''}
             ${['confirmed', 'seated'].includes(x.status) ? '<button class="btn secondary sm" data-act="edit">Edit</button><button class="btn secondary sm" data-act="cancel">Cancel</button>' : ''}
             ${['no_show', 'completed'].includes(x.status) ? '<button class="btn secondary sm" data-act="undo">Undo</button>' : ''}
-            ${x.guest_email !== 'walkin@guest.local' ? '<button class="btn ghost sm" data-act="resend" title="Resend email">✉️</button>' : ''}
+            ${x.guest_email !== 'walkin@guest.local' ? '<button class="btn ghost sm" data-act="resend" title="Resend email" aria-label="Resend email">✉️</button>' : ''}
           </div></td></tr>`;
       }).join('')}</tbody></table></div></div>`;
     body.querySelectorAll('tr[data-id]').forEach((tr) => {
@@ -172,17 +249,17 @@
       tr.querySelectorAll('[data-act]').forEach((el) => {
         const act = el.dataset.act;
         if (act === 'table') {
-          el.onchange = () => api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { table_id: el.value ? Number(el.value) : null } })
-            .then(() => { TB.toast('Table updated'); load(); })
-            .catch((e) => { if (e.status === 409 && confirm(`${e.message} Assign anyway?`)) api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { table_id: Number(el.value), force: true } }).then(load); else { fail(e); load(); } });
+          el.onchange = () => withForce((force) => api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { ...seatBody(el.value), force } }))
+            .then(() => { TB.toast('Table updated'); load(); }).catch((e) => { fail(e); load(); });
         } else el.onclick = () => resAction(act, x);
       });
     });
+    body.querySelectorAll('.guest-link').forEach((a) => { a.onclick = (e) => { e.preventDefault(); S.openGuest = Number(a.dataset.guest); location.hash = 'guests'; }; });
   }
 
   async function resAction(act, x) {
     try {
-      if (act === 'seat') await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { status: 'seated' } });
+      if (act === 'seat') { await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { status: 'seated' } }); TB.toast(`${x.guest_name} seated`); }
       if (act === 'complete') await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { status: 'completed' } });
       if (act === 'undo') await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { status: 'confirmed' } });
       if (act === 'resend') { await api(`/api/admin/reservations/${x.id}/resend`, { body: {} }); TB.toast('Email sent'); return; }
@@ -206,6 +283,8 @@
     } catch (e) { fail(e); }
   }
 
+  // Timeline: one row per table, bookings as bars. Drag a bar sideways to change the time
+  // (snaps to 15 minutes) or up/down to move it to another table.
   function renderTimeline(body, rows, floor) {
     const active = rows.filter((x) => ['confirmed', 'seated', 'completed'].includes(x.status));
     let start = 10 * 60; let end = 23 * 60;
@@ -213,60 +292,116 @@
     const span = end - start;
     const pct = (m) => `${((m - start) / span) * 100}%`;
     const tables = floor.tables.filter((t) => t.active);
-    const unassigned = active.filter((x) => !x.table_id);
+    const combos = new Map((floor.combos || []).map((c) => [c.id, c]));
+    const onTable = (t) => active.filter((x) => x.table_id === t.id || (x.combo_id && combos.has(x.combo_id) && comboTables(combos.get(x.combo_id)).includes(t.id)));
+    const unassigned = active.filter((x) => !x.table_id && !x.combo_id);
     const now = nowLocal();
     const nowLine = now.date === S.date && now.minutes > start && now.minutes < end ? `<div class="tl-now" style="left:${pct(now.minutes)}"></div>` : '';
     const lines = []; for (let m = start; m <= end; m += 60) lines.push(m);
-    const row = (label, sub, items) => `<div class="tl-row"><div class="tl-label">${esc(label)}<small>${sub}</small></div><div class="tl-track">
+    const row = (seat, label, sub, items) => `<div class="tl-row" data-seat="${seat}"><div class="tl-label">${esc(label)}<small>${sub}</small></div><div class="tl-track">
       ${lines.map((m) => `<div class="tl-line" style="left:${pct(m)}"></div>`).join('')}${nowLine}
-      ${items.map((x) => `<div class="tl-bar ${x.status}" data-id="${x.id}" style="left:${pct(toMin(x.time))};width:calc(${(x.duration_minutes / span) * 100}% - 2px)" title="${esc(x.guest_name)} · ${x.party_size} · ${TB.time(x.time)}">
-        <b>${esc(x.guest_name)}</b> (${x.party_size})<br>${TB.time(x.time)}</div>`).join('')}</div></div>`;
+      ${items.map((x) => `<div class="tl-bar ${x.status}${x.combo_id ? ' combo' : ''}" data-id="${x.id}" style="left:${pct(toMin(x.time))};width:calc(${(x.duration_minutes / span) * 100}% - 2px)" title="${esc(x.guest_name)} · ${x.party_size} · ${TB.time(x.time)}${x.combo_id ? ` · ${esc(x.table_label || '')}` : ''}">
+        <b>${esc(x.guest_name)}</b> (${x.party_size})<br>${TB.time(x.time)}${x.combo_id ? ' · ⛓' : ''}</div>`).join('')}</div></div>`;
     body.innerHTML = `<div class="timeline"><div class="tl-grid">
       <div class="tl-hours"><div class="tl-label"></div><div class="tl-track">${lines.map((m) => `<span style="left:${pct(m)}">${TB.time(hhmm(m)).replace(':00', '')}</span>`).join('')}</div></div>
-      ${tables.map((t) => row(t.label, `${t.min_seats}-${t.max_seats} seats`, active.filter((x) => x.table_id === t.id))).join('')}
-      ${unassigned.length ? row('Unassigned', `${unassigned.length}`, unassigned) : ''}
+      ${tables.map((t) => row(`t${t.id}`, t.label, `${t.min_seats}-${t.max_seats} seats`, onTable(t))).join('')}
+      ${row('', 'Unassigned', `${unassigned.length}`, unassigned)}
     </div></div>
-    <div class="legend"><span><i style="background:#2563eb;border-color:#2563eb"></i>Booked</span><span><i style="background:#16a34a;border-color:#16a34a"></i>Seated</span><span><i style="background:#9ca3af;border-color:#9ca3af"></i>Completed</span><span>Click a booking to edit it.</span></div>`;
-    body.querySelectorAll('.tl-bar').forEach((b) => { b.onclick = () => reservationModal(rows.find((x) => x.id === Number(b.dataset.id)), load); });
+    <div class="legend"><span><i style="background:#2563eb;border-color:#2563eb"></i>Booked</span><span><i style="background:#16a34a;border-color:#16a34a"></i>Seated</span><span><i style="background:#9ca3af;border-color:#9ca3af"></i>Completed</span><span>⛓ Combined tables</span><span><b>Drag</b> a booking to change its time or table. Click to edit.</span></div>`;
+
+    body.querySelectorAll('.tl-bar').forEach((bar) => {
+      const x = rows.find((r) => r.id === Number(bar.dataset.id));
+      let sx; let sy; let moved = false; let track; let ghostTime = x.time;
+      bar.addEventListener('pointerdown', (e) => {
+        if (x.status === 'completed') return;
+        bar.setPointerCapture(e.pointerId); sx = e.clientX; sy = e.clientY; moved = false; track = bar.parentElement; S.dragging = true;
+      });
+      bar.addEventListener('pointermove', (e) => {
+        if (sx === undefined) return;
+        const dx = e.clientX - sx; const dy = e.clientY - sy;
+        if (!moved && Math.abs(dx) + Math.abs(dy) < 5) return;
+        moved = true; bar.classList.add('dragging');
+        const deltaMin = Math.round(((dx / track.clientWidth) * span) / 15) * 15;
+        ghostTime = hhmm(Math.max(0, Math.min(23 * 60 + 45, toMin(x.time) + deltaMin)));
+        bar.style.transform = `translate(${dx}px, ${dy}px)`;
+        bar.querySelector('br').nextSibling.textContent = `${TB.time(ghostTime)} `;
+        body.querySelectorAll('.tl-row').forEach((r) => r.classList.remove('drop'));
+        const under = document.elementsFromPoint(e.clientX, e.clientY).find((el) => el.classList && el.classList.contains('tl-row'));
+        if (under) under.classList.add('drop');
+      });
+      bar.addEventListener('pointerup', async (e) => {
+        if (sx === undefined) return;
+        sx = undefined; S.dragging = false;
+        if (!moved) { reservationModal(x, load); return; }
+        const under = document.elementsFromPoint(e.clientX, e.clientY).find((el) => el.classList && el.classList.contains('tl-row'));
+        const seat = under ? under.dataset.seat : seatVal(x);
+        const fromSeat = bar.closest('.tl-row').dataset.seat;
+        const patch = {};
+        if (ghostTime !== x.time) patch.time = ghostTime;
+        if (seat !== fromSeat) Object.assign(patch, seatBody(seat));
+        if (!Object.keys(patch).length) { load(); return; }
+        try {
+          await withForce((force) => api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { ...patch, force, notify: true } }));
+          TB.toast(`Moved ${x.guest_name} to ${TB.time(patch.time || x.time)}${seat !== fromSeat ? ` · ${seat ? (under.querySelector('.tl-label').firstChild.textContent) : 'Unassigned'}` : ''}`);
+        } catch (err) { fail(err); }
+        load();
+      });
+    });
   }
 
-  function reservationModal(x, done) {
+  async function guestBook() {
+    if (!S.guests) { try { S.guests = (await api('/api/admin/guests')).guests; } catch { S.guests = []; } }
+    return S.guests;
+  }
+
+  function reservationModal(x, done, prefill) {
     const isNew = !x;
-    const v = x || { date: S.date, time: '19:00', party_size: 2, guest_name: '', guest_email: '', guest_phone: '', notes: '', internal_notes: '', occasion: '', duration_minutes: 90 };
-    const tables = (S.floor ? S.floor.tables : []).filter((t) => t.active);
+    const v = x || { date: S.date, time: '19:00', party_size: 2, guest_name: '', guest_email: '', guest_phone: '', notes: '', internal_notes: '', occasion: '', duration_minutes: 90, ...(prefill || {}) };
     TB.modal(`<h2>${isNew ? 'New reservation' : `Edit reservation #${esc(v.code)}`}</h2>
       <form id="m-form">
         <div class="grid-3">
-          <div class="field"><label>Date</label><input type="date" name="date" value="${v.date}" required></div>
-          <div class="field"><label>Party</label><input type="number" name="party_size" min="1" max="50" value="${v.party_size}" required></div>
-          <div class="field"><label>Duration (min)</label><input type="number" name="duration_minutes" min="15" step="15" value="${v.duration_minutes}"></div>
+          <div class="field"><label for="m-date">Date</label><input id="m-date" type="date" name="date" value="${v.date}" required></div>
+          <div class="field"><label for="m-party">Party</label><input id="m-party" type="number" name="party_size" min="1" max="50" value="${v.party_size}" required></div>
+          <div class="field"><label for="m-dur">Duration (min)</label><input id="m-dur" type="number" name="duration_minutes" min="15" step="15" value="${v.duration_minutes}"></div>
         </div>
         <div class="field"><label>Time</label><div id="m-slots" class="slots"></div><input type="hidden" name="time" value="${v.time}"></div>
-        <div class="field"><label>Table</label><select name="table_id"><option value="">Auto-assign best table</option>
-          ${tables.map((t) => `<option value="${t.id}"${t.id === v.table_id ? ' selected' : ''}>${esc(t.label)} (${t.min_seats}-${t.max_seats} seats)</option>`).join('')}</select></div>
-        <div class="field"><label>Guest name</label><input name="name" value="${esc(v.guest_name)}" required></div>
+        <div class="field"><label for="m-seat">Table</label><select id="m-seat" name="seat">${seatOptions(seatVal(v), 'Auto-assign best table')}</select></div>
+        <div class="field"><label for="m-name">Guest name ${isNew ? '<span class="muted small">(type to search your address book)</span>' : ''}</label><input id="m-name" name="name" list="m-guests" autocomplete="off" value="${esc(v.guest_name)}" required><datalist id="m-guests"></datalist></div>
         <div class="grid-2">
-          <div class="field"><label>Phone</label><input name="phone" type="tel" value="${esc(v.guest_phone)}" required></div>
-          <div class="field"><label>Email</label><input name="email" type="email" value="${esc(v.guest_email)}" required></div>
+          <div class="field"><label for="m-phone">Phone</label><input id="m-phone" name="phone" type="tel" value="${esc(v.guest_phone)}" required></div>
+          <div class="field"><label for="m-email">Email</label><input id="m-email" name="email" type="email" value="${esc(v.guest_email)}" required></div>
         </div>
+        <div id="m-guestnote"></div>
         <div class="grid-2">
-          <div class="field"><label>Occasion</label><input name="occasion" value="${esc(v.occasion)}"></div>
-          ${isNew ? '<div class="field"><label>Booked via</label><select name="source"><option value="phone">Phone</option><option value="admin">In person / staff</option></select></div>' : '<div></div>'}
+          <div class="field"><label for="m-occ">Occasion</label><input id="m-occ" name="occasion" value="${esc(v.occasion)}"></div>
+          ${isNew ? '<div class="field"><label for="m-src">Booked via</label><select id="m-src" name="source"><option value="phone">Phone</option><option value="admin">In person / staff</option></select></div>' : '<div></div>'}
         </div>
-        <div class="field"><label>Guest requests</label><textarea name="notes">${esc(v.notes)}</textarea></div>
-        <div class="field"><label>Internal notes (staff only)</label><textarea name="internal_notes">${esc(v.internal_notes)}</textarea></div>
+        <div class="field"><label for="m-notes">Guest requests</label><textarea id="m-notes" name="notes">${esc(v.notes)}</textarea></div>
+        <div class="field"><label for="m-int">Internal notes (staff only)</label><textarea id="m-int" name="internal_notes">${esc(v.internal_notes)}</textarea></div>
         <label class="check"><input type="checkbox" name="notify" checked> Email the guest ${isNew ? 'a confirmation' : 'if date/time/party changes'}</label>
         <div class="row" style="margin-top:16px"><button class="btn" type="submit">${isNew ? 'Book' : 'Save'}</button><button class="btn secondary" type="button" data-close>Close</button></div>
       </form>`,
     (m, close) => {
       const f = m.querySelector('#m-form');
+      // Address book lookup
+      guestBook().then((guests) => {
+        m.querySelector('#m-guests').innerHTML = guests.map((g) => `<option value="${esc(g.name)}">${esc([g.phone, g.email].filter(Boolean).join(' · '))}</option>`).join('');
+        const fill = () => {
+          const g = guests.find((z) => z.name.toLowerCase() === f.name.value.trim().toLowerCase());
+          const box = m.querySelector('#m-guestnote');
+          if (!g) { box.innerHTML = ''; return; }
+          if (isNew) { if (!f.phone.value) f.phone.value = g.phone || ''; if (!f.email.value) f.email.value = g.email || ''; }
+          box.innerHTML = (g.tags || g.notes) ? `<div class="alert" style="margin-bottom:12px">📇 ${g.tags ? `<b>${esc(g.tags.split(',').join(', '))}</b> ` : ''}${esc(g.notes || '')}</div>` : '';
+        };
+        f.name.addEventListener('input', fill); f.name.addEventListener('change', fill); fill();
+      });
       const loadSlots = async () => {
         const av = await api(`/api/admin/availability?date=${f.date.value}&party=${f.party_size.value}&ignore=${isNew ? 0 : v.id}`);
         const box = m.querySelector('#m-slots');
-        const times = av.slots.length ? av.slots : [];
+        const times = av.slots.slice();
         if (!times.some((s) => s.time === f.time.value)) times.push({ time: f.time.value, available: false, custom: true });
         times.sort((a, b) => a.time.localeCompare(b.time));
-        box.innerHTML = times.map((s) => `<button type="button" class="slot ${s.available ? '' : 'off'} ${s.time === f.time.value ? 'selected' : ''}" style="text-decoration:none;cursor:pointer" data-t="${s.time}" title="${s.available ? 'Table available' : 'No free table (you can still pick a table manually)'}">${TB.time(s.time)}</button>`).join('')
+        box.innerHTML = times.map((s) => `<button type="button" class="slot ${s.available ? '' : 'off'} ${s.time === f.time.value ? 'selected' : ''}" style="text-decoration:none;cursor:pointer" data-t="${s.time}" title="${s.available ? (s.comboId ? 'Free with combined tables' : 'Table available') : 'No free table (you can still pick a table manually)'}">${TB.time(s.time)}${s.comboId ? ' ⛓' : ''}</button>`).join('')
           + '<input type="time" step="300" style="width:130px" aria-label="Custom time">';
         box.querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => { f.time.value = b.dataset.t; box.querySelectorAll('.slot').forEach((z) => z.classList.toggle('selected', z === b)); }; });
         box.querySelector('input[type=time]').onchange = (e) => { if (e.target.value) { f.time.value = e.target.value; loadSlots(); } };
@@ -277,42 +412,31 @@
         const d = TB.formData(f);
         const body = {
           date: d.date, time: d.time, party_size: Number(d.party_size), duration_minutes: Number(d.duration_minutes) || 90,
-          table_id: d.table_id ? Number(d.table_id) : null, notes: d.notes, internal_notes: d.internal_notes, occasion: d.occasion,
+          ...seatBody(d.seat), notes: d.notes, internal_notes: d.internal_notes, occasion: d.occasion,
         };
-        const send = async (force) => {
-          if (isNew) {
-            return api('/api/admin/reservations', { body: { ...body, name: d.name, phone: d.phone, email: d.email, source: d.source, send_email: d.notify, force } });
-          }
-          return api(`/api/admin/reservations/${v.id}`, { method: 'PATCH', body: { ...body, guest_name: d.name, guest_phone: d.phone, guest_email: d.email, notify: d.notify, force } });
-        };
-        try { await send(false); }
-        catch (err) {
-          if (err.status === 409 && body.table_id && confirm(`${err.message}\nBook it anyway (double-seat)?`)) { try { await send(true); } catch (e2) { return fail(e2); } }
-          else return fail(err);
-        }
+        const send = (force) => (isNew
+          ? api('/api/admin/reservations', { body: { ...body, name: d.name, phone: d.phone, email: d.email, source: d.source, send_email: d.notify, force } })
+          : api(`/api/admin/reservations/${v.id}`, { method: 'PATCH', body: { ...body, guest_name: d.name, guest_phone: d.phone, guest_email: d.email, notify: d.notify, force } }));
+        try { await withForce(send, 'Book it there anyway (double-seat)?'); } catch (err) { return fail(err); }
+        S.guests = null;
         close(); TB.toast(isNew ? 'Reservation booked' : 'Reservation updated'); done && done();
       };
     });
   }
 
   function walkInModal(done) {
-    const tables = (S.floor ? S.floor.tables : []).filter((t) => t.active);
     TB.modal(`<h2>Seat a walk-in</h2><form id="w-form">
-      <div class="grid-2"><div class="field"><label>Party size</label><input type="number" name="party_size" min="1" value="2"></div>
-      <div class="field"><label>Table</label><select name="table_id"><option value="">Auto-assign</option>${tables.map((t) => `<option value="${t.id}">${esc(t.label)} (${t.min_seats}-${t.max_seats})</option>`).join('')}</select></div></div>
-      <div class="grid-2"><div class="field"><label>Name (optional)</label><input name="name"></div><div class="field"><label>Phone (optional)</label><input name="phone" type="tel"></div></div>
+      <div class="grid-2"><div class="field"><label for="w-party">Party size</label><input id="w-party" type="number" name="party_size" min="1" value="2"></div>
+      <div class="field"><label for="w-seat">Table</label><select id="w-seat" name="seat">${seatOptions('', 'Auto-assign')}</select></div></div>
+      <div class="grid-2"><div class="field"><label for="w-name">Name (optional)</label><input id="w-name" name="name"></div><div class="field"><label for="w-phone">Phone (optional)</label><input id="w-phone" name="phone" type="tel"></div></div>
       <div class="row"><button class="btn ok" type="submit">Seat now</button><button class="btn secondary" type="button" data-close>Close</button></div></form>`,
     (m, close) => {
       m.querySelector('#w-form').onsubmit = async (e) => {
         e.preventDefault();
         const d = TB.formData(e.target);
         const now = nowLocal();
-        const body = { source: 'walk_in', party_size: Number(d.party_size), name: d.name, phone: d.phone, date: now.date, time: hhmm(Math.floor(now.minutes / 5) * 5), table_id: d.table_id ? Number(d.table_id) : null };
-        try { await api('/api/admin/reservations', { body }); }
-        catch (err) {
-          if (err.status === 409 && body.table_id && confirm(`${err.message}\nSeat anyway?`)) await api('/api/admin/reservations', { body: { ...body, force: true } }).catch(fail);
-          else return fail(err);
-        }
+        const body = { source: 'walk_in', party_size: Number(d.party_size), name: d.name, phone: d.phone, date: now.date, time: hhmm(Math.floor(now.minutes / 5) * 5), ...seatBody(d.seat) };
+        try { await withForce((force) => api('/api/admin/reservations', { body: { ...body, force } }), 'Seat them there anyway?'); } catch (err) { return fail(err); }
         close(); TB.toast('Walk-in seated'); S.date = now.date; done && done();
       };
     });
@@ -362,12 +486,14 @@
           <div class="canvas-scroll"><div class="canvas" id="canvas"></div></div>
           <div class="legend"><span><i></i>Free</span><span><i style="background:#dbeafe;border-color:#2563eb"></i>Booked at this time</span><span><i style="background:#dcfce7;border-color:#16a34a"></i>Seated</span><span><i style="border-style:dashed"></i>Not bookable online</span>
             <span><b>${floor.tables.filter((t) => t.active).length}</b> tables · <b>${seats}</b> seats total</span><span>Drag tables to arrange. Click to edit.</span></div>
+          <div class="card" id="combos" style="margin-top:16px"></div>
         </div>
         <div class="card" id="tpanel"><p class="muted" style="margin:0">Select a table to edit its seats, shape and settings, or add a new one.</p></div>
       </div>`;
     const canvas = document.getElementById('canvas');
     const t0 = toMin(S.floorTime);
-    const busy = (t) => resv.find((x) => x.table_id === t.id && toMin(x.time) <= t0 && toMin(x.time) + x.duration_minutes > t0);
+    const comboById = new Map((floor.combos || []).map((c) => [c.id, c]));
+    const busy = (t) => resv.find((x) => (x.table_id === t.id || (x.combo_id && comboById.has(x.combo_id) && comboTables(comboById.get(x.combo_id)).includes(t.id))) && toMin(x.time) <= t0 && toMin(x.time) + x.duration_minutes > t0);
     const visible = floor.tables.filter((t) => (S.floorArea ? t.area_id === S.floorArea : !t.area_id));
     canvas.innerHTML = visible.map((t) => {
       const [w, h] = tableSize(t);
@@ -407,23 +533,82 @@
     document.getElementById('f-date').onchange = (e) => { S.date = e.target.value; viewFloor().catch(fail); };
     document.getElementById('f-time').onchange = (e) => { S.floorTime = e.target.value; viewFloor().catch(fail); };
     document.getElementById('add-area').onclick = async () => {
-      const name = prompt('Room name (e.g. Patio, Bar, Private room)'); if (!name) return;
+      const name = await askText('New room', '', 'e.g. Patio, Bar, Private room'); if (!name) return;
       const a = await api('/api/admin/areas', { body: { name, sort_order: floor.areas.length } }).catch(fail);
       if (a) { S.floorArea = a.id; viewFloor().catch(fail); }
     };
     if (S.floorArea) {
       document.getElementById('ren-area').onclick = async () => {
-        const a = floor.areas.find((z) => z.id === S.floorArea); const name = prompt('Rename room', a.name); if (!name) return;
+        const a = floor.areas.find((z) => z.id === S.floorArea); const name = await askText('Rename room', a.name); if (!name) return;
         await api(`/api/admin/areas/${a.id}`, { method: 'PUT', body: { name } }).catch(fail); viewFloor().catch(fail);
       };
       document.getElementById('del-area').onclick = async () => {
-        if (!confirm('Delete this room? Its tables move to "Unassigned".')) return;
+        if (!await ask('Delete this room? Its tables move to “Unassigned”.', 'Delete room', true)) return;
         await api(`/api/admin/areas/${S.floorArea}`, { method: 'DELETE' }).catch(fail); S.floorArea = null; viewFloor().catch(fail);
       };
     }
     document.getElementById('add-table').onclick = () => tablePanel({ label: `T${floor.tables.length + 1}`, min_seats: 2, max_seats: 4, shape: 'square', area_id: S.floorArea, online_bookable: 1, active: 1, rotation: 0, x: 40, y: 40 });
+    renderCombos(floor);
     const sel = floor.tables.find((z) => z.id === S.selTable);
     if (sel) tablePanel(sel);
+  }
+
+  // ---------------- Table combinations ----------------
+  function renderCombos(floor) {
+    const box = document.getElementById('combos');
+    const label = (id) => (floor.tables.find((t) => t.id === id) || { label: '?' }).label;
+    box.innerHTML = `<div class="row"><h2 style="margin:0">Table combinations</h2><span class="spacer"></span><button class="btn secondary sm" id="add-combo">+ Combine tables</button></div>
+      <p class="muted small">Push tables together for bigger parties. Rbooked only joins tables when no single table fits, and blocks every table in the combination.</p>
+      ${(floor.combos || []).length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Combination</th><th>Tables</th><th>Seats</th><th>Online</th><th></th></tr></thead><tbody>
+      ${floor.combos.map((c) => `<tr data-combo="${c.id}" class="${c.active ? '' : 'dim'}"><td><b>${esc(c.name)}</b></td><td>${comboTables(c).map(label).map(esc).join(' + ')}</td><td>${c.min_seats}-${c.max_seats}</td>
+        <td>${c.online_bookable ? 'Yes' : 'Staff only'}</td><td style="text-align:right;white-space:nowrap"><button class="btn secondary sm" data-edit-combo="${c.id}">Edit</button> <button class="btn ghost sm" data-del-combo="${c.id}">Delete</button></td></tr>`).join('')}
+      </tbody></table></div>` : '<p class="muted">No combinations yet. Example: join T4 and T5 to seat a party of 8.</p>'}`;
+    const hl = (c, on) => comboTables(c).forEach((id) => { const el = document.querySelector(`.ftable[data-id="${id}"]`); if (el) el.classList.toggle('combo-hl', on); });
+    box.querySelectorAll('tr[data-combo]').forEach((tr) => {
+      const c = floor.combos.find((z) => z.id === Number(tr.dataset.combo));
+      tr.onmouseenter = () => hl(c, true); tr.onmouseleave = () => hl(c, false);
+    });
+    document.getElementById('add-combo').onclick = () => comboModal(floor, null);
+    box.querySelectorAll('[data-edit-combo]').forEach((b) => { b.onclick = () => comboModal(floor, floor.combos.find((z) => z.id === Number(b.dataset.editCombo))); });
+    box.querySelectorAll('[data-del-combo]').forEach((b) => {
+      b.onclick = async () => {
+        if (!await ask('Delete this table combination?', 'Delete', true)) return;
+        await api(`/api/admin/combos/${b.dataset.delCombo}`, { method: 'DELETE' }).catch(fail); viewFloor().catch(fail);
+      };
+    });
+  }
+
+  function comboModal(floor, c) {
+    const chosen = new Set(c ? comboTables(c) : (S.selTable ? [S.selTable] : []));
+    const areaName = (id) => (floor.areas.find((a) => a.id === id) || { name: 'Unassigned' }).name;
+    TB.modal(`<h2>${c ? `Edit ${esc(c.name)}` : 'Combine tables'}</h2><form id="c-form">
+      <div class="field"><label>Tables to push together</label><div class="days" id="c-tables">${floor.tables.filter((t) => t.active).map((t) => `<label><input type="checkbox" value="${t.id}" ${chosen.has(t.id) ? 'checked' : ''}>${esc(t.label)} <span class="muted small">${t.max_seats} · ${esc(areaName(t.area_id))}</span></label>`).join('')}</div></div>
+      <div class="field"><label for="c-name">Name</label><input id="c-name" name="name" value="${esc(c ? c.name : '')}" placeholder="e.g. T4 + T5"></div>
+      <div class="grid-2"><div class="field"><label for="c-min">Min party</label><input id="c-min" type="number" min="1" name="min_seats" value="${c ? c.min_seats : ''}"></div>
+      <div class="field"><label for="c-max">Max party</label><input id="c-max" type="number" min="1" name="max_seats" value="${c ? c.max_seats : ''}"></div></div>
+      <label class="check"><input type="checkbox" name="online_bookable" ${!c || c.online_bookable ? 'checked' : ''}> Guests can book it online</label>
+      <label class="check" style="margin-top:6px"><input type="checkbox" name="active" ${!c || c.active ? 'checked' : ''}> Active</label>
+      <div class="row" style="margin-top:16px"><button class="btn" type="submit">${c ? 'Save' : 'Create combination'}</button><button class="btn secondary" type="button" data-close>Cancel</button></div></form>`,
+    (m, close) => {
+      const f = m.querySelector('#c-form');
+      const ids = () => [...m.querySelectorAll('#c-tables input:checked')].map((x) => Number(x.value));
+      const suggest = () => {
+        const ts = floor.tables.filter((t) => ids().includes(t.id));
+        if (ts.length < 2) return;
+        f.name.placeholder = ts.map((t) => t.label).join(' + ');
+        if (!c) { f.max_seats.value = ts.reduce((a, t) => a + t.max_seats, 0); f.min_seats.value = Math.max(...ts.map((t) => t.max_seats)) + 1; }
+      };
+      m.querySelectorAll('#c-tables input').forEach((x) => { x.onchange = suggest; }); suggest();
+      f.onsubmit = async (e) => {
+        e.preventDefault();
+        const d = TB.formData(f);
+        const body = { table_ids: ids(), name: d.name || f.name.placeholder, min_seats: Number(d.min_seats) || undefined, max_seats: Number(d.max_seats) || undefined, online_bookable: d.online_bookable, active: d.active };
+        try {
+          await api(c ? `/api/admin/combos/${c.id}` : '/api/admin/combos', { method: c ? 'PUT' : 'POST', body });
+          close(); TB.toast(c ? 'Combination saved' : 'Tables combined'); viewFloor().catch(fail);
+        } catch (err) { fail(err); }
+      };
+    });
   }
 
   function tablePanel(t) {
@@ -451,7 +636,7 @@
     };
     if (!isNew) {
       p.querySelector('#t-del').onclick = async () => {
-        if (!confirm(`Delete table ${t.label}? Existing reservations on it become unassigned.`)) return;
+        if (!await ask(`Delete table ${t.label}? Its reservations become unassigned and combinations using it are removed.`, 'Delete table', true)) return;
         await api(`/api/admin/tables/${t.id}`, { method: 'DELETE' }).catch(fail); S.selTable = null; viewFloor().catch(fail);
       };
     }
@@ -497,7 +682,7 @@
         } catch (err) { fail(err); }
       };
       const del = f.querySelector('[data-del-shift]');
-      if (del) del.onclick = async () => { if (confirm('Delete this service?')) { await api(`/api/admin/shifts/${f.dataset.id}`, { method: 'DELETE' }).catch(fail); viewServices().catch(fail); } };
+      if (del) del.onclick = async () => { if (await ask('Delete this service?', 'Delete', true)) { await api(`/api/admin/shifts/${f.dataset.id}`, { method: 'DELETE' }).catch(fail); viewServices().catch(fail); } };
     });
     bind();
     document.getElementById('add-shift').onclick = () => {
@@ -511,19 +696,78 @@
     view.querySelectorAll('[data-del]').forEach((b) => { b.onclick = async () => { await api(`/api/admin/closures/${b.dataset.del}`, { method: 'DELETE' }).catch(fail); viewServices().catch(fail); }; });
   }
 
-  // ---------------- Guests ----------------
+  // ---------------- Guests: address book ----------------
   async function viewGuests() {
-    view.innerHTML = `<div class="toolbar"><input type="search" id="g-q" placeholder="Search guests by name, email or phone" style="width:320px"></div><div id="g-list"></div>`;
+    view.innerHTML = `<div class="toolbar"><input type="search" id="g-q" placeholder="Search name, phone, email, notes" style="width:300px">
+        <div class="chips" id="g-tags"></div><span class="spacer"></span><button class="btn" id="g-add">+ Add guest</button></div>
+      <div class="book"><div class="card" style="padding:0" id="g-list"></div><div class="card" id="g-card"><p class="muted" style="margin:0">Select a guest to see their profile, notes and visit history.</p></div></div>`;
+    let tagFilter = '';
     const load = async () => {
-      const rows = await api(`/api/admin/guests?q=${encodeURIComponent(document.getElementById('g-q').value)}`);
-      document.getElementById('g-list').innerHTML = `<div class="card" style="padding:0"><div class="table-wrap"><table class="data">
-        <thead><tr><th>Guest</th><th>Phone</th><th>Reservations</th><th>Visits</th><th>No-shows</th><th>Cancelled</th><th>Last date</th></tr></thead>
-        <tbody>${rows.map((g) => `<tr><td><b>${esc(g.name)}</b><br><span class="muted">${esc(g.email)}</span></td><td><a href="tel:${esc(g.phone)}">${esc(g.phone)}</a></td>
-          <td>${g.reservations}</td><td>${g.visits || 0}</td><td>${g.no_shows ? `<span class="tag warn">${g.no_shows}</span>` : 0}</td><td>${g.cancellations || 0}</td><td>${TB.date(g.last_date)}</td></tr>`).join('')
-          || '<tr><td colspan="7" class="muted">No guests yet.</td></tr>'}</tbody></table></div></div>`;
+      const data = await api(`/api/admin/guests?q=${encodeURIComponent(document.getElementById('g-q').value)}&tag=${encodeURIComponent(tagFilter)}`);
+      S.guests = null;
+      document.getElementById('g-tags').innerHTML = data.tags.map((t) => `<button type="button" class="chip${t === tagFilter ? ' on' : ''}" data-t="${esc(t)}">${esc(t)}</button>`).join('');
+      document.querySelectorAll('#g-tags [data-t]').forEach((b) => { b.onclick = () => { tagFilter = tagFilter === b.dataset.t ? '' : b.dataset.t; load().catch(fail); }; });
+      document.getElementById('g-list').innerHTML = `<div class="g-count muted small">${data.guests.length} contact${data.guests.length === 1 ? '' : 's'}</div>` + (data.guests.map((g) => `
+        <button type="button" class="g-row${S.openGuest === g.id ? ' on' : ''}" data-id="${g.id}">
+          <span class="avatar">${esc(TB.initials(g.name) || '?')}</span>
+          <span class="g-main"><b>${esc(g.name)}</b><span class="small muted">${esc(g.phone || g.email || 'No contact info')}</span>
+            <span class="guest-tags">${(g.tags || '').split(',').filter(Boolean).map((t) => `<span class="tag ${/vip/i.test(t) ? 'vip' : /allerg/i.test(t) ? 'warn' : 'good'}">${esc(t)}</span>`).join('')}${g.no_shows ? `<span class="tag warn">${g.no_shows} no-show</span>` : ''}</span></span>
+          <span class="g-side small muted">${g.visits || 0} visit${g.visits === 1 ? '' : 's'}${g.next_visit ? `<br><b style="color:var(--ok)">Next ${TB.date(g.next_visit.slice(0, 10))}</b>` : ''}</span>
+        </button>`).join('') || '<p class="muted" style="padding:16px">No guests match.</p>');
+      document.querySelectorAll('.g-row').forEach((b) => { b.onclick = () => { S.openGuest = Number(b.dataset.id); document.querySelectorAll('.g-row').forEach((x) => x.classList.toggle('on', x === b)); openGuest(S.openGuest); }; });
+      if (S.openGuest && data.guests.some((g) => g.id === S.openGuest)) openGuest(S.openGuest);
     };
-    let timer; document.getElementById('g-q').oninput = () => { clearTimeout(timer); timer = setTimeout(() => load().catch(fail), 250); };
+    let t; document.getElementById('g-q').oninput = () => { clearTimeout(t); t = setTimeout(() => load().catch(fail), 200); };
+    document.getElementById('g-add').onclick = () => guestForm(null, load);
     await load();
+  }
+
+  async function openGuest(id) {
+    const card = document.getElementById('g-card');
+    if (!card) return;
+    const { guest: g, reservations } = await api(`/api/admin/guests/${id}`);
+    card.innerHTML = `<div class="row"><span class="avatar lg">${esc(TB.initials(g.name) || '?')}</span><div style="min-width:0"><h2 style="margin:0;font-size:22px">${esc(g.name)}</h2>
+        <div class="guest-tags">${(g.tags || '').split(',').filter(Boolean).map((x) => `<span class="tag ${/vip/i.test(x) ? 'vip' : /allerg/i.test(x) ? 'warn' : 'good'}">${esc(x)}</span>`).join('')}</div></div></div>
+      <div class="kv"><span>Phone</span><b>${g.phone ? `<a href="tel:${esc(g.phone)}">${esc(g.phone)}</a>` : '—'}</b><span>Email</span><b>${esc(g.email || '—')}</b>
+        <span>Birthday</span><b>${esc(g.birthday || '—')}</b><span>Marketing</span><b>${g.marketing_opt_in ? 'Opted in' : 'No'}</b></div>
+      ${g.notes ? `<div class="alert" style="margin:10px 0">📇 ${esc(g.notes)}</div>` : ''}
+      <div class="stats" style="grid-template-columns:repeat(4,1fr);margin:12px 0"><div class="stat"><b>${g.reservations}</b><span>Bookings</span></div><div class="stat"><b>${g.visits}</b><span>Visits</span></div>
+        <div class="stat"><b>${g.no_shows}</b><span>No-shows</span></div><div class="stat"><b>${g.cancellations}</b><span>Cancelled</span></div></div>
+      <div class="row"><button class="btn" id="g-book">Book a table</button><button class="btn secondary" id="g-edit">Edit</button><span class="spacer"></span><button class="btn ghost" id="g-del">Delete</button></div>
+      <h3 style="margin:18px 0 6px">History</h3>
+      ${reservations.length ? `<table class="data">${reservations.map((x) => `<tr><td>${TB.date(x.date, { year: 'numeric' })}<br><span class="small muted">${TB.time(x.time)}</span></td><td>${x.party_size} ppl · ${esc(x.table_label || 'No table')}${x.notes ? `<div class="small muted">${esc(x.notes)}</div>` : ''}</td><td><span class="badge ${x.status}">${STATUS_LABEL[x.status]}</span></td></tr>`).join('')}</table>` : '<p class="muted">No reservations yet.</p>'}`;
+    document.getElementById('g-book').onclick = () => reservationModal(null, () => openGuest(id), { guest_name: g.name, guest_phone: g.phone, guest_email: g.email, date: nowLocal().date });
+    document.getElementById('g-edit').onclick = () => guestForm(g, () => viewGuests().catch(fail));
+    document.getElementById('g-del').onclick = async () => {
+      if (!await ask(`Delete ${g.name} from your address book? Their past reservations stay.`, 'Delete guest', true)) return;
+      await api(`/api/admin/guests/${id}`, { method: 'DELETE' }).catch(fail); S.openGuest = null; viewGuests().catch(fail);
+    };
+    if (window.matchMedia('(max-width: 1000px)').matches) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function guestForm(g, done) {
+    const v = g || { name: '', phone: '', email: '', birthday: '', tags: '', notes: '', marketing_opt_in: 0 };
+    TB.modal(`<h2>${g ? 'Edit guest' : 'Add guest'}</h2><form id="gf">
+      <div class="field"><label for="gf-name">Name</label><input id="gf-name" name="name" value="${esc(v.name)}" required></div>
+      <div class="grid-2"><div class="field"><label for="gf-phone">Phone</label><input id="gf-phone" name="phone" type="tel" value="${esc(v.phone)}"></div>
+      <div class="field"><label for="gf-email">Email</label><input id="gf-email" name="email" type="email" value="${esc(v.email)}"></div></div>
+      <div class="grid-2"><div class="field"><label for="gf-bday">Birthday</label><input id="gf-bday" name="birthday" value="${esc(v.birthday)}" placeholder="MM-DD"></div>
+      <div class="field"><label for="gf-tags">Tags (comma separated)</label><input id="gf-tags" name="tags" value="${esc(v.tags)}" placeholder="VIP, Regular, Allergy"></div></div>
+      <div class="chips" style="margin:-6px 0 12px">${['VIP', 'Regular', 'Allergy', 'Vegan', 'Industry', 'Big spender'].map((t) => `<button type="button" class="chip" data-add="${t}">+ ${t}</button>`).join('')}</div>
+      <div class="field"><label for="gf-notes">Notes (allergies, favorite table, preferences)</label><textarea id="gf-notes" name="notes">${esc(v.notes)}</textarea></div>
+      <label class="check"><input type="checkbox" name="marketing_opt_in" ${v.marketing_opt_in ? 'checked' : ''}> OK to send news and offers</label>
+      <div class="row" style="margin-top:16px"><button class="btn" type="submit">${g ? 'Save' : 'Add to address book'}</button><button class="btn secondary" type="button" data-close>Cancel</button></div></form>`,
+    (m, close) => {
+      const f = m.querySelector('#gf');
+      m.querySelectorAll('[data-add]').forEach((b) => { b.onclick = () => { const set = new Set(f.tags.value.split(',').map((x) => x.trim()).filter(Boolean)); set.add(b.dataset.add); f.tags.value = [...set].join(', '); }; });
+      f.onsubmit = async (e) => {
+        e.preventDefault();
+        try {
+          const saved = await api(g ? `/api/admin/guests/${g.id}` : '/api/admin/guests', { method: g ? 'PUT' : 'POST', body: TB.formData(f) });
+          S.openGuest = saved.id; S.guests = null; close(); TB.toast(g ? 'Guest saved' : 'Guest added'); done && done();
+        } catch (err) { fail(err); }
+      };
+    });
   }
 
   // ---------------- Widget ----------------

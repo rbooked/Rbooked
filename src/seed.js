@@ -74,6 +74,10 @@ tx(() => {
       run('INSERT INTO tables (restaurant_id, area_id, label, min_seats, max_seats, shape, x, y, online_bookable) VALUES (?,?,?,?,?,?,?,?,?)',
         rid, area, label, mn, mx, shape, x, y, label === 'Bar' ? 0 : 1);
     }
+    const tid = (label) => one('SELECT id FROM tables WHERE restaurant_id = ? AND label = ?', rid, label).id;
+    for (const [name, labels, mn, mx] of [['T1 + T2', ['T1', 'T2'], 3, 4], ['T4 + T5', ['T4', 'T5'], 5, 8], ['P1 + P2', ['P1', 'P2'], 5, 8], ['T6 + B1', ['T6', 'B1'], 10, 16]]) {
+      run('INSERT INTO table_combos (restaurant_id, name, table_ids, min_seats, max_seats, online_bookable) VALUES (?,?,?,?,?,?)', rid, name, labels.map(tid).join(','), mn, mx, mx > 10 ? 0 : 1);
+    }
     run(`INSERT INTO shifts (restaurant_id, name, days, start_time, end_time, slot_interval, turn_minutes, max_covers_per_slot)
          VALUES (?, 'Lunch', '1,2,3,4,5', '11:30', '14:00', 15, 75, 12)`, rid);
     run(`INSERT INTO shifts (restaurant_id, name, days, start_time, end_time, slot_interval, turn_minutes, max_covers_per_slot)
@@ -106,6 +110,21 @@ tx(() => {
         i === 2 ? 'Window seat if possible' : i === 5 ? 'Birthday' : '', ['online', 'widget', 'phone'][i % 3], 'confirmed');
       });
     }
+  });
+});
+
+// Build each restaurant's address book from the sample bookings, with a few notes and tags.
+const { upsertGuest } = require('./reservations');
+const NOTES = [['VIP,Regular', 'Prefers a booth. Likes the house red.'], ['Allergy', 'Severe nut allergy. Tell the kitchen.'], ['Regular', 'Celebrates anniversary every spring.'], ['', ''], ['VIP', 'Food writer. Comp a dessert.'], ['', '']];
+tx(() => {
+  const rows = require('./db').all('SELECT id, restaurant_id, guest_name, guest_email, guest_phone FROM reservations');
+  for (const x of rows) {
+    const gid = upsertGuest(x.restaurant_id, { guest_name: x.guest_name, guest_email: x.guest_email, guest_phone: x.guest_phone });
+    run('UPDATE reservations SET guest_id = ? WHERE id = ?', gid, x.id);
+  }
+  require('./db').all('SELECT id FROM guests').forEach((g, i) => {
+    const [tags, notes] = NOTES[i % NOTES.length];
+    run('UPDATE guests SET tags = ?, notes = ? WHERE id = ?', tags, notes, g.id);
   });
 });
 
