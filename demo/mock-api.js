@@ -2,7 +2,7 @@
    It answers the same /api/... calls the real server does, keeps data in this
    browser's storage, and records every email in a demo inbox. */
 (function () {
-  const KEY = 'rbooked_demo_v4';
+  const KEY = 'rbooked_demo_v5';
   const mem = {};
   const store = {
     get() { try { return JSON.parse(localStorage.getItem(KEY)); } catch { return mem.db || null; } },
@@ -67,7 +67,7 @@
   const LAST = ['Johnson', 'Kim', 'Garcia', 'Patel', 'Nguyen', 'Brown', 'Rossi', 'Cohen', 'Okafor', 'Silva', 'Lee', 'Martin'];
 
   function seed() {
-    const db = { seq: 1, restaurants: [], users: [], areas: [], tables: [], shifts: [], closures: [], reservations: [], emails: [], combos: [], guests: [], session: null };
+    const db = { seq: 1, restaurants: [], users: [], areas: [], tables: [], shifts: [], closures: [], reservations: [], emails: [], combos: [], guests: [], menu: [], session: null };
     const id = () => db.seq++;
     RESTAURANTS.forEach(([name, cuisine, price, zip, address, tz, description, color], idx) => {
       const z = ZIPS[zip];
@@ -82,6 +82,10 @@
       };
       db.restaurants.push(r);
       starterFloor(db, r, true, id);
+      // Profile: placeholder cover art and logo, hours from the services, website, and a sample menu.
+      Object.assign(r, { image_url: window.TBSamples.coverArt(r), logo_url: window.TBSamples.logoArt(r), website_url: `https://example.com/${slug}`,
+        hours: JSON.stringify(window.TBSamples.hoursFromShifts(db.shifts.filter((s) => s.restaurant_id === r.id))) });
+      window.TBSamples.menuFor(cuisine).forEach((m) => db.menu.push({ id: id(), restaurant_id: r.id, ...m, created_at: nowSql() }));
       if (idx === 0) { const u = { id: id(), restaurant_id: r.id, name: 'Demo Owner', email: 'demo@rbooked.test', password: 'demo1234' }; db.users.push(u); db.session = u.id; }
       const today = nowInZone(tz).date;
       const tbls = db.tables.filter((t) => t.restaurant_id === r.id && t.online_bookable);
@@ -149,7 +153,7 @@
   }
 
   let db = store.get();
-  if (!db || !db.restaurants || !db.combos || !db.restaurants[0].turn_times) { db = seed(); store.set(db); }
+  if (!db || !db.restaurants || !db.combos || !db.menu || !db.restaurants[0].turn_times) { db = seed(); store.set(db); }
   const save = () => store.set(db);
   const nextId = () => db.seq++;
 
@@ -296,7 +300,11 @@
   }
 
   const PUBLIC = ['slug', 'name', 'cuisine', 'price_level', 'description', 'phone', 'address', 'city', 'state', 'zip', 'lat', 'lng', 'timezone', 'image_url', 'max_party_size', 'booking_window_days', 'cancellation_policy', 'accent_color', 'tags', 'featured'];
-  const pub = (r) => Object.fromEntries(PUBLIC.map((k) => [k, r[k]]));
+  PUBLIC.push('website_url', 'logo_url', 'hours');
+  const menuCounts = (rid) => { const c = {}; db.menu.filter((m) => m.restaurant_id === rid && m.available).forEach((m) => m.tags.split(',').filter(Boolean).forEach((t) => { c[t] = (c[t] || 0) + 1; })); return c; };
+  // Diet tags also come from the menu: 3+ vegan dishes puts a restaurant in "vegan" searches, and so on.
+  const dietTags = (r) => { const c = menuCounts(r.id); const t = new Set(window.TBMatch.parseTags(r.tags)); ['vegan', 'vegetarian', 'gluten_free', 'halal'].forEach((x) => { if ((c[x] || 0) >= 3) t.add(x); }); return [...t].join(','); };
+  const pub = (r) => ({ ...Object.fromEntries(PUBLIC.map((k) => [k, r[k]])), tags: dietTags(r), menu_counts: menuCounts(r.id) });
   const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
   function bookable(slug) {
     const r = db.restaurants.find((x) => x.slug === slug);
@@ -355,8 +363,9 @@
     const zip = String(q.zip || '').trim(); const party = partyOf(q); const want = wantTime(q);
     if (!/^\d{5}$/.test(zip)) throw new E('Please enter a 5-digit ZIP code.');
     const { origin } = nearby(zip); let { list } = nearby(zip);
-    if (q.q) list = list.filter(({ r }) => `${r.name} ${r.cuisine}`.toLowerCase().includes(String(q.q).toLowerCase()));
-    if (q.tag) list = list.filter(({ r }) => window.TBMatch.parseTags(r.tags).includes(q.tag));
+    const term = String(q.q || '').trim().toLowerCase();
+    if (term) list = list.filter(({ r }) => `${r.name} ${r.cuisine}`.toLowerCase().includes(term) || db.menu.some((m) => m.restaurant_id === r.id && m.available && `${m.name} ${m.section}`.toLowerCase().includes(term)));
+    if (q.tag) list = list.filter(({ r }) => window.TBMatch.parseTags(dietTags(r)).includes(q.tag));
     return {
       origin: origin ? { city: origin.city, state: origin.state } : null, party, time: want,
       results: list.map(({ r, miles: mi }) => {
@@ -376,13 +385,15 @@
     const party = partyOf(q); const want = wantTime(q);
     const prefs = window.TBMatch.parseTags(q.prefs); const price = Math.max(0, Math.min(4, Number(q.price) || 0));
     const { origin, list } = nearby(zip);
-    const ranked = window.TBMatch.rank(list.map(({ r, miles: mi }) => ({ restaurant: r, miles: mi, slots: openTimes(r, dateFor(q.date, r), party) })), { prefs, price, time: want })
-      .slice(0, 5).map((m) => ({ ...m, restaurant: { ...pub(m.restaurant), date: dateFor(q.date, m.restaurant) } }));
+    const ranked = window.TBMatch.rank(list.map(({ r, miles: mi }) => ({ restaurant: { ...r, tags: dietTags(r) }, miles: mi, slots: openTimes(r, dateFor(q.date, r), party) })), { prefs, price, time: want })
+      .slice(0, 5).map((m) => ({ ...m, restaurant: { ...pub(db.restaurants.find((x) => x.id === m.restaurant.id)), date: dateFor(q.date, m.restaurant) } }));
     return { origin: origin ? { city: origin.city, state: origin.state } : null, party, time: want, prefs, price, picks: ranked };
   });
   on('GET', '/api/public/restaurants/:slug', (q, b, p) => {
     const r = bookable(p.slug);
-    return { restaurant: pub(r), shifts: db.shifts.filter((s) => s.restaurant_id === r.id && s.active), today: nowInZone(r.timezone).date };
+    const menu = db.menu.filter((m) => m.restaurant_id === r.id && m.available).sort((a, c) => a.sort_order - c.sort_order || a.id - c.id)
+      .map(({ id, section, name, description, price_cents, tags }) => ({ id, section, name, description, price_cents, tags }));
+    return { restaurant: pub(r), shifts: db.shifts.filter((s) => s.restaurant_id === r.id && s.active), menu, today: nowInZone(r.timezone).date };
   });
   on('GET', '/api/public/restaurants/:slug/availability', (q, b, p) => {
     const r = bookable(p.slug); const av = getAvailability(r, q.date || nowInZone(r.timezone).date, Number(q.party) || 2);
@@ -431,7 +442,7 @@
       lat: z ? z[0] : near ? near.lat : null, lng: z ? z[1] : near ? near.lng : null, timezone: b.timezone || 'America/New_York', image_url: '',
       max_party_size: 8, booking_window_days: 60, min_notice_minutes: 60, reminder_hours: 24, no_show_grace_minutes: 30, auto_no_show: 0, send_no_show_email: 1,
       cancellation_policy: 'Please cancel at least 2 hours before your reservation.', accent_color: '#c2410c',
-      trial_ends_at: new Date(Date.now() + 30 * 86400000).toISOString(), subscription_status: 'trialing', stripe_subscription_id: null, tags: '', featured: 0, turn_times: '2:90,4:120,6:180,99:210',
+      trial_ends_at: new Date(Date.now() + 30 * 86400000).toISOString(), subscription_status: 'trialing', stripe_subscription_id: null, tags: '', featured: 0, turn_times: '2:90,4:120,6:180,99:210', website_url: '', logo_url: '', hours: '',
     };
     db.restaurants.push(r);
     starterFloor(db, r, false, nextId);
@@ -449,7 +460,7 @@
   on('POST', '/api/auth/logout', () => { db.session = null; return { ok: true }; });
   on('GET', '/api/auth/me', () => { const u = db.users.find((x) => x.id === db.session); return { user: u ? { name: u.name, email: u.email } : null, demo: true }; });
 
-  const SETTINGS = ['name', 'cuisine', 'price_level', 'description', 'phone', 'email', 'address', 'city', 'state', 'zip', 'timezone', 'image_url', 'max_party_size', 'booking_window_days', 'min_notice_minutes', 'reminder_hours', 'no_show_grace_minutes', 'auto_no_show', 'send_no_show_email', 'cancellation_policy', 'accent_color', 'tags', 'turn_times'];
+  const SETTINGS = ['name', 'cuisine', 'price_level', 'description', 'phone', 'email', 'address', 'city', 'state', 'zip', 'timezone', 'image_url', 'max_party_size', 'booking_window_days', 'min_notice_minutes', 'reminder_hours', 'no_show_grace_minutes', 'auto_no_show', 'send_no_show_email', 'cancellation_policy', 'accent_color', 'tags', 'turn_times', 'website_url', 'logo_url', 'hours'];
   on('GET', '/api/admin/restaurant', () => {
     const { u, r } = me();
     const base = location.href.replace(/[^/]*$/, '').replace(/\/$/, '');
@@ -459,6 +470,16 @@
     const { r } = me(); const f = pick(b, SETTINGS);
     ['price_level', 'max_party_size', 'booking_window_days', 'min_notice_minutes', 'reminder_hours', 'no_show_grace_minutes'].forEach((k) => { if (f[k] !== undefined) f[k] = Math.max(0, Number(f[k]) || 0); });
     ['auto_no_show', 'send_no_show_email'].forEach((k) => { if (f[k] !== undefined) f[k] = f[k] ? 1 : 0; });
+    if (f.website_url !== undefined) {
+      f.website_url = String(f.website_url).trim().slice(0, 300);
+      if (f.website_url && !/^https?:\/\//i.test(f.website_url)) f.website_url = `https://${f.website_url}`;
+      if (f.website_url && !/^https?:\/\/[^\s/$.?#].[^\s]*$/i.test(f.website_url)) throw new E('Enter a valid website address.');
+    }
+    ['image_url', 'logo_url'].forEach((k) => {
+      if (f[k] === undefined) return; f[k] = String(f[k]).trim();
+      if (f[k] && !/^https:\/\/[^\s"'()]+$/.test(f[k]) && f[k] !== r[k]) throw new E('Upload a photo, or paste an https:// image link.');
+    });
+    if (f.hours !== undefined) { const h = f.hours ? window.TBMatch.parseHours(f.hours) : null; f.hours = h ? JSON.stringify(h) : ''; }
     if (f.turn_times !== undefined) f.turn_times = Array.isArray(f.turn_times) ? window.TBMatch.formatTurns(f.turn_times) : window.TBMatch.formatTurns(window.TBMatch.parseTurns(f.turn_times));
     if (f.tags !== undefined) f.tags = window.TBMatch.parseTags(Array.isArray(f.tags) ? f.tags.join(',') : f.tags).join(',');
     Object.assign(r, f); return { ok: true };
@@ -623,6 +644,36 @@
   on('DELETE', '/api/admin/guests/:id', (q, b, p) => {
     const { r } = me(); owned('guests', p.id, r.id); db.guests = db.guests.filter((g) => g.id !== Number(p.id));
     db.reservations.forEach((x) => { if (x.guest_id === Number(p.id)) x.guest_id = null; }); return { ok: true };
+  });
+  const cleanMenuItem = (b) => {
+    const f = pick(b, ['section', 'name', 'description', 'price', 'price_cents', 'tags', 'sort_order', 'available']);
+    if (f.section !== undefined) f.section = String(f.section).trim().slice(0, 60) || 'Menu';
+    if (f.name !== undefined) f.name = String(f.name).trim().slice(0, 120);
+    if (f.description !== undefined) f.description = String(f.description).trim().slice(0, 500);
+    if (f.price !== undefined) { const v = String(f.price).replace(/[^0-9.]/g, ''); f.price_cents = v === '' ? null : Math.round(Number(v) * 100); delete f.price; }
+    if (f.price_cents !== undefined && f.price_cents !== null) f.price_cents = Math.max(0, Math.round(Number(f.price_cents) || 0));
+    if (f.tags !== undefined) { const t = new Set(window.TBMatch.parseMenuTags(f.tags)); if (t.has('vegan')) { t.add('vegetarian'); t.add('dairy_free'); } f.tags = [...t].join(','); }
+    if (f.sort_order !== undefined) f.sort_order = Math.round(Number(f.sort_order) || 0);
+    if (f.available !== undefined) f.available = f.available ? 1 : 0;
+    return f;
+  };
+  on('GET', '/api/admin/menu', () => { const { r } = me(); return db.menu.filter((m) => m.restaurant_id === r.id).sort((a, b) => a.sort_order - b.sort_order || a.id - b.id); });
+  on('POST', '/api/admin/menu', (q, b) => {
+    const { r } = me(); const f = { section: 'Menu', ...cleanMenuItem(b) };
+    if (!f.name) throw new E('Give the dish a name.');
+    const mine = db.menu.filter((m) => m.restaurant_id === r.id);
+    const m = { id: nextId(), restaurant_id: r.id, description: '', price_cents: null, tags: '', available: 1, sort_order: mine.length ? Math.max(...mine.map((x) => x.sort_order)) + 1 : 0, created_at: nowSql(), ...f };
+    db.menu.push(m); return m;
+  });
+  on('PUT', '/api/admin/menu/order', (q, b) => { const { r } = me(); (b.ids || []).forEach((id, i) => { const m = db.menu.find((x) => x.id === Number(id) && x.restaurant_id === r.id); if (m) m.sort_order = i; }); return { ok: true }; });
+  on('PUT', '/api/admin/menu/:id', (q, b, p) => { const { r } = me(); const m = owned('menu', p.id, r.id); const f = cleanMenuItem(b); if (f.name === '') throw new E('Give the dish a name.'); Object.assign(m, f); return m; });
+  on('DELETE', '/api/admin/menu/:id', (q, b, p) => { const { r } = me(); owned('menu', p.id, r.id); db.menu = db.menu.filter((m) => m.id !== Number(p.id)); return { ok: true }; });
+  // In the demo, photos stay in this browser as data URLs (the real server stores them and serves /img/:id).
+  on('POST', '/api/admin/images', (q, b) => {
+    const { r } = me(); const kind = b.kind === 'logo' ? 'logo' : 'cover';
+    if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(String(b.data || ''))) throw new E('Upload a JPG, PNG or WebP image.');
+    if (b.data.length > 2500000) throw new E('That image is too large for the demo. Try a smaller one.');
+    r[kind === 'logo' ? 'logo_url' : 'image_url'] = b.data; return { url: b.data, kind };
   });
   on('GET', '/api/admin/emails', () => { const { r } = me(); return db.emails.filter((e) => e.restaurant_id === r.id).slice().reverse().map(({ html, ...e }) => e); });
   on('GET', '/api/admin/billing', () => billingSummary(me().r));

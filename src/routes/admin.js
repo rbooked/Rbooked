@@ -30,8 +30,8 @@ const owned = (table, id, rid) => {
 // ---------- Restaurant profile & settings ----------
 const SETTINGS = ['name', 'cuisine', 'price_level', 'description', 'phone', 'email', 'address', 'city', 'state', 'zip', 'timezone',
   'image_url', 'max_party_size', 'booking_window_days', 'min_notice_minutes', 'reminder_hours', 'no_show_grace_minutes',
-  'auto_no_show', 'send_no_show_email', 'cancellation_policy', 'accent_color', 'tags', 'turn_times'];
-const { parseTags, parseTurns, formatTurns } = require('../../public/js/matcher');
+  'auto_no_show', 'send_no_show_email', 'cancellation_policy', 'accent_color', 'tags', 'turn_times', 'website_url', 'logo_url', 'hours'];
+const { parseTags, parseTurns, formatTurns, parseMenuTags, parseHours } = require('../../public/js/matcher');
 
 router.get('/restaurant', wrap(async (req, res) => {
   res.json({ restaurant: pick(req.restaurant, ['id', 'slug', 'featured', ...SETTINGS]), user: req.user, billing: billing.billingSummary(req.restaurant), baseUrl: config.baseUrl });
@@ -44,6 +44,18 @@ router.put('/restaurant', wrap(async (req, res) => {
   }
   for (const k of ['auto_no_show', 'send_no_show_email']) if (f[k] !== undefined) f[k] = f[k] ? 1 : 0;
   if (f.tags !== undefined) f.tags = parseTags(Array.isArray(f.tags) ? f.tags.join(',') : f.tags).join(',');
+  if (f.website_url !== undefined) {
+    f.website_url = String(f.website_url).trim().slice(0, 300);
+    if (f.website_url && !/^https?:\/\//i.test(f.website_url)) f.website_url = `https://${f.website_url}`;
+    if (f.website_url && !/^https?:\/\/[^\s/$.?#].[^\s]*$/i.test(f.website_url)) throw new BookingError('Enter a valid website address.');
+  }
+  for (const k of ['image_url', 'logo_url']) {
+    if (f[k] === undefined) continue;
+    f[k] = String(f[k]).trim();
+    // Photos come from the upload endpoint (/img/…) or an https link.
+    if (f[k] && !/^(\/img\/\d+|https:\/\/[^\s"'()]+)$/.test(f[k]) && f[k] !== req.restaurant[k]) throw new BookingError('Upload a photo, or paste an https:// image link.');
+  }
+  if (f.hours !== undefined) { const h = f.hours ? parseHours(f.hours) : null; f.hours = h ? JSON.stringify(h) : ''; }
   if (f.turn_times !== undefined) f.turn_times = Array.isArray(f.turn_times) ? formatTurns(f.turn_times) : formatTurns(parseTurns(f.turn_times));
   if (f.timezone) { try { new Intl.DateTimeFormat('en-US', { timeZone: f.timezone }); } catch { throw new BookingError('Unknown time zone.'); } }
   if (f.zip && f.zip !== req.restaurant.zip) {
@@ -388,6 +400,73 @@ router.post('/billing/simulate', wrap(async (req, res) => {
   if (req.body.status === 'expired') run(`UPDATE restaurants SET subscription_status='trialing', trial_ends_at=? WHERE id=?`, new Date(Date.now() - 1000).toISOString(), req.restaurant.id);
   else run('UPDATE restaurants SET subscription_status = ? WHERE id = ?', status, req.restaurant.id);
   res.json(billing.billingSummary(one('SELECT * FROM restaurants WHERE id = ?', req.restaurant.id)));
+}));
+
+// ---------- Menu ----------
+function cleanMenuItem(b) {
+  const f = pick(b, ['section', 'name', 'description', 'price', 'price_cents', 'tags', 'sort_order', 'available']);
+  if (f.section !== undefined) f.section = String(f.section).trim().slice(0, 60) || 'Menu';
+  if (f.name !== undefined) f.name = String(f.name).trim().slice(0, 120);
+  if (f.description !== undefined) f.description = String(f.description).trim().slice(0, 500);
+  if (f.price !== undefined) {
+    const p = String(f.price).replace(/[^0-9.]/g, '');
+    f.price_cents = p === '' ? null : Math.round(Number(p) * 100);
+    delete f.price;
+  }
+  if (f.price_cents !== undefined && f.price_cents !== null) f.price_cents = Math.max(0, Math.round(Number(f.price_cents) || 0));
+  if (f.tags !== undefined) {
+    const t = new Set(parseMenuTags(f.tags));
+    if (t.has('vegan')) { t.add('vegetarian'); t.add('dairy_free'); }
+    f.tags = [...t].join(',');
+  }
+  if (f.sort_order !== undefined) f.sort_order = Math.round(Number(f.sort_order) || 0);
+  if (f.available !== undefined) f.available = f.available ? 1 : 0;
+  return f;
+}
+router.get('/menu', wrap(async (req, res) => {
+  res.json(all('SELECT * FROM menu_items WHERE restaurant_id = ? ORDER BY sort_order, id', req.restaurant.id));
+}));
+router.post('/menu', wrap(async (req, res) => {
+  const rid = req.restaurant.id;
+  const f = { section: 'Menu', ...cleanMenuItem(req.body) };
+  if (!f.name) throw new BookingError('Give the dish a name.');
+  if (f.sort_order === undefined) f.sort_order = (one('SELECT MAX(sort_order) AS m FROM menu_items WHERE restaurant_id = ?', rid).m ?? -1) + 1;
+  const keys = Object.keys(f);
+  const info = run(`INSERT INTO menu_items (restaurant_id, ${keys.join(',')}) VALUES (?, ${keys.map(() => '?').join(',')})`, rid, ...keys.map((k) => f[k]));
+  res.status(201).json(one('SELECT * FROM menu_items WHERE id = ?', info.lastInsertRowid));
+}));
+router.put('/menu/order', wrap(async (req, res) => {
+  const ids = (Array.isArray(req.body.ids) ? req.body.ids : []).map(Number);
+  tx(() => ids.forEach((id, i) => run('UPDATE menu_items SET sort_order = ? WHERE id = ? AND restaurant_id = ?', i, id, req.restaurant.id)));
+  res.json({ ok: true });
+}));
+router.put('/menu/:id', wrap(async (req, res) => {
+  const m = owned('menu_items', req.params.id, req.restaurant.id);
+  const f = cleanMenuItem(req.body);
+  if (f.name === '') throw new BookingError('Give the dish a name.');
+  update('menu_items', m.id, req.restaurant.id, f);
+  res.json(one('SELECT * FROM menu_items WHERE id = ?', m.id));
+}));
+router.delete('/menu/:id', wrap(async (req, res) => {
+  owned('menu_items', req.params.id, req.restaurant.id);
+  run('DELETE FROM menu_items WHERE id = ?', req.params.id);
+  res.json({ ok: true });
+}));
+
+// ---------- Photo & logo upload ----------
+router.post('/images', wrap(async (req, res) => {
+  const kind = req.body.kind === 'logo' ? 'logo' : 'cover';
+  const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(req.body.data || ''));
+  if (!m) throw new BookingError('Upload a JPG, PNG or WebP image.');
+  const buf = Buffer.from(m[2], 'base64');
+  if (buf.length > 4 * 1024 * 1024) throw new BookingError('That image is too large (4 MB max).');
+  const rid = req.restaurant.id;
+  const col = kind === 'logo' ? 'logo_url' : 'image_url';
+  const info = run('INSERT INTO images (restaurant_id, kind, mime, data) VALUES (?,?,?,?)', rid, kind, m[1], buf);
+  const url = `/img/${info.lastInsertRowid}`;
+  run(`UPDATE restaurants SET ${col} = ? WHERE id = ?`, url, rid);
+  run('DELETE FROM images WHERE restaurant_id = ? AND kind = ? AND id != ?', rid, kind, info.lastInsertRowid);
+  res.status(201).json({ url, kind });
 }));
 
 module.exports = router;

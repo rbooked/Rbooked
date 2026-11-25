@@ -237,3 +237,37 @@ test('address book collects guests and keeps staff notes', async () => {
   assert.strictEqual((await call('GET', `/api/admin/guests/${g.id}`)).data.reservations.length, 2);
   assert.strictEqual((await call('DELETE', `/api/admin/guests/${n.data.id}`)).status, 200);
 });
+
+test('restaurant profile: website, hours, photo upload and menu with dietary filters', async () => {
+  const hours = Array.from({ length: 7 }, (_, d) => ({ closed: d === 1 ? 1 : 0, open: '17:00', close: '23:00' }));
+  const p = await call('PUT', '/api/admin/restaurant', { website_url: 'testbistro.com', hours: JSON.stringify(hours) });
+  assert.strictEqual(p.status, 200);
+  const me = (await call('GET', '/api/admin/restaurant')).data.restaurant;
+  assert.strictEqual(me.website_url, 'https://testbistro.com');
+  assert.strictEqual(JSON.parse(me.hours)[1].closed, 1);
+  assert.strictEqual((await call('PUT', '/api/admin/restaurant', { image_url: 'javascript:alert(1)' })).status, 400);
+  // 1x1 PNG
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  const up = await call('POST', '/api/admin/images', { kind: 'logo', data: png });
+  assert.strictEqual(up.status, 201);
+  const img = await fetch(base + up.data.url);
+  assert.strictEqual(img.headers.get('content-type'), 'image/png');
+  assert.strictEqual((await call('POST', '/api/admin/images', { kind: 'cover', data: 'data:text/html;base64,PGgxPg==' })).status, 400);
+
+  const dishes = [['Mains', 'Tofu Curry', '16', ['vegan']], ['Mains', 'Lentil Stew', '14.50', ['vegan', 'gluten_free']], ['Starters', 'Hummus', '9', ['vegan']], ['Mains', 'Steak Frites', '32', []]];
+  for (const [section, name, price, tags] of dishes) assert.strictEqual((await call('POST', '/api/admin/menu', { section, name, price, tags })).status, 201);
+  const menu = (await call('GET', '/api/admin/menu')).data;
+  const stew = menu.find((m) => m.name === 'Lentil Stew');
+  assert.strictEqual(stew.price_cents, 1450);
+  assert.ok(stew.tags.split(',').includes('vegetarian'), 'vegan dishes count as vegetarian');
+  await call('PUT', `/api/admin/menu/${menu.find((m) => m.name === 'Steak Frites').id}`, { available: false });
+
+  const pubR = await call('GET', '/api/public/restaurants/test-bistro', null, false);
+  assert.strictEqual(pubR.data.menu.length, 3, 'hidden dishes are not shown to guests');
+  assert.strictEqual(pubR.data.restaurant.website_url, 'https://testbistro.com');
+  assert.ok(pubR.data.restaurant.tags.split(',').includes('vegan'), '3+ vegan dishes make the restaurant show up as vegan');
+  const s = await call('GET', '/api/public/search?zip=10011&q=lentil', null, false);
+  assert.strictEqual(s.data.results.length, 1, 'search finds restaurants by dish');
+  const v = await call('GET', '/api/public/search?zip=10011&tag=vegan', null, false);
+  assert.strictEqual(v.data.results.length, 1);
+});

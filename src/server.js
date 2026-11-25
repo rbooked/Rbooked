@@ -14,7 +14,17 @@ app.set('trust proxy', 1);
 // Stripe needs the raw body to verify signatures, so mount before express.json().
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), billing.webhook);
 
+// Photo and logo uploads arrive as base64 JSON (resized in the browser first).
+app.use('/api/admin/images', express.json({ limit: '6mb' }));
 app.use(express.json({ limit: '200kb' }));
+
+// Uploaded restaurant photos and logos.
+app.get('/img/:id', (req, res) => {
+  const img = require('./db').one('SELECT mime, data FROM images WHERE id = ?', Number(req.params.id));
+  if (!img) return res.status(404).end();
+  res.set({ 'Content-Type': img.mime, 'Cache-Control': 'public, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' });
+  res.end(Buffer.from(img.data));
+});
 
 // The public booking API is called from restaurants' own websites by the widget.
 app.use('/api/public', (req, res, next) => {

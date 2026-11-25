@@ -90,5 +90,33 @@
     return hit.minutes;
   }
 
-  return { TAGS, TAG_IDS, label, parseTags, rank, DEFAULT_TURNS, parseTurns, formatTurns, turnFor };
+  // ---- Menu dietary tags ----
+  const MENU_TAGS = [
+    { id: 'vegetarian', label: 'Vegetarian', icon: '🥕' }, { id: 'vegan', label: 'Vegan', icon: '🌱' },
+    { id: 'gluten_free', label: 'Gluten-free', icon: '🌾' }, { id: 'dairy_free', label: 'Dairy-free', icon: '🥛' },
+    { id: 'nut_free', label: 'Nut-free', icon: '🥜' }, { id: 'halal', label: 'Halal', icon: '☪️' }, { id: 'spicy', label: 'Spicy', icon: '🌶️' },
+  ];
+  const MENU_TAG_IDS = new Set(MENU_TAGS.map((t) => t.id));
+  const parseMenuTags = (v) => [...new Set((Array.isArray(v) ? v : String(v || '').split(',')).map((t) => String(t).trim()).filter((t) => MENU_TAG_IDS.has(t)))];
+  const sortMenuTags = (tags) => String(tags || '').split(',').filter(Boolean).sort((a, b) => MENU_TAGS.findIndex((t) => t.id === a) - MENU_TAGS.findIndex((t) => t.id === b));
+  const menuTag = (id) => MENU_TAGS.find((t) => t.id === id) || { id, label: id, icon: '' };
+
+  // ---- Opening hours: JSON list of 7 days (0 = Sunday) like {closed:0, open:'17:00', close:'22:00'} ----
+  function parseHours(v) {
+    let a; try { a = typeof v === 'string' ? JSON.parse(v || '[]') : v; } catch { a = []; }
+    if (!Array.isArray(a) || a.length !== 7) return null;
+    const ok = (t) => /^\d{2}:\d{2}$/.test(t || '');
+    return a.map((d) => ({ closed: d && d.closed ? 1 : 0, open: ok(d && d.open) ? d.open : '17:00', close: ok(d && d.close) ? d.close : '22:00' }));
+  }
+  // Is the restaurant open at this weekday/minute? Handles closing after midnight.
+  function openAt(hours, weekday, minutes) {
+    const h = parseHours(hours); if (!h) return null;
+    const m = (t) => { const [a, b] = t.split(':').map(Number); return a * 60 + b; };
+    const today = h[weekday]; const prev = h[(weekday + 6) % 7];
+    if (!today.closed && minutes >= m(today.open) && (m(today.close) > m(today.open) ? minutes < m(today.close) : true)) return true;
+    if (!prev.closed && m(prev.close) <= m(prev.open) && minutes < m(prev.close)) return true;
+    return false;
+  }
+
+  return { TAGS, TAG_IDS, label, parseTags, rank, DEFAULT_TURNS, parseTurns, formatTurns, turnFor, MENU_TAGS, parseMenuTags, menuTag, sortMenuTags, parseHours, openAt };
 });

@@ -10,6 +10,7 @@ files = {
   'for-restaurants.html': 'for-restaurants.html', 'login.html': 'login.html', 'embed.html': 'embed.html',
   'admin/index.html': 'admin.html', 'admin/admin.js': 'admin/admin.js', 'admin/admin.css': 'admin/admin.css',
   'css/app.css': 'css/app.css', 'js/common.js': 'js/common.js', 'js/booking.js': 'js/booking.js', 'js/matcher.js': 'js/matcher.js',
+  'js/samples.js': 'js/samples.js',
 }
 REPL = [
   ('href="/css/', 'href="css/'), ('src="/js/', 'src="js/'),
@@ -24,7 +25,7 @@ REPL = [
   ('href="#settings" data-view="settings"', 'href="#preferences" data-view="preferences"'),
   ("settings: ['Settings', viewSettings]", "preferences: ['Settings', viewSettings]"),
   ('href="#settings"', 'href="#preferences"'),
-  ('<script src="js/common.js"></script>', '<script src="js/matcher.js"></script>\n<script src="mock-api.js"></script>\n<script src="js/common.js"></script>'),
+  ('<script src="js/common.js"></script>', '<script src="js/matcher.js"></script>\n<script src="js/samples.js"></script>\n<script src="mock-api.js"></script>\n<script src="js/common.js"></script>'),
 ]
 for src, dst in files.items():
     s = open(os.path.join(SRC, src), encoding='utf-8').read()

@@ -11,9 +11,26 @@ const email = require('../email');
 const router = express.Router();
 
 const PUBLIC_FIELDS = ['slug', 'name', 'cuisine', 'price_level', 'description', 'phone', 'address', 'city', 'state', 'zip',
-  'lat', 'lng', 'timezone', 'image_url', 'max_party_size', 'booking_window_days', 'cancellation_policy', 'accent_color', 'tags', 'featured'];
+  'lat', 'lng', 'timezone', 'image_url', 'max_party_size', 'booking_window_days', 'cancellation_policy', 'accent_color', 'tags', 'featured', 'website_url', 'logo_url', 'hours'];
 const matcher = require('../../public/js/matcher');
-const publicRestaurant = (r) => Object.fromEntries(PUBLIC_FIELDS.map((k) => [k, r[k]]));
+// Diet tags also come from the menu: 3+ vegan dishes makes a restaurant show up for "vegan", and so on.
+const MENU_DIET = ['vegan', 'vegetarian', 'gluten_free', 'halal'];
+function menuStats(rid) {
+  const counts = {};
+  for (const m of all('SELECT tags FROM menu_items WHERE restaurant_id = ? AND available = 1', rid)) {
+    for (const t of String(m.tags).split(',').filter(Boolean)) counts[t] = (counts[t] || 0) + 1;
+  }
+  return counts;
+}
+function publicRestaurant(r) {
+  const out = Object.fromEntries(PUBLIC_FIELDS.map((k) => [k, r[k]]));
+  const counts = menuStats(r.id);
+  const tags = new Set(matcher.parseTags(r.tags));
+  MENU_DIET.forEach((t) => { if ((counts[t] || 0) >= 3) tags.add(t); });
+  out.tags = [...tags].join(',');
+  out.menu_counts = counts;
+  return out;
+}
 
 function getBookableRestaurant(slug) {
   const r = one('SELECT * FROM restaurants WHERE slug = ?', slug);
@@ -66,8 +83,10 @@ router.get('/search', wrap(async (req, res) => {
   if (!/^\d{5}$/.test(zip)) throw new BookingError('Please enter a 5-digit ZIP code.');
   const { origin, list: near } = await nearby(zip, radius);
   let list = near;
-  if (q) list = list.filter(({ r }) => `${r.name} ${r.cuisine}`.toLowerCase().includes(q));
-  if (tag) list = list.filter(({ r }) => matcher.parseTags(r.tags).includes(tag));
+  // Search matches the name, cuisine, or any dish on the menu ("tacos", "ramen"…).
+  if (q) list = list.filter(({ r }) => `${r.name} ${r.cuisine}`.toLowerCase().includes(q)
+    || all('SELECT name, section FROM menu_items WHERE restaurant_id = ? AND available = 1', r.id).some((m) => `${m.name} ${m.section}`.toLowerCase().includes(q)));
+  if (tag) list = list.filter(({ r }) => matcher.parseTags(publicRestaurant(r).tags).includes(tag));
   const results = list.slice(0, 40).map(({ r, miles }) => {
     const date = dateFor(req.query.date, r);
     const av = getAvailability(r, date, party);
@@ -100,9 +119,9 @@ router.get('/pick', wrap(async (req, res) => {
   const prefs = matcher.parseTags(req.query.prefs);
   const price = Math.max(0, Math.min(4, Number(req.query.price) || 0));
   const { origin, list } = await nearby(zip, Math.min(100, Number(req.query.radius) || 25));
-  const candidates = list.map(({ r, miles }) => ({ restaurant: r, miles, slots: openTimes(r, dateFor(req.query.date, r), party) }));
+  const candidates = list.map(({ r, miles }) => ({ restaurant: { ...r, tags: publicRestaurant(r).tags }, miles, slots: openTimes(r, dateFor(req.query.date, r), party) }));
   const ranked = matcher.rank(candidates, { prefs, price, time: wantTime }).slice(0, 5).map((m) => ({
-    ...m, restaurant: { ...publicRestaurant(m.restaurant), date: dateFor(req.query.date, m.restaurant) },
+    ...m, restaurant: { ...publicRestaurant(one('SELECT * FROM restaurants WHERE id = ?', m.restaurant.id)), date: dateFor(req.query.date, m.restaurant) },
   }));
   res.json({ origin: origin ? { city: origin.city, state: origin.state } : null, party, time: wantTime, prefs, price, picks: ranked });
 }));
@@ -110,7 +129,9 @@ router.get('/pick', wrap(async (req, res) => {
 router.get('/restaurants/:slug', wrap(async (req, res) => {
   const r = getBookableRestaurant(req.params.slug);
   const shifts = all('SELECT name, days, start_time, end_time FROM shifts WHERE restaurant_id = ? AND active = 1 ORDER BY start_time', r.id);
-  res.json({ restaurant: publicRestaurant(r), shifts, today: nowInZone(r.timezone).date });
+  const menu = all(`SELECT id, section, name, description, price_cents, tags FROM menu_items
+    WHERE restaurant_id = ? AND available = 1 ORDER BY sort_order, id`, r.id);
+  res.json({ restaurant: publicRestaurant(r), shifts, menu, today: nowInZone(r.timezone).date });
 }));
 
 router.get('/restaurants/:slug/availability', wrap(async (req, res) => {

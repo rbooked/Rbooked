@@ -13,12 +13,17 @@
   <nav class="nav"><a href="/" class="hide-sm">Find a table</a><a href="/for-restaurants">For restaurants</a><a href="/login" id="nav-login">Restaurant login</a></nav>
 </div></header>
 <main class="container">
+  <section class="r-hero" id="banner">
+    <div class="r-hero-logo" id="r-logo" hidden></div>
+    <div class="r-hero-text"><h1 id="r-name">Loading…</h1><div class="r-hero-meta" id="r-meta"></div></div>
+    <div class="r-hero-actions" id="r-actions"></div>
+  </section>
   <div class="booking">
     <div>
-      <div class="r-banner" id="banner"><h1 id="r-name">Loading…</h1></div>
-      <div class="card" style="margin-top:16px" id="about"></div>
+      <div class="card" id="about"></div>
+      <div class="card" id="menu" style="margin-top:16px" hidden></div>
     </div>
-    <div><div class="card" id="booking"></div></div>
+    <div><div class="card sticky-book" id="booking"></div></div>
   </div>
 </main>
 <footer class="footer"><div class="container row"><span>© Rbooked</span><span class="spacer"></span><a href="/for-restaurants">List your restaurant</a><a href="/login">Restaurant login</a></div></footer>
@@ -37,14 +42,83 @@
   document.title = `${r.name} · Book a table · Rbooked`;
   document.getElementById('r-name').textContent = r.name;
   document.getElementById('banner').setAttribute('style', TB.thumbStyle(r));
+  if (r.accent_color) document.documentElement.style.setProperty('--brand', r.accent_color);
+  const logo = document.getElementById('r-logo');
+  logo.hidden = false;
+  if (r.logo_url) logo.style.backgroundImage = `url("${r.logo_url.replace(/"/g, '%22')}")`;
+  else { logo.textContent = TB.initials(r.name); logo.style.background = r.accent_color; }
+
+  // Opening hours and "open now", in the restaurant's own time zone.
+  const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const hours = TBMatch.parseHours(r.hours);
+  let wd = new Date().getDay(); let mins = new Date().getHours() * 60 + new Date().getMinutes();
+  try {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: r.timezone, weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+      .formatToParts(new Date()).map((x) => [x.type, x.value]));
+    wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday); mins = +p.hour * 60 + +p.minute;
+  } catch { /* fall back to the browser's time */ }
+  const open = hours ? TBMatch.openAt(hours, wd, mins) : null;
+  const web = r.website_url && /^https?:\/\//i.test(r.website_url) ? r.website_url : '';
+  document.getElementById('r-meta').innerHTML = `${esc(r.cuisine)} · ${TB.price(r.price_level)} · ${esc(r.city)}, ${esc(r.state)}
+    ${open === null ? '' : `<span class="open-badge ${open ? 'yes' : 'no'}">${open ? 'Open now' : 'Closed now'}</span>`}${r.featured ? ' <span class="feat-badge">Featured</span>' : ''}`;
+  document.getElementById('r-actions').innerHTML = `${web ? `<a class="btn light" href="${esc(web)}" target="_blank" rel="noopener nofollow">🌐 Website</a>` : ''}
+    <a class="btn light" href="tel:${esc(r.phone)}">📞 Call</a>${state.menu.length ? '<a class="btn light" href="#menu" id="to-menu">🍽️ Menu</a>' : ''}`;
+
   const map = `https://www.openstreetmap.org/search?query=${encodeURIComponent(`${r.address}, ${r.city}, ${r.state} ${r.zip}`)}`;
+  const webLabel = web.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '');
   document.getElementById('about').innerHTML = `
-    <div class="r-meta" style="margin-bottom:8px">${esc(r.cuisine)} · ${TB.price(r.price_level)}${r.featured ? ' · <span class="feat-badge">Featured</span>' : ''}</div>
-    <div class="tagchips" style="margin-bottom:10px">${TBMatch.parseTags(r.tags).map((t) => `<span class="tagchip">${esc(TBMatch.label(t))}</span>`).join('')}</div>
-    <p>${esc(r.description || '')}</p>
-    <p><b>Address</b><br>${esc(r.address)}<br>${esc(r.city)}, ${esc(r.state)} ${esc(r.zip)} · <a href="${map}" target="_blank" rel="noopener">Map</a></p>
-    <p><b>Phone</b><br><a href="tel:${esc(r.phone)}">${esc(r.phone)}</a></p>
-    <p class="muted small">${esc(r.cancellation_policy || '')}</p>`;
+    <div class="tagchips" style="margin:0 0 10px">${TBMatch.parseTags(r.tags).map((t) => `<span class="tagchip">${esc(TBMatch.label(t))}</span>`).join('')}</div>
+    <p style="font-size:17px">${esc(r.description || '')}</p>
+    <div class="about-grid">
+      <div><b>Address</b><br>${esc(r.address)}<br>${esc(r.city)}, ${esc(r.state)} ${esc(r.zip)}<br><a href="${map}" target="_blank" rel="noopener">Map & directions</a>
+        <p style="margin:12px 0 0"><b>Phone</b><br><a href="tel:${esc(r.phone)}">${esc(r.phone)}</a></p>
+        ${web ? `<p style="margin:12px 0 0"><b>Website</b><br><a href="${esc(web)}" target="_blank" rel="noopener nofollow">${esc(webLabel)}</a></p>` : ''}</div>
+      ${hours ? `<div><b>Hours</b><table class="hours">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<tr class="${d === wd ? 'today' : ''}"><td>${DAYS[d]}</td><td>${hours[d].closed ? 'Closed' : `${TB.time(hours[d].open)} – ${TB.time(hours[d].close)}`}</td></tr>`).join('')}</table></div>` : ''}
+    </div>
+    <p class="muted small" style="margin-top:14px">${esc(r.cancellation_policy || '')}</p>`;
+
+  // Menu with dietary filters. Pick several to combine them (for example vegan + gluten-free).
+  const menu = state.menu;
+  if (!menu.length) return;
+  const box = document.getElementById('menu'); box.hidden = false;
+  const want = new Set(); let q = '';
+  const counts = {};
+  menu.forEach((m) => m.tags.split(',').filter(Boolean).forEach((t) => { counts[t] = (counts[t] || 0) + 1; }));
+  const money = (c) => (c === null || c === undefined ? '' : `$${(c / 100).toFixed(c % 100 ? 2 : 0)}`);
+  box.innerHTML = `<div class="row"><h2 class="serif" style="margin:0">Menu</h2><span class="spacer"></span><input type="search" id="m-q" placeholder="Search dishes" aria-label="Search the menu" style="max-width:220px"></div>
+    <div class="chips menu-chips" role="group" aria-label="Dietary filters">${TBMatch.MENU_TAGS.filter((t) => counts[t.id]).map((t) => `<button class="chip" data-t="${t.id}" aria-pressed="false">${t.icon} ${esc(t.label)} <span class="cnt">${counts[t.id]}</span></button>`).join('')}</div>
+    <div id="m-list"></div>`;
+  const draw = () => {
+    const list = menu.filter((m) => [...want].every((t) => m.tags.split(',').includes(t)) && (!q || `${m.name} ${m.description}`.toLowerCase().includes(q)));
+    const secs = [...new Set(menu.map((m) => m.section))].filter((s) => list.some((m) => m.section === s));
+    box.querySelector('#m-list').innerHTML = secs.length
+      ? secs.map((s) => `<h3 class="menu-h">${esc(s)}</h3>${list.filter((m) => m.section === s).map((m) => `<div class="dish">
+          <div><b>${esc(m.name)}</b>${m.description ? `<div class="muted small">${esc(m.description)}</div>` : ''}
+          <div class="dish-tags">${TBMatch.sortMenuTags(m.tags).map((t) => { const x = TBMatch.menuTag(t); return `<span class="dtag">${x.icon} ${esc(x.label)}</span>`; }).join('')}</div></div>
+          <div class="dish-price">${money(m.price_cents)}</div></div>`).join('')}`).join('')
+      : `<p class="muted">No dishes match ${want.size ? 'those filters' : 'your search'}. <button class="btn ghost sm" id="m-reset">Clear filters</button></p>`;
+    const reset = box.querySelector('#m-reset');
+    if (reset) {
+      reset.onclick = () => {
+        want.clear(); q = ''; box.querySelector('#m-q').value = '';
+        box.querySelectorAll('[data-t]').forEach((b) => { b.classList.remove('on'); b.setAttribute('aria-pressed', 'false'); });
+        draw();
+      };
+    }
+  };
+  box.querySelectorAll('[data-t]').forEach((b) => {
+    b.onclick = () => {
+      const t = b.dataset.t;
+      if (want.has(t)) want.delete(t); else want.add(t);
+      b.classList.toggle('on', want.has(t)); b.setAttribute('aria-pressed', String(want.has(t)));
+      draw();
+    };
+  });
+  box.querySelector('#m-q').oninput = (e) => { q = e.target.value.trim().toLowerCase(); draw(); };
+  draw();
+  const toMenu = document.getElementById('to-menu');
+  if (toMenu) toMenu.onclick = (e) => { e.preventDefault(); box.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  if (location.hash === '#menu') setTimeout(() => box.scrollIntoView({ block: 'start' }), 50);
 })();
 </script>
 </body>

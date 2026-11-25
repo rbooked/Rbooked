@@ -85,6 +85,16 @@ tx(() => {
     run(`INSERT INTO shifts (restaurant_id, name, days, start_time, end_time, slot_interval, turn_minutes, max_covers_per_slot)
          VALUES (?, 'Weekend brunch', '0,6', '10:00', '13:30', 30, 75, 0)`, rid);
 
+    // Profile: placeholder cover art and logo, opening hours from the services, website, and a menu.
+    const S = require('../public/js/samples');
+    const shiftRows = require('./db').all('SELECT * FROM shifts WHERE restaurant_id = ?', rid);
+    run('UPDATE restaurants SET image_url = ?, logo_url = ?, hours = ?, website_url = ? WHERE id = ?',
+      S.coverArt({ cuisine, accent_color: color }), S.logoArt({ name, accent_color: color }), JSON.stringify(S.hoursFromShifts(shiftRows)), `https://example.com/${slug}`, rid);
+    for (const m of S.menuFor(cuisine)) {
+      run('INSERT INTO menu_items (restaurant_id, section, name, description, price_cents, tags, sort_order) VALUES (?,?,?,?,?,?,?)',
+        rid, m.section, m.name, m.description, m.price_cents, m.tags, m.sort_order);
+    }
+
     if (idx === 0) {
       run('INSERT INTO users (restaurant_id, name, email, password_hash) VALUES (?,?,?,?)', rid, 'Demo Owner', 'demo@rbooked.test', hashPassword('demo1234'));
     }

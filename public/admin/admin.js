@@ -33,6 +33,7 @@
     if (r.accent_color) document.documentElement.style.setProperty('--brand', r.accent_color);
     S.date = nowLocal().date;
     renderBanner();
+    setupSteps().catch(() => {});
     document.getElementById('logout').onclick = async () => { await api('/api/auth/logout', { body: {} }); location.href = '/login'; };
     document.getElementById('menu-btn').onclick = () => document.getElementById('sidebar').classList.toggle('open');
     window.addEventListener('hashchange', route);
@@ -55,6 +56,7 @@
     reservations: ['Reservations', viewReservations], floor: ['Floor plan & tables', viewFloor], services: ['Services & hours', viewServices],
     guests: ['Address book', viewGuests], widget: ['Website widget', viewWidget], settings: ['Settings', viewSettings],
     billing: ['Billing', viewBilling], emails: ['Email log', viewEmails], welcome: ['Welcome', viewWelcome],
+    profile: ['Restaurant profile', viewProfile], 'menu-items': ['Menu', viewMenu],
   };
   function route() {
     const key = (location.hash.slice(1).split('?')[0]) || 'reservations';
@@ -67,19 +69,238 @@
   }
 
   // ---------------- Welcome (after signup) ----------------
-  async function viewWelcome() {
+  async function viewWelcome() { S.welcome = true; history.replaceState(null, '', '#profile'); return route(); }
+
+  // ---------------- Restaurant profile (where new restaurants start) ----------------
+  const DAY_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const money = (c) => (c === null || c === undefined ? '' : `$${(c / 100).toFixed(c % 100 ? 2 : 0)}`);
+
+  // Shrink a photo in the browser before upload so pages stay fast.
+  function resizeImage(file, maxW, maxH, type) {
+    return new Promise((resolve, reject) => {
+      if (!/^image\/(jpeg|png|webp|gif)$/.test(file.type)) { reject(new Error('Pick a JPG, PNG or WebP image.')); return; }
+      const img = new Image();
+      img.onload = () => {
+        const k = Math.min(1, maxW / img.width, maxH / img.height);
+        const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        const g = c.getContext('2d');
+        if (type === 'image/jpeg') { g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); }
+        g.drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(img.src);
+        resolve(c.toDataURL(type, 0.84));
+      };
+      img.onerror = () => reject(new Error('That file could not be read as an image.'));
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
+  async function setupSteps() {
+    const [floor, shifts, menu] = await Promise.all([api('/api/admin/floor'), api('/api/admin/shifts'), api('/api/admin/menu')]);
+    const r = S.me.restaurant; const b = S.me.billing;
+    S.menuCount = menu.length;
+    const steps = [
+      ['Name, cuisine and description', !!(r.name && r.cuisine && (r.description || '').length >= 20), '#profile', 'p-about'],
+      ['Main photo', !!r.image_url, '#profile', 'p-photos'],
+      ['Logo', !!r.logo_url, '#profile', 'p-photos'],
+      ['Opening hours', !!TBMatch.parseHours(r.hours), '#profile', 'p-hours'],
+      ['Link to your website', !!r.website_url, '#profile', 'p-contact'],
+      ['Menu with prices and dietary tags', menu.length >= 3, '#menu-items'],
+      ['Tables, seats and combinations', floor.tables.filter((t) => t.active).length >= 2, '#floor'],
+      ['Services and reservation length', shifts.shifts.some((s) => s.active), '#services'],
+      ['Payment method ($20/month after the trial)', b.hasPaymentMethod || b.status === 'active', '#billing'],
+    ];
+    const done = steps.filter((s) => s[1]).length;
+    const pill = document.getElementById('setup-pill');
+    if (pill) { pill.hidden = done === steps.length; pill.textContent = `${done}/${steps.length}`; }
+    return { steps, done };
+  }
+
+  async function viewProfile() {
     const r = S.me.restaurant;
-    view.innerHTML = `<div class="card" style="max-width:720px">
-      <h2 class="serif" style="font-size:26px">Welcome to Rbooked, ${esc(r.name)}! 🎉</h2>
-      <p>Your 30-day free trial is running and you're already live in ZIP code search with a starter setup. Finish these steps:</p>
-      <ol style="line-height:2.1">
-        <li><a href="#floor">Set up your floor plan</a>: rooms, tables, and seats per table.</li>
-        <li><a href="#services">Set your services</a>: lunch, dinner, brunch, seating times and turn times.</li>
-        <li><a href="#settings">Review booking rules</a>: max party size, reminders, no-show policy.</li>
-        <li><a href="#widget">Add the booking widget</a> to your website.</li>
-        <li><a href="#billing">Add a payment method</a> so you stay live after the trial ($20/month).</li>
-      </ol>
-      <a class="btn" href="#reservations">Go to reservations</a></div>`;
+    const { steps, done } = await setupSteps();
+    const hours = TBMatch.parseHours(r.hours) || TBSamples.hoursFromShifts((await api('/api/admin/shifts')).shifts);
+    const hadHours = !!TBMatch.parseHours(r.hours);
+    const pct = Math.round((done / steps.length) * 100);
+    view.innerHTML = `
+      ${S.welcome ? `<div class="card welcome"><h2 class="serif">Welcome to Rbooked, ${esc(r.name)}! 🎉</h2><p style="margin:0">Your 30-day free trial has started. First, build your restaurant profile: this is what guests see when they find you.</p></div>` : ''}
+      <div class="card setup ${done === steps.length ? 'complete' : ''}">
+        <div class="row"><h2 style="margin:0">${done === steps.length ? '✅ Your restaurant is ready for guests' : 'Get your restaurant ready'}</h2><span class="spacer"></span><b>${done} of ${steps.length}</b></div>
+        <div class="progress"><i style="width:${pct}%"></i></div>
+        <ol class="steps">${steps.map(([label, ok, href, anchor]) => `<li class="${ok ? 'ok' : ''}"><a href="${href}" ${anchor ? `data-jump="${anchor}"` : ''}>${ok ? '✓' : '○'} ${esc(label)}</a></li>`).join('')}</ol>
+      </div>
+      <form id="p-form">
+      <div class="card" id="p-photos"><div class="row"><h2 style="margin:0">Photos</h2><span class="spacer"></span><a class="btn ghost sm" href="${S.me.demoBase ? `restaurant.html?slug=${r.slug}` : `/restaurant?slug=${r.slug}`}">View my guest page ↗</a></div>
+        <p class="muted small">Your main photo is the big picture at the top of your page and in search results. Wide photos work best (at least 1600 × 900). Your logo shows on your page and booking widget.</p>
+        <div class="p-hero" id="p-hero" style="${TB.thumbStyle(r)}">
+          <div class="p-logo" id="p-logo" style="${r.logo_url ? `background-image:url('${esc(r.logo_url)}')` : `background:${esc(r.accent_color)}`}">${r.logo_url ? '' : esc(TB.initials(r.name))}</div>
+          <div class="p-hero-name">${esc(r.name)}</div>
+          <div class="p-hero-btns"><label class="btn sm">📷 ${r.image_url ? 'Change main photo' : 'Add main photo'}<input type="file" accept="image/*" id="up-cover" hidden></label>
+          <label class="btn secondary sm">${r.logo_url ? 'Change logo' : 'Add logo'}<input type="file" accept="image/*" id="up-logo" hidden></label></div>
+        </div>
+        <div class="row small" style="margin-top:8px">${r.image_url ? '<button type="button" class="btn ghost sm" id="rm-cover">Remove photo</button>' : ''}${r.logo_url ? '<button type="button" class="btn ghost sm" id="rm-logo">Remove logo</button>' : ''}<span class="muted">Tip: you can also drag a photo onto the picture.</span></div>
+      </div>
+      <div class="two-col" style="margin-top:16px">
+        <div class="card" id="p-about"><h2>About your restaurant</h2>
+          <div class="field"><label for="p-name">Restaurant name</label><input id="p-name" name="name" value="${esc(r.name)}" required></div>
+          <div class="grid-2"><div class="field"><label for="p-cuisine">Cuisine</label><input id="p-cuisine" name="cuisine" value="${esc(r.cuisine)}" placeholder="e.g. Italian, Thai, Vegan"></div>
+          <div class="field"><label for="p-price">Price</label><select id="p-price" name="price_level">${[1, 2, 3, 4].map((n) => `<option value="${n}"${n === r.price_level ? ' selected' : ''}>${'$'.repeat(n)} ${['Inexpensive', 'Moderate', 'Pricey', 'Fine dining'][n - 1]}</option>`).join('')}</select></div></div>
+          <div class="field"><label for="p-desc">Description</label><textarea id="p-desc" name="description" rows="4" placeholder="What makes your place special? Signature dishes, atmosphere, chef…">${esc(r.description)}</textarea></div>
+          <div class="field"><label>What describes you? <span class="muted small">(used in search and “Pick for me”)</span></label>
+            <div class="days">${TBMatch.TAGS.map((t) => `<label><input type="checkbox" data-tag="${t.id}" ${TBMatch.parseTags(r.tags).includes(t.id) ? 'checked' : ''}>${esc(t.label)}</label>`).join('')}</div></div>
+          <div class="field"><label for="p-color">Brand color</label><input id="p-color" type="color" name="accent_color" value="${esc(r.accent_color)}" style="height:44px;padding:4px;max-width:120px"></div>
+        </div>
+        <div>
+          <div class="card" id="p-contact" style="margin-bottom:16px"><h2>Contact & location</h2>
+            <div class="field"><label for="p-web">Your website</label><input id="p-web" name="website_url" value="${esc(r.website_url || '')}" placeholder="www.yourrestaurant.com" inputmode="url"></div>
+            <div class="field"><label for="p-phone">Phone</label><input id="p-phone" name="phone" type="tel" value="${esc(r.phone)}"></div>
+            <div class="field"><label for="p-addr">Street address</label><input id="p-addr" name="address" value="${esc(r.address)}"></div>
+            <div class="grid-3"><div class="field"><label for="p-city">City</label><input id="p-city" name="city" value="${esc(r.city)}"></div>
+            <div class="field"><label for="p-state">State</label><input id="p-state" name="state" value="${esc(r.state)}" maxlength="2"></div>
+            <div class="field"><label for="p-zip">ZIP</label><input id="p-zip" name="zip" value="${esc(r.zip)}" maxlength="5" inputmode="numeric"></div></div>
+          </div>
+          <div class="card" id="p-hours"><div class="row"><h2 style="margin:0">Opening hours</h2><span class="spacer"></span><button type="button" class="btn ghost sm" id="h-copy">Copy Monday to all</button></div>
+            ${hadHours ? '' : '<p class="small muted">We filled these in from your services. Adjust and save.</p>'}
+            <div class="hours-ed">${hours.map((h, i) => `<div class="h-row ${h.closed ? 'closed' : ''}" data-d="${i}"><b>${DAY_LONG[i]}</b>
+              <label class="check"><input type="checkbox" data-open ${h.closed ? '' : 'checked'}> Open</label>
+              <input type="time" data-from value="${h.open}" aria-label="${DAY_LONG[i]} opens"><span class="muted">to</span><input type="time" data-to value="${h.close}" aria-label="${DAY_LONG[i]} closes"></div>`).join('')}</div>
+          </div>
+        </div>
+      </div>
+      <div class="savebar"><button class="btn lg" type="submit">Save profile</button><span class="muted small">Changes show on your guest page right away.</span></div>
+      </form>`;
+    S.welcome = false;
+    view.querySelectorAll('[data-jump]').forEach((a) => { a.onclick = (e) => { const el = document.getElementById(a.dataset.jump); if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1200); } }; });
+    view.querySelectorAll('.h-row [data-open]').forEach((c) => { c.onchange = () => c.closest('.h-row').classList.toggle('closed', !c.checked); });
+    document.getElementById('h-copy').onclick = () => {
+      const rows = [...view.querySelectorAll('.h-row')]; const mon = rows[1];
+      rows.forEach((row) => { row.querySelector('[data-from]').value = mon.querySelector('[data-from]').value; row.querySelector('[data-to]').value = mon.querySelector('[data-to]').value; });
+      TB.toast('Copied Monday’s hours to every open day');
+    };
+    const upload = async (file, kind) => {
+      if (!file) return;
+      try {
+        const data = await resizeImage(file, kind === 'logo' ? 400 : 1800, kind === 'logo' ? 400 : 1100, kind === 'logo' ? 'image/png' : 'image/jpeg');
+        TB.toast('Uploading…');
+        await api('/api/admin/images', { body: { kind, data } });
+        S.me = await api('/api/admin/restaurant'); TB.toast(kind === 'logo' ? 'Logo updated' : 'Main photo updated'); viewProfile().catch(fail);
+      } catch (e) { fail(e); }
+    };
+    document.getElementById('up-cover').onchange = (e) => upload(e.target.files[0], 'cover');
+    document.getElementById('up-logo').onchange = (e) => upload(e.target.files[0], 'logo');
+    const hero = document.getElementById('p-hero');
+    hero.ondragover = (e) => { e.preventDefault(); hero.classList.add('drop'); };
+    hero.ondragleave = () => hero.classList.remove('drop');
+    hero.ondrop = (e) => { e.preventDefault(); hero.classList.remove('drop'); const f = e.dataTransfer.files[0]; const onLogo = e.target.closest('.p-logo'); upload(f, onLogo ? 'logo' : 'cover'); };
+    const clear = (field, label) => async () => {
+      if (!await ask(`Remove your ${label}?`, 'Remove', true)) return;
+      await api('/api/admin/restaurant', { method: 'PUT', body: { [field]: '' } }).catch(fail);
+      S.me = await api('/api/admin/restaurant'); viewProfile().catch(fail);
+    };
+    const rc = document.getElementById('rm-cover'); if (rc) rc.onclick = clear('image_url', 'main photo');
+    const rl = document.getElementById('rm-logo'); if (rl) rl.onclick = clear('logo_url', 'logo');
+    document.getElementById('p-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const body = TB.formData(e.target);
+      body.tags = [...e.target.querySelectorAll('[data-tag]:checked')].map((x) => x.dataset.tag);
+      body.hours = JSON.stringify([...view.querySelectorAll('.h-row')].map((row) => ({
+        closed: row.querySelector('[data-open]').checked ? 0 : 1, open: row.querySelector('[data-from]').value || '17:00', close: row.querySelector('[data-to]').value || '22:00' })));
+      try {
+        await api('/api/admin/restaurant', { method: 'PUT', body });
+        S.me = await api('/api/admin/restaurant');
+        document.getElementById('rest-name').textContent = S.me.restaurant.name;
+        document.documentElement.style.setProperty('--brand', S.me.restaurant.accent_color);
+        TB.toast('Profile saved'); viewProfile().catch(fail);
+      } catch (err) { fail(err); }
+    };
+  }
+
+  // ---------------- Menu ----------------
+  async function viewMenu() {
+    const items = await api('/api/admin/menu');
+    const r = S.me.restaurant;
+    S.menuFilter = S.menuFilter || '';
+    const sections = [...new Set(items.map((m) => m.section))];
+    const counts = {}; items.forEach((m) => m.tags.split(',').filter(Boolean).forEach((t) => { counts[t] = (counts[t] || 0) + 1; }));
+    const shown = (m) => !S.menuFilter || m.tags.split(',').includes(S.menuFilter);
+    view.innerHTML = `
+      <div class="toolbar"><button class="btn" id="mi-add">+ Add dish</button>
+        <div class="chips">${['', ...TBMatch.MENU_TAGS.map((t) => t.id)].map((id) => { const t = id ? TBMatch.menuTag(id) : null; return `<button class="chip ${S.menuFilter === id ? 'on' : ''}" data-f="${id}">${t ? `${t.icon} ${esc(t.label)} <span class="muted">${counts[id] || 0}</span>` : `All <span class="muted">${items.length}</span>`}</button>`; }).join('')}</div>
+        <span class="spacer"></span><a class="btn ghost sm" href="${S.me.demoBase ? `restaurant.html?slug=${r.slug}` : `/restaurant?slug=${r.slug}`}#menu">Preview as a guest ↗</a></div>
+      ${items.length ? '' : `<div class="card empty-menu"><h2>Add your menu</h2><p>Guests can browse it on your page and filter by vegetarian, vegan, gluten-free and more. Restaurants with 3 or more vegan (or vegetarian, gluten-free, halal) dishes also show up when guests search for those.</p>
+        <div class="row"><button class="btn" id="mi-first">+ Add your first dish</button><button class="btn secondary" id="mi-sample">Start from a sample ${esc(r.cuisine || '')} menu</button></div></div>`}
+      ${sections.map((sec) => { const list = items.filter((m) => m.section === sec && shown(m)); if (!list.length) return ''; return `<div class="card menu-sec"><div class="row"><h2 style="margin:0">${esc(sec)}</h2><span class="muted small">${list.length} item${list.length > 1 ? 's' : ''}</span><span class="spacer"></span>
+          <button class="btn ghost sm" data-rename="${esc(sec)}">Rename</button><button class="btn secondary sm" data-add-in="${esc(sec)}">+ Add to ${esc(sec)}</button></div>
+          <div class="menu-list">${list.map((m) => `<div class="mi-row ${m.available ? '' : 'off'}" data-id="${m.id}">
+            <div class="mi-move"><button class="btn ghost sm" data-up aria-label="Move up">↑</button><button class="btn ghost sm" data-down aria-label="Move down">↓</button></div>
+            <div class="mi-main"><b>${esc(m.name)}</b>${m.available ? '' : ' <span class="tag">Hidden</span>'}${m.description ? `<div class="small muted">${esc(m.description)}</div>` : ''}
+              <div class="mi-tags">${TBMatch.sortMenuTags(m.tags).map((t) => `<span class="dtag">${TBMatch.menuTag(t).icon} ${esc(TBMatch.menuTag(t).label)}</span>`).join('')}</div></div>
+            <div class="mi-price">${money(m.price_cents)}</div>
+            <div class="mi-acts"><label class="switch" title="Show on menu"><input type="checkbox" data-avail ${m.available ? 'checked' : ''} aria-label="Show ${esc(m.name)} on menu"><i></i></label>
+              <button class="btn secondary sm" data-edit>Edit</button><button class="btn ghost sm" data-del aria-label="Delete">🗑</button></div></div>`).join('')}</div></div>`; }).join('')}`;
+    view.querySelectorAll('[data-f]').forEach((b) => { b.onclick = () => { S.menuFilter = b.dataset.f; viewMenu().catch(fail); }; });
+    const add = (section) => menuItemModal(null, sections, section);
+    document.getElementById('mi-add').onclick = () => add(sections[0] || 'Starters');
+    const first = document.getElementById('mi-first'); if (first) first.onclick = () => add('Starters');
+    const sample = document.getElementById('mi-sample');
+    if (sample) {
+      sample.onclick = async () => {
+        sample.disabled = true;
+        try { for (const m of TBSamples.menuFor(r.cuisine)) await api('/api/admin/menu', { body: m }); TB.toast('Sample menu added. Edit the dishes and prices to match yours.'); } catch (e) { fail(e); }
+        viewMenu().catch(fail); setupSteps().catch(() => {});
+      };
+    }
+    view.querySelectorAll('[data-add-in]').forEach((b) => { b.onclick = () => add(b.dataset.addIn); });
+    view.querySelectorAll('[data-rename]').forEach((b) => {
+      b.onclick = async () => {
+        const name = await askText('Rename section', b.dataset.rename); if (!name || name === b.dataset.rename) return;
+        await Promise.all(items.filter((m) => m.section === b.dataset.rename).map((m) => api(`/api/admin/menu/${m.id}`, { method: 'PUT', body: { section: name } }))).catch(fail);
+        viewMenu().catch(fail);
+      };
+    });
+    view.querySelectorAll('.mi-row').forEach((row) => {
+      const m = items.find((x) => x.id === Number(row.dataset.id));
+      row.querySelector('[data-edit]').onclick = () => menuItemModal(m, sections);
+      row.querySelector('[data-del]').onclick = async () => { if (await ask(`Delete “${m.name}” from your menu?`, 'Delete', true)) { await api(`/api/admin/menu/${m.id}`, { method: 'DELETE' }).catch(fail); viewMenu().catch(fail); } };
+      row.querySelector('[data-avail]').onchange = async (e) => { await api(`/api/admin/menu/${m.id}`, { method: 'PUT', body: { available: e.target.checked } }).catch(fail); TB.toast(e.target.checked ? `${m.name} is on the menu` : `${m.name} is hidden (86’d)`); viewMenu().catch(fail); };
+      const move = async (dir) => {
+        const same = items.filter((x) => x.section === m.section); const i = same.indexOf(m); const j = i + dir;
+        if (j < 0 || j >= same.length) return;
+        [same[i], same[j]] = [same[j], same[i]];
+        const order = sections.flatMap((s) => (s === m.section ? same : items.filter((x) => x.section === s))).map((x) => x.id);
+        await api('/api/admin/menu/order', { method: 'PUT', body: { ids: order } }).catch(fail); viewMenu().catch(fail);
+      };
+      row.querySelector('[data-up]').onclick = () => move(-1); row.querySelector('[data-down]').onclick = () => move(1);
+    });
+  }
+
+  function menuItemModal(m, sections, section) {
+    const v = m || { section: section || 'Starters', name: '', description: '', price_cents: null, tags: '', available: 1 };
+    const has = new Set(v.tags.split(','));
+    TB.modal(`<h2>${m ? `Edit ${esc(m.name)}` : 'Add a dish'}</h2><form id="mi-form">
+      <div class="grid-2"><div class="field"><label for="mi-sec">Section</label><input id="mi-sec" name="section" list="mi-secs" value="${esc(v.section)}" required><datalist id="mi-secs">${[...new Set([...sections, 'Starters', 'Mains', 'Sides', 'Desserts', 'Drinks'])].map((s) => `<option value="${esc(s)}">`).join('')}</datalist></div>
+      <div class="field"><label for="mi-price">Price</label><div class="money"><span>$</span><input id="mi-price" name="price" inputmode="decimal" value="${v.price_cents === null ? '' : (v.price_cents / 100).toFixed(2).replace(/\.00$/, '')}" placeholder="18"></div></div></div>
+      <div class="field"><label for="mi-name">Dish name</label><input id="mi-name" name="name" value="${esc(v.name)}" required placeholder="e.g. Margherita pizza"></div>
+      <div class="field"><label for="mi-desc">Description <span class="muted small">(optional)</span></label><textarea id="mi-desc" name="description" rows="2" placeholder="Ingredients, how it's made…">${esc(v.description)}</textarea></div>
+      <div class="field"><label>Dietary tags</label><div class="days">${TBMatch.MENU_TAGS.map((t) => `<label><input type="checkbox" data-mt="${t.id}" ${has.has(t.id) ? 'checked' : ''}>${t.icon} ${esc(t.label)}</label>`).join('')}</div>
+        <p class="small muted" style="margin:6px 0 0">Vegan dishes are also counted as vegetarian and dairy-free.</p></div>
+      <label class="check"><input type="checkbox" name="available" ${v.available ? 'checked' : ''}> Show on the menu</label>
+      <div class="row" style="margin-top:16px"><button class="btn" type="submit">${m ? 'Save' : 'Add dish'}</button>${m ? '' : '<button class="btn secondary" type="button" id="mi-another">Save & add another</button>'}<button class="btn ghost" type="button" data-close>Cancel</button></div></form>`,
+    (box, close) => {
+      const f = box.querySelector('#mi-form');
+      box.querySelector('[data-mt="vegan"]').onchange = (e) => { if (e.target.checked) { box.querySelector('[data-mt="vegetarian"]').checked = true; box.querySelector('[data-mt="dairy_free"]').checked = true; } };
+      const save = async (again) => {
+        if (!f.reportValidity()) return;
+        const d = TB.formData(f);
+        const body = { section: d.section, name: d.name, description: d.description, price: d.price, available: d.available, tags: [...box.querySelectorAll('[data-mt]:checked')].map((x) => x.dataset.mt) };
+        try {
+          await api(m ? `/api/admin/menu/${m.id}` : '/api/admin/menu', { method: m ? 'PUT' : 'POST', body });
+          TB.toast(m ? 'Dish saved' : `${d.name} added`);
+          close(); viewMenu().catch(fail); setupSteps().catch(() => {});
+          if (again) setTimeout(() => menuItemModal(null, [...new Set([...sections, d.section])], d.section), 50);
+        } catch (e) { fail(e); }
+      };
+      f.onsubmit = (e) => { e.preventDefault(); save(false); };
+      const another = box.querySelector('#mi-another'); if (another) another.onclick = () => save(true);
+    });
   }
 
   // ---------------- In-page confirm / prompt (browser dialogs are blocked in some embeds) ----------------
@@ -976,23 +1197,11 @@
     const tzs = ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Phoenix', 'America/Los_Angeles', 'America/Anchorage', 'Pacific/Honolulu'];
     if (!tzs.includes(r.timezone)) tzs.push(r.timezone);
     view.innerHTML = `<form id="s-form"><div class="two-col">
-      <div class="card"><h2>Restaurant profile</h2>
-        <div class="field"><label>Name</label><input name="name" value="${esc(r.name)}"></div>
-        <div class="grid-2"><div class="field"><label>Cuisine</label><input name="cuisine" value="${esc(r.cuisine)}"></div>
-        <div class="field"><label>Price</label><select name="price_level">${[1, 2, 3, 4].map((n) => `<option value="${n}"${n === r.price_level ? ' selected' : ''}>${'$'.repeat(n)}</option>`).join('')}</select></div></div>
-        <div class="field"><label>Description</label><textarea name="description">${esc(r.description)}</textarea></div>
-        <div class="grid-2"><div class="field"><label>Phone</label><input name="phone" value="${esc(r.phone)}"></div>
-        <div class="field"><label>Notification email (new bookings / cancellations)</label><input name="email" type="email" value="${esc(r.email)}"></div></div>
-        <div class="field"><label>Street address</label><input name="address" value="${esc(r.address)}"></div>
-        <div class="grid-3"><div class="field"><label>City</label><input name="city" value="${esc(r.city)}"></div>
-        <div class="field"><label>State</label><input name="state" value="${esc(r.state)}" maxlength="2"></div>
-        <div class="field"><label>ZIP</label><input name="zip" value="${esc(r.zip)}" maxlength="5"></div></div>
-        <div class="grid-2"><div class="field"><label>Time zone</label><select name="timezone">${tzs.map((z) => `<option${z === r.timezone ? ' selected' : ''}>${z}</option>`).join('')}</select></div>
-        <div class="field"><label>Brand color</label><input type="color" name="accent_color" value="${esc(r.accent_color)}" style="height:44px;padding:4px"></div></div>
-        <div class="field"><label>Photo URL (optional)</label><input name="image_url" value="${esc(r.image_url)}" placeholder="https://…"></div>
-        <div class="field"><label>What describes you? (used by search and “Pick for me”)</label>
-          <div class="days">${TBMatch.TAGS.map((t) => `<label><input type="checkbox" data-tag="${t.id}" ${TBMatch.parseTags(r.tags).includes(t.id) ? 'checked' : ''}>${esc(t.label)}</label>`).join('')}</div>
-          ${r.featured ? '<p class="small" style="margin-top:8px"><span class="feat-badge">Featured</span> Your restaurant is featured on the Rbooked home page.</p>' : ''}</div>
+      <div class="card"><h2>Account & notifications</h2>
+        <p class="small muted">Your name, photos, menu, hours and website are on the <a href="#profile">Restaurant profile</a> page.</p>
+        <div class="field"><label>Notification email (new bookings / cancellations)</label><input name="email" type="email" value="${esc(r.email)}"></div>
+        <div class="field"><label>Time zone</label><select name="timezone">${tzs.map((z) => `<option${z === r.timezone ? ' selected' : ''}>${z}</option>`).join('')}</select></div>
+        ${r.featured ? '<p class="small" style="margin-top:8px"><span class="feat-badge">Featured</span> Your restaurant is featured on the Rbooked home page.</p>' : ''}
       </div>
       <div>
         <div class="card" style="margin-bottom:16px"><h2>Booking rules</h2>
@@ -1015,7 +1224,6 @@
       e.preventDefault();
       try {
         const body = TB.formData(e.target);
-        body.tags = [...e.target.querySelectorAll('[data-tag]:checked')].map((x) => x.dataset.tag);
         await api('/api/admin/restaurant', { method: 'PUT', body });
         S.me = await api('/api/admin/restaurant');
         document.getElementById('rest-name').textContent = S.me.restaurant.name;

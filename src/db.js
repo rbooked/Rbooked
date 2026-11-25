@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS restaurants (
   accent_color TEXT DEFAULT '#c2410c',
   tags TEXT DEFAULT '',                  -- comma list of tag ids (see public/js/matcher.js)
   turn_times TEXT DEFAULT '2:90,4:120,6:180,99:210', -- reservation length by party size (maxParty:minutes)
+  website_url TEXT DEFAULT '',
+  logo_url TEXT DEFAULT '',
+  hours TEXT DEFAULT '',                 -- JSON, 7 days from Sunday: [{closed, open, close}]
   featured INTEGER DEFAULT 0,            -- set by the platform, shown in "Featured" sections
   -- billing
   trial_ends_at TEXT NOT NULL,
@@ -167,6 +170,31 @@ CREATE TABLE IF NOT EXISTS guests (
 );
 CREATE INDEX IF NOT EXISTS idx_guests_rest ON guests(restaurant_id, email);
 
+-- Menu items guests can browse and filter (vegan, gluten-free…)
+CREATE TABLE IF NOT EXISTS menu_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  restaurant_id INTEGER NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+  section TEXT NOT NULL DEFAULT 'Menu',   -- Starters, Mains, Desserts, Drinks…
+  name TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  price_cents INTEGER,                    -- NULL = no price shown (e.g. market price)
+  tags TEXT DEFAULT '',                   -- comma list: vegan,vegetarian,gluten_free,dairy_free,nut_free,halal,spicy
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  available INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_menu_rest ON menu_items(restaurant_id, sort_order);
+
+-- Uploaded photos and logos (served at /img/:id)
+CREATE TABLE IF NOT EXISTS images (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  restaurant_id INTEGER NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,                     -- cover | logo
+  mime TEXT NOT NULL,
+  data BLOB NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS email_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   reservation_id INTEGER,
@@ -195,6 +223,7 @@ const rcols = new Set(db.prepare('PRAGMA table_info(reservations)').all().map((c
 if (!rcols.has('combo_id')) db.exec('ALTER TABLE reservations ADD COLUMN combo_id INTEGER');
 if (!rcols.has('guest_id')) db.exec('ALTER TABLE reservations ADD COLUMN guest_id INTEGER');
 if (!cols.has('turn_times')) db.exec("ALTER TABLE restaurants ADD COLUMN turn_times TEXT DEFAULT '2:90,4:120,6:180,99:210'");
+for (const [c, def] of [['website_url', "''"], ['logo_url', "''"], ['hours', "''"]]) if (!cols.has(c)) db.exec(`ALTER TABLE restaurants ADD COLUMN ${c} TEXT DEFAULT ${def}`);
 if (!cols.has('featured')) db.exec('ALTER TABLE restaurants ADD COLUMN featured INTEGER DEFAULT 0');
 
 /** Run fn inside a transaction. */
