@@ -1,6 +1,6 @@
 /*!
- * Tablebird booking widget.
- * Inline:  <div data-tablebird="your-slug"></div><script src="https://YOUR-DOMAIN/widget.js" async></script>
+ * Rbooked booking widget.
+ * Inline:  <div data-rbooked="your-slug"></div><script src="https://YOUR-DOMAIN/widget.js" async></script>
  * Button:  <script src="https://YOUR-DOMAIN/widget.js" data-restaurant="your-slug" data-mode="button" async></script>
  * Options (on the div or script tag): data-color="#c2410c", data-party="2", data-label="Reserve a table"
  */
@@ -34,7 +34,7 @@
   function inline(el) {
     if (el.dataset.tbMounted) return;
     el.dataset.tbMounted = '1';
-    el.appendChild(makeFrame(el.getAttribute('data-tablebird'), { color: el.dataset.color, party: el.dataset.party }));
+    el.appendChild(makeFrame(el.getAttribute('data-rbooked'), { color: el.dataset.color, party: el.dataset.party }));
   }
 
   function button(slug, opts) {
@@ -68,16 +68,16 @@
 
   window.addEventListener('message', function (e) {
     if (e.origin !== origin || !e.data) return;
-    if (e.data.type === 'tablebird:height') {
+    if (e.data.type === 'rbooked:height') {
       frames.forEach(function (f) { if (f.contentWindow === e.source) f.style.height = (e.data.height + 4) + 'px'; });
     }
-    if (e.data.type === 'tablebird:booked') {
-      document.dispatchEvent(new CustomEvent('tablebird:booked', { detail: { code: e.data.code } }));
+    if (e.data.type === 'rbooked:booked') {
+      document.dispatchEvent(new CustomEvent('rbooked:booked', { detail: { code: e.data.code } }));
     }
   });
 
   function init() {
-    var nodes = document.querySelectorAll('[data-tablebird]');
+    var nodes = document.querySelectorAll('[data-rbooked]');
     for (var i = 0; i < nodes.length; i++) inline(nodes[i]);
     var slug = script.getAttribute('data-restaurant');
     if (slug && script.getAttribute('data-mode') === 'button') {
@@ -85,7 +85,7 @@
     } else if (slug && !nodes.length) {
       var holder = document.createElement('div');
       script.parentNode.insertBefore(holder, script.nextSibling);
-      holder.setAttribute('data-tablebird', slug);
+      holder.setAttribute('data-rbooked', slug);
       if (script.getAttribute('data-color')) holder.dataset.color = script.getAttribute('data-color');
       inline(holder);
     }

@@ -4,13 +4,13 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/app.css">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%229%22 fill=%22%23c2410c%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2218%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Georgia%22%3ET%3C/text%3E%3C/svg%3E">
-<title>Tablebird · Book a table near you</title>
-<meta name="description" content="Find restaurants near your ZIP code and book a table instantly, or let Tablebird pick one for you.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%229%22 fill=%22%23c2410c%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2218%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Georgia%22%3ER%3C/text%3E%3C/svg%3E">
+<title>Rbooked · Book a table near you</title>
+<meta name="description" content="Find restaurants near your ZIP code and book a table instantly, or let Rbooked pick one for you.">
 </head>
 <body>
 <header class="site-header"><div class="container">
-  <a class="logo" href="/"><span class="logo-mark">T</span>Tablebird</a>
+  <a class="logo" href="/"><span class="logo-mark">R</span>Rbooked</a>
   <nav class="nav"><a href="/" class="hide-sm">Find a table</a><a href="/for-restaurants">For restaurants</a><a href="/login" id="nav-login">Restaurant login</a></nav>
 </div></header>
 <section class="hero">
@@ -57,7 +57,7 @@
     </div>
   </section>
 </main>
-<footer class="footer"><div class="container row"><span>© Tablebird</span><span class="spacer"></span><a href="/for-restaurants">List your restaurant</a><a href="/login">Restaurant login</a></div></footer>
+<footer class="footer"><div class="container row"><span>© Rbooked</span><span class="spacer"></span><a href="/for-restaurants">List your restaurant</a><a href="/login">Restaurant login</a></div></footer>
 <script src="/js/common.js"></script>
 <script src="/js/matcher.js"></script>
 <script>
@@ -114,7 +114,7 @@
   function clear() { head.textContent = ''; list.innerHTML = ''; pickBox.innerHTML = ''; empty.classList.add('hidden'); }
   function noneNear(zip) {
     empty.classList.remove('hidden');
-    empty.innerHTML = `<h3>No restaurants on Tablebird near ${esc(zip)} yet.</h3>
+    empty.innerHTML = `<h3>No restaurants on Rbooked near ${esc(zip)} yet.</h3>
       <p class="muted">Know a great spot? <a href="/for-restaurants">Restaurants can join free for 30 days.</a></p>
       <p class="muted small">Sample restaurants are in ZIPs 10011, 94110, 97205, 60607 and 78701.</p>`;
   }
@@ -211,7 +211,7 @@
     try {
       let rows = await api('/api/public/featured?' + q);
       let where = /^\d{5}$/.test(zip) ? `near ${zip}` : '';
-      if (!rows.length && q.has('zip')) { q.delete('zip'); rows = await api('/api/public/featured?' + q); where = 'across Tablebird'; }
+      if (!rows.length && q.has('zip')) { q.delete('zip'); rows = await api('/api/public/featured?' + q); where = 'across Rbooked'; }
       document.getElementById('featured-where').textContent = where ? `· ${where}` : '';
       document.getElementById('featured').innerHTML = rows.map((r) => mini(r, f.party.value, r.slots, 'Featured')).join('') || '<p class="muted">No featured restaurants yet.</p>';
     } catch { document.getElementById('featured-wrap').classList.add('hidden'); }

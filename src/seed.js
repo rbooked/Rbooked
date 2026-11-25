@@ -82,7 +82,7 @@ tx(() => {
          VALUES (?, 'Weekend brunch', '0,6', '10:00', '13:30', 30, 75, 0)`, rid);
 
     if (idx === 0) {
-      run('INSERT INTO users (restaurant_id, name, email, password_hash) VALUES (?,?,?,?)', rid, 'Demo Owner', 'demo@tablebird.test', hashPassword('demo1234'));
+      run('INSERT INTO users (restaurant_id, name, email, password_hash) VALUES (?,?,?,?)', rid, 'Demo Owner', 'demo@rbooked.test', hashPassword('demo1234'));
     }
 
     // Sample reservations: today and the next 3 days, dinner service.
@@ -110,5 +110,5 @@ tx(() => {
 });
 
 console.log(`Seeded ${RESTAURANTS.length} restaurants.`);
-console.log('Demo restaurant login: demo@tablebird.test / demo1234');
+console.log('Demo restaurant login: demo@rbooked.test / demo1234');
 console.log('Try ZIP codes: 10011 (NYC), 94110 (SF), 97205 (Portland), 60607 (Chicago), 78701 (Austin)');

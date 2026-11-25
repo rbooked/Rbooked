@@ -1,11 +1,11 @@
-/* Tablebird restaurant dashboard (vanilla JS single-page app). */
+/* Rbooked restaurant dashboard (vanilla JS single-page app). */
 (function () {
   const { api, esc } = TB;
   const view = document.getElementById('view');
   const S = { me: null, date: null, mode: 'list', floorArea: null, selTable: null };
   const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const STATUS_LABEL = { confirmed: 'Booked', seated: 'Seated', completed: 'Completed', cancelled: 'Cancelled', no_show: 'No-show' };
-  const SOURCE_LABEL = { online: 'Tablebird', widget: 'Website', phone: 'Phone', walk_in: 'Walk-in', admin: 'Staff' };
+  const SOURCE_LABEL = { online: 'Rbooked', widget: 'Website', phone: 'Phone', walk_in: 'Walk-in', admin: 'Staff' };
 
   const fail = (e) => TB.toast(e.message, true);
   const nowLocal = () => {
@@ -70,7 +70,7 @@
   async function viewWelcome() {
     const r = S.me.restaurant;
     view.innerHTML = `<div class="card" style="max-width:720px">
-      <h2 class="serif" style="font-size:26px">Welcome to Tablebird, ${esc(r.name)}! 🎉</h2>
+      <h2 class="serif" style="font-size:26px">Welcome to Rbooked, ${esc(r.name)}! 🎉</h2>
       <p>Your 30-day free trial is running and you're already live in ZIP code search with a starter setup. Finish these steps:</p>
       <ol style="line-height:2.1">
         <li><a href="#floor">Set up your floor plan</a>: rooms, tables, and seats per table.</li>
@@ -529,7 +529,7 @@
   // ---------------- Widget ----------------
   async function viewWidget() {
     const r = S.me.restaurant; const base = S.me.baseUrl;
-    const inline = `<div data-tablebird="${r.slug}"></div>\n<script src="${base}/widget.js" async></script>`;
+    const inline = `<div data-rbooked="${r.slug}"></div>\n<script src="${base}/widget.js" async></script>`;
     const button = `<script src="${base}/widget.js" data-restaurant="${r.slug}" data-mode="button" data-color="${r.accent_color}" data-label="Reserve a table" async></script>`;
     const iframe = `<iframe src="${base}/embed.html?r=${r.slug}" title="Reserve a table" style="width:100%;max-width:480px;height:640px;border:0"></iframe>`;
     const link = `${base}/restaurant?slug=${r.slug}`;
@@ -566,7 +566,7 @@
         <div class="field"><label>Photo URL (optional)</label><input name="image_url" value="${esc(r.image_url)}" placeholder="https://…"></div>
         <div class="field"><label>What describes you? (used by search and “Pick for me”)</label>
           <div class="days">${TBMatch.TAGS.map((t) => `<label><input type="checkbox" data-tag="${t.id}" ${TBMatch.parseTags(r.tags).includes(t.id) ? 'checked' : ''}>${esc(t.label)}</label>`).join('')}</div>
-          ${r.featured ? '<p class="small" style="margin-top:8px"><span class="feat-badge">Featured</span> Your restaurant is featured on the Tablebird home page.</p>' : ''}</div>
+          ${r.featured ? '<p class="small" style="margin-top:8px"><span class="feat-badge">Featured</span> Your restaurant is featured on the Rbooked home page.</p>' : ''}</div>
       </div>
       <div>
         <div class="card" style="margin-bottom:16px"><h2>Booking rules</h2>

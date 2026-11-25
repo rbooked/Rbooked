@@ -63,7 +63,7 @@
       reasons.push(off === 0 ? `Table open at ${fmt(best)}` : `Closest open table: ${fmt(best)}`);
       if (c.miles != null) reasons.push(`${c.miles} mi away`);
       if (want.price && r.price_level === want.price) reasons.push(`${'$'.repeat(r.price_level)} like you asked`);
-      if (r.featured) reasons.push('Featured on Tablebird');
+      if (r.featured) reasons.push('Featured on Rbooked');
       out.push({
         restaurant: r, miles: c.miles, time: best, times: times.slice(0, 4).sort(), score: Math.max(1, Math.min(99, Math.round(points))),
         matched, missed, reasons,

@@ -1,7 +1,7 @@
 /* Shared helpers for all pages. */
 (function () {
   const TB = {};
-  TB.base = window.TABLEBIRD_BASE || '';
+  TB.base = window.RBOOKED_BASE || '';
 
   TB.api = async function (path, opts = {}) {
     const res = await fetch(TB.base + path, {

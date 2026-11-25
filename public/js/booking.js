@@ -106,7 +106,7 @@
         <p class="muted small">We sent the details to ${esc(body.email)}.</p>
         <a class="btn secondary" href="${manage}" target="_blank" rel="noopener">View or cancel reservation</a>
       </div>`;
-      if (window.parent !== window) window.parent.postMessage({ type: 'tablebird:booked', code: out.code }, '*');
+      if (window.parent !== window) window.parent.postMessage({ type: 'rbooked:booked', code: out.code }, '*');
     }
 
     renderPicker();

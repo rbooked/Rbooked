@@ -14,7 +14,7 @@
 </head>
 <body>
 <div class="embed" id="booking"><p class="muted">Loading…</p></div>
-<div class="powered">Reservations by <a href="/" target="_blank" rel="noopener">Tablebird</a></div>
+<div class="powered">Reservations by <a href="/" target="_blank" rel="noopener">Rbooked</a></div>
 <script src="/js/common.js"></script>
 <script src="/js/booking.js"></script>
 <script>
@@ -26,7 +26,7 @@
     if (color) document.getElementById('booking').style.setProperty('--brand', color.startsWith('#') ? color : '#' + color);
   });
   // Tell the parent page how tall we are so the iframe can resize (used by widget.js).
-  const post = () => window.parent.postMessage({ type: 'tablebird:height', slug, height: document.documentElement.scrollHeight }, '*');
+  const post = () => window.parent.postMessage({ type: 'rbooked:height', slug, height: document.documentElement.scrollHeight }, '*');
   new ResizeObserver(post).observe(document.body);
   window.addEventListener('load', post);
 })();

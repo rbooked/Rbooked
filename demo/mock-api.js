@@ -1,8 +1,8 @@
-/* Tablebird live demo: runs the whole backend inside the browser.
+/* Rbooked live demo: runs the whole backend inside the browser.
    It answers the same /api/... calls the real server does, keeps data in this
    browser's storage, and records every email in a demo inbox. */
 (function () {
-  const KEY = 'tablebird_demo_v2';
+  const KEY = 'rbooked_demo_v2';
   const mem = {};
   const store = {
     get() { try { return JSON.parse(localStorage.getItem(KEY)); } catch { return mem.db || null; } },
@@ -82,7 +82,7 @@
       };
       db.restaurants.push(r);
       starterFloor(db, r, true, id);
-      if (idx === 0) db.users.push({ id: id(), restaurant_id: r.id, name: 'Demo Owner', email: 'demo@tablebird.test', password: 'demo1234' });
+      if (idx === 0) db.users.push({ id: id(), restaurant_id: r.id, name: 'Demo Owner', email: 'demo@rbooked.test', password: 'demo1234' });
       const today = nowInZone(tz).date;
       const tbls = db.tables.filter((t) => t.restaurant_id === r.id && t.online_bookable);
       for (let d = 0; d < 4; d++) {
@@ -186,9 +186,9 @@
   // ---------- emails (recorded in the demo inbox) ----------
   function emailHtml(r, title, body) {
     return `<div style="font-family:Helvetica,Arial,sans-serif;background:#f6f3ee;padding:18px"><div style="max-width:520px;margin:auto;background:#fff;border-radius:12px;overflow:hidden">
-      <div style="background:${r ? r.accent_color : '#c2410c'};color:#fff;padding:16px 22px;font-weight:bold;font-size:18px">${esc(r ? r.name : 'Tablebird')}</div>
+      <div style="background:${r ? r.accent_color : '#c2410c'};color:#fff;padding:16px 22px;font-weight:bold;font-size:18px">${esc(r ? r.name : 'Rbooked')}</div>
       <div style="padding:22px;color:#1f1b16"><h2 style="margin:0 0 12px;font-size:20px">${esc(title)}</h2>${body}</div>
-      <div style="padding:12px 22px;background:#faf7f2;font-size:12px;color:#7a6f63">${r ? `${esc(r.address)}, ${esc(r.city)} ${esc(r.state)} · ${esc(r.phone)}<br>` : ''}Reservations powered by Tablebird</div></div></div>`;
+      <div style="padding:12px 22px;background:#faf7f2;font-size:12px;color:#7a6f63">${r ? `${esc(r.address)}, ${esc(r.city)} ${esc(r.state)} · ${esc(r.phone)}<br>` : ''}Reservations powered by Rbooked</div></div></div>`;
   }
   const details = (x) => `<table cellpadding="5" style="background:#faf7f2;border-radius:8px;width:100%;font-size:14px;margin:6px 0 14px">
     <tr><td style="color:#7a6f63;width:110px">Date</td><td><b>${esc(prettyDate(x.date))}</b></td></tr><tr><td style="color:#7a6f63">Time</td><td><b>${prettyTime(x.time)}</b></td></tr>
@@ -396,8 +396,8 @@
     starterFloor(db, r, false, nextId);
     const u = { id: nextId(), restaurant_id: r.id, name: b.owner_name, email: em, password: b.password };
     db.users.push(u); db.session = u.id;
-    db.emails.push({ id: nextId(), restaurant_id: r.id, to_addr: em, kind: 'welcome', status: 'outbox', created_at: nowSql(), subject: `Welcome to Tablebird, ${r.name}!`,
-      html: emailHtml(null, 'Your 30-day free trial has started', `<p>Hi ${esc(u.name)}, thanks for joining Tablebird.</p><p>Your free trial runs until <b>${new Date(r.trial_ends_at).toDateString()}</b>. After that it's just <b>$20/month</b>, cancel anytime.</p>`) });
+    db.emails.push({ id: nextId(), restaurant_id: r.id, to_addr: em, kind: 'welcome', status: 'outbox', created_at: nowSql(), subject: `Welcome to Rbooked, ${r.name}!`,
+      html: emailHtml(null, 'Your 30-day free trial has started', `<p>Hi ${esc(u.name)}, thanks for joining Rbooked.</p><p>Your free trial runs until <b>${new Date(r.trial_ends_at).toDateString()}</b>. After that it's just <b>$20/month</b>, cancel anytime.</p>`) });
     return { ok: true, slug: r.slug };
   });
   on('POST', '/api/auth/login', (q, b) => {
@@ -572,7 +572,7 @@
     count(); window.addEventListener('storage', count);
     document.getElementById('demo-inbox').onclick = () => {
       const emails = (store.get() || db).emails.slice().reverse();
-      TB.modal(`<h2>Demo inbox</h2><p class="muted small">Every email Tablebird would have sent to guests and restaurants. On the real site these go out through your email provider.</p>
+      TB.modal(`<h2>Demo inbox</h2><p class="muted small">Every email Rbooked would have sent to guests and restaurants. On the real site these go out through your email provider.</p>
         <div id="ib">${emails.length ? `<div class="inbox-list">${emails.map((e) => `<div class="inbox-item" data-id="${e.id}"><b>${esc(e.subject)}</b><small>To ${esc(e.to_addr)} · ${esc(e.kind.replace('_', ' '))}</small></div>`).join('')}</div>` : '<p>No emails yet. Book a table to see the confirmation.</p>'}</div>
         <div class="row" style="margin-top:12px"><button class="btn secondary" data-close>Close</button></div>`, (m) => {
         m.parentElement.style.alignItems = 'start'; m.style.maxWidth = '640px';

@@ -6,7 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tablebird-'));
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rbooked-'));
 process.env.DATABASE_PATH = path.join(dir, 'test.db');
 process.env.SMTP_HOST = '';
 process.env.STRIPE_SECRET_KEY = '';

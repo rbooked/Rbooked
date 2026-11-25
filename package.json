@@ -1,5 +1,5 @@
 {
-  "name": "tablebird",
+  "name": "rbooked",
   "version": "1.0.0",
   "description": "Restaurant reservation platform with embeddable booking widget",
   "main": "src/server.js",

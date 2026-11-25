@@ -76,7 +76,7 @@ app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 
 if (require.main === module) {
   app.listen(config.port, () => {
-    console.log(`Tablebird running at ${config.baseUrl} (port ${config.port})`);
+    console.log(`Rbooked running at ${config.baseUrl} (port ${config.port})`);
     console.log(`Email: ${config.smtp.host ? `SMTP ${config.smtp.host}` : 'outbox mode, see /dev/outbox'}`);
     console.log(`Billing: ${billing.stripe ? 'Stripe' : 'demo mode (no STRIPE_SECRET_KEY)'}`);
   });

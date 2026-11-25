@@ -21,14 +21,14 @@ function layout(restaurant, title, bodyHtml) {
   return `<!doctype html><html><body style="margin:0;background:#f6f3ee;font-family:Helvetica,Arial,sans-serif;color:#1f1b16">
   <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px">
   <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#fff;border-radius:12px;overflow:hidden">
-    <tr><td style="background:${accent};color:#fff;padding:20px 28px;font-size:20px;font-weight:bold">${esc(restaurant?.name || 'Tablebird')}</td></tr>
+    <tr><td style="background:${accent};color:#fff;padding:20px 28px;font-size:20px;font-weight:bold">${esc(restaurant?.name || 'Rbooked')}</td></tr>
     <tr><td style="padding:28px">
       <h1 style="font-size:22px;margin:0 0 16px">${esc(title)}</h1>
       ${bodyHtml}
     </td></tr>
     <tr><td style="padding:16px 28px;background:#faf7f2;font-size:12px;color:#7a6f63">
       ${restaurant ? `${esc(restaurant.address)}, ${esc(restaurant.city)} ${esc(restaurant.state)} ${esc(restaurant.zip)} · ${esc(restaurant.phone)}<br>` : ''}
-      Reservations powered by Tablebird
+      Reservations powered by Rbooked
     </td></tr>
   </table></td></tr></table></body></html>`;
 }
@@ -55,8 +55,8 @@ function icsFor(r, res) {
   const end = new Date(start.getTime() + res.duration_minutes * 60000);
   const f = (d) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
   return [
-    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Tablebird//EN', 'METHOD:PUBLISH', 'BEGIN:VEVENT',
-    `UID:${res.code}@tablebird`, `DTSTAMP:${f(new Date())}`, `DTSTART:${f(start)}`, `DTEND:${f(end)}`,
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Rbooked//EN', 'METHOD:PUBLISH', 'BEGIN:VEVENT',
+    `UID:${res.code}@rbooked`, `DTSTAMP:${f(new Date())}`, `DTSTART:${f(start)}`, `DTEND:${f(end)}`,
     `SUMMARY:Dinner at ${r.name} (${res.party_size})`,
     `LOCATION:${[r.address, r.city, r.state, r.zip].filter(Boolean).join(', ').replace(/,/g, '\\,')}`,
     `DESCRIPTION:Confirmation ${res.code}. Manage: ${manageUrl(res)}`,
@@ -166,9 +166,9 @@ async function sendWelcome(restaurant, user) {
   return send({
     to: user.email,
     kind: 'welcome',
-    subject: `Welcome to Tablebird, ${restaurant.name}!`,
+    subject: `Welcome to Rbooked, ${restaurant.name}!`,
     html: layout(null, 'Your 30-day free trial has started', `
-      <p>Hi ${esc(user.name)}, thanks for joining Tablebird.</p>
+      <p>Hi ${esc(user.name)}, thanks for joining Rbooked.</p>
       <p>Your free trial runs until <b>${esc(new Date(restaurant.trial_ends_at).toDateString())}</b>.
       After that it's just <b>$20/month</b>, cancel anytime.</p>
       <p>Next steps: add your tables, set your services, and paste the booking widget on your website.</p>
@@ -179,7 +179,7 @@ async function sendWelcome(restaurant, user) {
 async function sendTrialEnding(restaurant, to, daysLeft) {
   return send({
     to, kind: 'trial_ending',
-    subject: `Your Tablebird trial ends in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`,
+    subject: `Your Rbooked trial ends in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`,
     html: layout(null, 'Keep taking reservations', `
       <p>Your free trial for <b>${esc(restaurant.name)}</b> ends in ${daysLeft} day${daysLeft === 1 ? '' : 's'}.
       Add a payment method to keep your restaurant bookable for $20/month.</p>

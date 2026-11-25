@@ -1,6 +1,6 @@
-# Tablebird: restaurant reservations
+# Rbooked: restaurant reservations
 
-Tablebird is a full restaurant reservation platform made of five parts:
+Rbooked is a full restaurant reservation platform made of five parts:
 
 - **Diner website.** Guests search by **ZIP code** and see nearby restaurants with their open times. They book with name, email and phone, then change or cancel from a private link.
 - **Restaurant dashboard.** Restaurants manage reservations, tables, seats and chairs, the floor plan, services (shifts), closed dates, guests, no-shows and settings.
@@ -22,7 +22,7 @@ npm start                   # http://localhost:3000
 ```
 
 - Diner site: http://localhost:3000 (try ZIPs **10011**, **94110**, **97205**, **60607**, **78701**)
-- Restaurant login: http://localhost:3000/login with **demo@tablebird.test / demo1234**
+- Restaurant login: http://localhost:3000/login with **demo@rbooked.test / demo1234**
 - Sign up a new restaurant: http://localhost:3000/for-restaurants
 - Email outbox (dev only, when SMTP isn't configured): http://localhost:3000/dev/outbox
 - Tests: `npm test`
@@ -36,9 +36,9 @@ Requires **Node 22.13+** (for `node:sqlite` and `process.loadEnvFile`).
 | `PORT` | HTTP port (default 3000) |
 | `BASE_URL` | Public URL, e.g. `https://book.yourdomain.com`. Used in emails and widget code. |
 | `SESSION_SECRET` | Long random string (`openssl rand -hex 32`) |
-| `DATABASE_PATH` | SQLite file path (default `./data/tablebird.db`) |
+| `DATABASE_PATH` | SQLite file path (default `./data/rbooked.db`) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS` | Any SMTP provider (Postmark, SendGrid, Mailgun, Amazon SES, Gmail…). Leave `SMTP_HOST` empty for outbox mode. |
-| `EMAIL_FROM` | e.g. `Tablebird <reservations@yourdomain.com>` |
+| `EMAIL_FROM` | e.g. `Rbooked <reservations@yourdomain.com>` |
 | `STRIPE_SECRET_KEY` | `sk_test_…` first, `sk_live_…` when you launch. Empty = demo billing mode. |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` from your Stripe webhook endpoint (required in production) |
 | `STRIPE_PRICE_ID` | Optional. A recurring $20/month Price. If empty, the price is created inline at checkout. |
@@ -52,7 +52,7 @@ Requires **Node 22.13+** (for `node:sqlite` and `process.loadEnvFile`).
 
 ### Stripe setup (test mode first)
 1. In the Stripe Dashboard (test mode), copy your **secret key** into `STRIPE_SECRET_KEY`.
-2. Optionally create a Product "Tablebird for Restaurants" with a **$20.00 USD monthly** price and put its id in `STRIPE_PRICE_ID`.
+2. Optionally create a Product "Rbooked for Restaurants" with a **$20.00 USD monthly** price and put its id in `STRIPE_PRICE_ID`.
 3. Add a webhook endpoint at `https://YOUR_DOMAIN/api/stripe/webhook` for these events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`. Put its signing secret in `STRIPE_WEBHOOK_SECRET`.
    For local testing: `stripe listen --forward-to localhost:3000/api/stripe/webhook`.
 4. In **Settings → Billing → Customer portal**, enable cancel and update payment method.
@@ -74,7 +74,7 @@ How billing works:
 - Booking takes name, email, phone, occasion and special requests. A hidden honeypot field blocks simple bots.
 - The private manage link lets guests view, **change** (date, time or party size, re-checked against availability) or **cancel**.
 
-- **Pick for me**: diners choose a few quick options (food such as vegan or halal, vibe such as classy or romantic, extras, price) plus a time. Tablebird ranks nearby restaurants with a table open within 90 minutes of that time and shows a top pick with a match score, the reasons, and other good matches. Food choices are treated as must-haves. The ranking lives in `public/js/matcher.js`.
+- **Pick for me**: diners choose a few quick options (food such as vegan or halal, vibe such as classy or romantic, extras, price) plus a time. Rbooked ranks nearby restaurants with a table open within 90 minutes of that time and shows a top pick with a match score, the reasons, and other good matches. Food choices are treated as must-haves. The ranking lives in `public/js/matcher.js`.
 - **Featured restaurants** appear on the home page, near the diner's ZIP when one is known. Featured is set by the platform (`restaurants.featured`), so it can later become a paid add-on.
 
 **Restaurants (dashboard at `/admin/`)**
@@ -104,14 +104,14 @@ The smallest table that fits is assigned. Bookings are re-checked inside a datab
 
 ```html
 <!-- Inline booking form -->
-<div data-tablebird="your-restaurant-slug"></div>
+<div data-rbooked="your-restaurant-slug"></div>
 <script src="https://YOUR_DOMAIN/widget.js" async></script>
 
 <!-- Floating "Reserve a table" button -->
 <script src="https://YOUR_DOMAIN/widget.js" data-restaurant="your-restaurant-slug" data-mode="button" data-color="#c2410c" async></script>
 ```
 
-The widget is an auto-resizing iframe, so it never conflicts with the host site's CSS. Host pages can listen for `document.addEventListener('tablebird:booked', e => …)` (for example, to fire analytics).
+The widget is an auto-resizing iframe, so it never conflicts with the host site's CSS. Host pages can listen for `document.addEventListener('rbooked:booked', e => …)` (for example, to fire analytics).
 
 ## Deploying
 
@@ -119,12 +119,12 @@ Any host that runs Node 22 and gives you a **persistent disk** for the SQLite fi
 
 **Docker**
 ```bash
-docker build -t tablebird .
-docker run -d -p 3000:3000 -v tablebird-data:/data --env-file .env tablebird
+docker build -t rbooked .
+docker run -d -p 3000:3000 -v rbooked-data:/data --env-file .env rbooked
 docker exec -it <container> node src/seed.js   # optional demo data
 ```
 
-**Render / Railway**: create a Web Service from this folder with build command `npm ci` and start command `npm start`. Attach a disk mounted at `/data` and set `DATABASE_PATH=/data/tablebird.db`, `NODE_ENV=production`, `BASE_URL` and the email and Stripe variables.
+**Render / Railway**: create a Web Service from this folder with build command `npm ci` and start command `npm start`. Attach a disk mounted at `/data` and set `DATABASE_PATH=/data/rbooked.db`, `NODE_ENV=production`, `BASE_URL` and the email and Stripe variables.
 
 Put it behind HTTPS (the platforms above do this for you); session cookies are marked `Secure` when `BASE_URL` starts with `https`. Back up the SQLite file regularly, for example with a nightly copy or Litestream. To grow past one server, switch `src/db.js` to Postgres; all SQL lives in the `src/` modules.
 

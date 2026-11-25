@@ -4,12 +4,12 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/app.css">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%229%22 fill=%22%23c2410c%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2218%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Georgia%22%3ET%3C/text%3E%3C/svg%3E">
-<title>Restaurant login · Tablebird</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%229%22 fill=%22%23c2410c%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2218%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Georgia%22%3ER%3C/text%3E%3C/svg%3E">
+<title>Restaurant login · Rbooked</title>
 </head>
 <body>
 <header class="site-header"><div class="container">
-  <a class="logo" href="/"><span class="logo-mark">T</span>Tablebird</a>
+  <a class="logo" href="/"><span class="logo-mark">R</span>Rbooked</a>
   <nav class="nav"><a href="/" class="hide-sm">Find a table</a><a href="/for-restaurants">For restaurants</a><a href="/login" id="nav-login">Restaurant login</a></nav>
 </div></header>
 <main class="container" style="max-width:440px;padding:48px 16px 80px">
@@ -21,11 +21,11 @@
       <div id="l-err"></div>
       <button class="btn block lg" type="submit">Log in</button>
     </form>
-    <p class="muted small" style="margin-top:16px">New to Tablebird? <a href="/for-restaurants#signup">Start a free 30-day trial</a>.</p>
-    <p class="muted small hidden" id="demo-hint">Demo account: demo@tablebird.test / demo1234</p>
+    <p class="muted small" style="margin-top:16px">New to Rbooked? <a href="/for-restaurants#signup">Start a free 30-day trial</a>.</p>
+    <p class="muted small hidden" id="demo-hint">Demo account: demo@rbooked.test / demo1234</p>
   </div>
 </main>
-<footer class="footer"><div class="container row"><span>© Tablebird</span><span class="spacer"></span><a href="/for-restaurants">List your restaurant</a><a href="/login">Restaurant login</a></div></footer>
+<footer class="footer"><div class="container row"><span>© Rbooked</span><span class="spacer"></span><a href="/for-restaurants">List your restaurant</a><a href="/login">Restaurant login</a></div></footer>
 <script src="/js/common.js"></script>
 <script>
 TB.api('/api/auth/me').then((m) => { if (m.user) location.href = '/admin/'; if (m.demo) document.getElementById('demo-hint').classList.remove('hidden'); }).catch(() => {});
