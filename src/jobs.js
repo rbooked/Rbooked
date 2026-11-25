@@ -46,6 +46,7 @@ function autoComplete(now = new Date()) {
 }
 
 async function trialNotices(now = new Date()) {
+  if (require('./billing').billingOff()) return; // no "trial ending" emails until billing is turned on
   const rows = all(`SELECT * FROM restaurants WHERE subscription_status = 'trialing'`);
   for (const r of rows) {
     const daysLeft = Math.ceil((new Date(r.trial_ends_at) - now) / 86400000);

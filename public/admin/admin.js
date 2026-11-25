@@ -43,6 +43,7 @@
   function renderBanner() {
     const b = S.me.billing;
     const el = document.getElementById('banner');
+    if (b.billingOff) { el.innerHTML = ''; return; }
     if (b.status === 'expired' || b.status === 'canceled') {
       el.innerHTML = `<div class="alert error"><b>Your restaurant is hidden from search and the widget is paused.</b> ${b.status === 'expired' ? 'Your free trial has ended.' : 'Your subscription was cancelled.'} <a href="#billing">Subscribe for $20/month</a> to start taking reservations again.</div>`;
     } else if (b.status === 'trialing') {
@@ -107,7 +108,7 @@
       ['Tables, seats and combinations', floor.tables.filter((t) => t.active).length >= 2, '#floor'],
       ['Services and reservation length', shifts.shifts.some((s) => s.active), '#services'],
       ['Payment method ($20/month after the trial)', b.hasPaymentMethod || b.status === 'active', '#billing'],
-    ];
+    ].filter((s) => !(b.billingOff && s[2] === '#billing'));
     const done = steps.filter((s) => s[1]).length;
     const pill = document.getElementById('setup-pill');
     if (pill) { pill.hidden = done === steps.length; pill.textContent = `${done}/${steps.length}`; }
@@ -121,7 +122,7 @@
     const hadHours = !!TBMatch.parseHours(r.hours);
     const pct = Math.round((done / steps.length) * 100);
     view.innerHTML = `
-      ${S.welcome ? `<div class="card welcome"><h2 class="serif">Welcome to Rbooked, ${esc(r.name)}! 🎉</h2><p style="margin:0">Your 30-day free trial has started. First, build your restaurant profile: this is what guests see when they find you.</p></div>` : ''}
+      ${S.welcome ? `<div class="card welcome"><h2 class="serif">Welcome to Rbooked, ${esc(r.name)}! 🎉</h2><p style="margin:0">${S.me.billing.billingOff ? 'Your account is ready.' : 'Your 30-day free trial has started.'} First, build your restaurant profile: this is what guests see when they find you.</p></div>` : ''}
       <div class="card setup ${done === steps.length ? 'complete' : ''}">
         <div class="row"><h2 style="margin:0">${done === steps.length ? '✅ Your restaurant is ready for guests' : 'Get your restaurant ready'}</h2><span class="spacer"></span><b>${done} of ${steps.length}</b></div>
         <div class="progress"><i style="width:${pct}%"></i></div>
@@ -1238,6 +1239,13 @@
     const b = await api('/api/admin/billing');
     S.me.billing = b; renderBanner();
     const statusText = { trialing: `Free trial, ${b.trialDaysLeft} day${b.trialDaysLeft === 1 ? '' : 's'} left`, active: 'Active subscription', past_due: 'Payment past due', canceled: 'Cancelled', expired: 'Trial ended' }[b.status];
+    if (b.billingOff) {
+      view.innerHTML = `<div class="card" style="max-width:640px"><h2>Your plan</h2>
+        <p style="font-size:28px;margin:0" class="serif">Free</p>
+        <p>Rbooked is free while we launch. There's nothing to pay and no card needed. Your restaurant stays visible in search and the booking widget stays on.</p>
+        <p class="muted small">Later the plan will be $20/month with a 30-day free trial. We'll email you well before anything changes.</p></div>`;
+      return;
+    }
     const ok = location.hash.includes('checkout=success');
     view.innerHTML = `<div class="two-col"><div class="card">
       ${ok ? '<div class="alert ok" style="margin-bottom:14px">Thanks! Your payment method was saved. It can take a few seconds for the status to update.</div>' : ''}

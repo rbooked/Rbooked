@@ -15,9 +15,13 @@ function stripe() {
   return client;
 }
 
-/** A restaurant shows up in search and accepts bookings while trialing or paid. */
+/** On the live site with no Stripe keys yet, billing is off: everyone is free and never hidden. */
+const billingOff = () => config.isProduction && !stripe();
+
+/** A restaurant shows up in search and accepts bookings while trialing or paid (or while billing is off). */
 function isBookable(r) {
   if (!r) return false;
+  if (billingOff()) return true;
   if (r.subscription_status === 'active' || r.subscription_status === 'past_due') return true;
   if (r.subscription_status === 'trialing') return new Date(r.trial_ends_at) > new Date();
   return false;
@@ -25,16 +29,18 @@ function isBookable(r) {
 
 function billingSummary(r) {
   const trialMsLeft = new Date(r.trial_ends_at) - new Date();
-  const status = r.subscription_status === 'trialing' && trialMsLeft <= 0 ? 'expired' : r.subscription_status;
+  const off = billingOff();
+  const status = off ? 'free' : r.subscription_status === 'trialing' && trialMsLeft <= 0 ? 'expired' : r.subscription_status;
   return {
     status,
+    billingOff: off,
     bookable: isBookable(r),
     trialEndsAt: r.trial_ends_at,
     trialDaysLeft: Math.max(0, Math.ceil(trialMsLeft / 86400000)),
     hasPaymentMethod: !!r.stripe_subscription_id,
     price: '$20/month',
     stripeEnabled: !!stripe(),
-    demoMode: !stripe(),
+    demoMode: !stripe() && !off,
   };
 }
 
@@ -124,4 +130,4 @@ async function webhook(req, res) {
   res.json({ received: true });
 }
 
-module.exports = { isBookable, billingSummary, createCheckout, createPortal, webhook, stripe };
+module.exports = { billingOff, isBookable, billingSummary, createCheckout, createPortal, webhook, stripe };
