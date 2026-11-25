@@ -383,6 +383,16 @@ test('staff key can reset a restaurant and keep its logins', async () => {
   } finally { delete process.env.STAFF_API_KEY; }
 });
 
+test('owner can change the login email and password', async () => {
+  assert.strictEqual((await call('PUT', '/api/admin/account/login', { password: 'nope', email: 'x@example.com' })).status, 401);
+  const r = await call('PUT', '/api/admin/account/login', { password: 'password123', email: 'Management@QueenMamasKitchen.com', new_password: 'newpass1234' });
+  assert.strictEqual(r.status, 200, JSON.stringify(r.data)); assert.strictEqual(r.data.email, 'management@queenmamaskitchen.com');
+  assert.deepStrictEqual(r.data.changed, ['email', 'password']);
+  const back = await call('PUT', '/api/admin/account/login', { password: 'newpass1234', new_password: 'password123' });
+  assert.strictEqual(back.status, 200);
+  assert.strictEqual((await call('GET', '/api/admin/restaurant')).data.user.email, 'management@queenmamaskitchen.com');
+});
+
 test('gallery and likes: diners heart restaurants, dishes and food photos', async () => {
   await call('PUT', '/api/admin/restaurant', { name: 'Heart Cafe', cuisine: 'Cafe', description: 'Cozy cafe with pastries.' });
   const dish = (await call('POST', '/api/admin/menu', { name: 'Croissant', price: '4', section: 'Bakery' })).data;
