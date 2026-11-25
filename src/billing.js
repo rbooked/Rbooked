@@ -38,7 +38,7 @@ function billingSummary(r) {
     trialEndsAt: r.trial_ends_at,
     trialDaysLeft: Math.max(0, Math.ceil(trialMsLeft / 86400000)),
     hasPaymentMethod: !!r.stripe_subscription_id,
-    price: '$29.95/month',
+    price: '$49/month',
     stripeEnabled: !!stripe(),
     demoMode: !stripe() && !off,
   };

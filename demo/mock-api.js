@@ -168,7 +168,7 @@
     const left = new Date(r.trial_ends_at) - new Date();
     return {
       status: r.subscription_status === 'trialing' && left <= 0 ? 'expired' : r.subscription_status, bookable: isBookable(r), trialEndsAt: r.trial_ends_at,
-      trialDaysLeft: Math.max(0, Math.ceil(left / 86400000)), hasPaymentMethod: !!r.stripe_subscription_id, price: '$29.95/month', stripeEnabled: false, demoMode: true,
+      trialDaysLeft: Math.max(0, Math.ceil(left / 86400000)), hasPaymentMethod: !!r.stripe_subscription_id, price: '$49/month', stripeEnabled: false, demoMode: true,
     };
   }
   const memberIds = (c) => String(c.table_ids || '').split(',').map(Number).filter(Boolean);
@@ -451,7 +451,7 @@
     const u = { id: nextId(), restaurant_id: r.id, name: b.owner_name, email: em, password: b.password };
     db.users.push(u); db.session = u.id;
     db.emails.push({ id: nextId(), restaurant_id: r.id, to_addr: em, kind: 'welcome', status: 'outbox', created_at: nowSql(), subject: `Welcome to Rbooked, ${r.name}!`,
-      html: emailHtml(null, 'Your 14-day free trial has started', `<p>Hi ${esc(u.name)}, thanks for joining Rbooked.</p><p>Your free trial runs until <b>${new Date(r.trial_ends_at).toDateString()}</b>. After that it's just <b>$29.95/month</b>, cancel anytime.</p>`) });
+      html: emailHtml(null, 'Your 14-day free trial has started', `<p>Hi ${esc(u.name)}, thanks for joining Rbooked.</p><p>Your free trial runs until <b>${new Date(r.trial_ends_at).toDateString()}</b>. After that it's just <b>$49/month</b>, cancel anytime.</p>`) });
     return { ok: true, slug: r.slug };
   });
   on('POST', '/api/auth/login', (q, b) => {

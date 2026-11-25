@@ -6,7 +6,7 @@ Rbooked is a full restaurant reservation platform made of five parts:
 - **Restaurant dashboard.** Restaurants manage reservations, tables, seats and chairs, the floor plan, services (shifts), closed dates, guests, no-shows and settings.
 - **Embeddable widget.** Restaurants add booking to their own website with one line of code, either as an inline form or a floating "Reserve" button.
 - **Emails.** Confirmations come with a calendar invite. There are also reminders, change notices, cancellations and no-show follow-ups, and staff are alerted about new bookings and cancellations.
-- **Subscriptions.** Each restaurant gets **14 days free, then $29.95/month** through Stripe Checkout and the Billing Portal.
+- **Subscriptions.** Each restaurant gets **14 days free, then $49/month** through Stripe Checkout and the Billing Portal.
 
 Stack: Node.js 22, Express, SQLite (the built-in `node:sqlite`, so there is nothing native to compile), Nodemailer and Stripe. The frontend is plain HTML, CSS and JS with no build step.
 
@@ -41,7 +41,7 @@ Requires **Node 22.13+** (for `node:sqlite` and `process.loadEnvFile`).
 | `EMAIL_FROM` | e.g. `Rbooked <reservations@yourdomain.com>` |
 | `STRIPE_SECRET_KEY` | `sk_test_…` first, `sk_live_…` when you launch. Empty = demo billing mode. |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` from your Stripe webhook endpoint (required in production) |
-| `STRIPE_PRICE_ID` | Optional. A recurring $29.95/month Price. If empty, the price is created inline at checkout. |
+| `STRIPE_PRICE_ID` | Optional. A recurring $49/month Price. If empty, the price is created inline at checkout. |
 | `JOB_INTERVAL_SECONDS` | How often reminders and no-show jobs run (default 300) |
 | `NODE_ENV` | Set to `production` in production. This turns off `/dev/outbox`, the demo hint and demo billing. |
 
@@ -52,7 +52,7 @@ Requires **Node 22.13+** (for `node:sqlite` and `process.loadEnvFile`).
 
 ### Stripe setup (test mode first)
 1. In the Stripe Dashboard (test mode), copy your **secret key** into `STRIPE_SECRET_KEY`.
-2. Optionally create a Product "Rbooked for Restaurants" with a **$29.95 USD monthly** price and put its id in `STRIPE_PRICE_ID`.
+2. Optionally create a Product "Rbooked for Restaurants" with a **$49 USD monthly** price and put its id in `STRIPE_PRICE_ID`.
 3. Add a webhook endpoint at `https://YOUR_DOMAIN/api/stripe/webhook` for these events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`. Put its signing secret in `STRIPE_WEBHOOK_SECRET`.
    For local testing: `stripe listen --forward-to localhost:3000/api/stripe/webhook`.
 4. In **Settings → Billing → Customer portal**, enable cancel and update payment method.
@@ -60,7 +60,7 @@ Requires **Node 22.13+** (for `node:sqlite` and `process.loadEnvFile`).
 
 How billing works:
 - Signup creates the restaurant in `trialing` status with `trial_ends_at` = now + 14 days. No card is required.
-- "Add payment method" opens Stripe Checkout for a $29.95/month subscription. The remaining trial carries over (`trial_end`), so the first charge happens when the 14 days are up.
+- "Add payment method" opens Stripe Checkout for a $49/month subscription. The remaining trial carries over (`trial_end`), so the first charge happens when the 14 days are up.
 - Webhooks keep `subscription_status` in sync: `active`, `past_due` or `canceled`.
 - If the trial ends without a subscription, or the subscription is cancelled, the restaurant is **hidden from search and the widget stops taking bookings**. All data is kept, and subscribing turns everything back on.
 - Owners get "trial ending" emails 7 days and 1 day before the trial ends.

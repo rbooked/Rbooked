@@ -5,7 +5,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/app.css">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%229%22 fill=%22%23c2410c%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2218%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Georgia%22%3ER%3C/text%3E%3C/svg%3E">
-<title>Rbooked for restaurants · 14 days free, then $29.95/month</title>
+<title>Rbooked for restaurants · 14 days free, then $49/month</title>
 </head>
 <body>
 <header class="site-header"><div class="container">
@@ -14,9 +14,9 @@
 </div></header>
 <section class="hero" style="padding-bottom:64px">
   <div class="container">
-    <h1>Fill more tables. Pay $29.95 a month. That's it.</h1>
+    <h1>Fill more tables. Pay $49 a month. That's it.</h1>
     <p>Online reservations, a booking widget for your own website, floor plan and table management, and automatic guest emails. Try everything free for 14 days.</p>
-    <div class="perks"><span>✓ 14 days free</span><span>✓ Then $29.95/month</span><span>✓ Cancel anytime</span><span>✓ No credit card to sign up</span></div>
+    <div class="perks"><span>✓ 14 days free</span><span>✓ Then $49/month</span><span>✓ Cancel anytime</span><span>✓ No credit card to sign up</span></div>
     <a class="btn lg" href="#signup" style="margin-top:18px;background:#fff;color:#7c2d12">Start your free trial</a>
   </div>
 </section>
@@ -31,6 +31,63 @@
       <div class="card feature"><h3>No-show control</h3><p class="muted">Track no-shows per guest, mark them in one tap, or let Rbooked do it after a grace period.</p></div>
       <div class="card feature"><h3>Phone & walk-ins</h3><p class="muted">Take phone bookings and seat walk-ins from the same dashboard, with guest phone numbers on file.</p></div>
       <div class="card feature"><h3>Guest history</h3><p class="muted">See each guest's visits, cancellations and no-shows before they arrive.</p></div>
+    </div>
+  </section>
+
+  <section class="section pc" id="pricing" aria-labelledby="pc-title">
+    <div class="pc-head">
+      <h2 class="serif pc-title" id="pc-title">More reservations. Less overhead.</h2>
+      <p class="pc-lede">Running a restaurant is expensive enough. Your reservation software shouldn't be.</p>
+      <p class="muted">Manage your reservations, accept online bookings, and introduce your restaurant to new diners for one affordable monthly subscription.</p>
+      <div class="pc-price"><span class="pc-just">Just</span> <b class="serif" id="pc-price">$49</b><span class="pc-per">/month</span></div>
+      <p class="pc-terms">No per-guest fees. No booking commissions. No long-term commitment.</p>
+    </div>
+
+    <h3 class="serif pc-h">See how much you could save</h3>
+    <p class="pc-banner"><b>Save up to <span data-count id="pc-pct">83</span>% compared with selected leading reservation platforms' starting subscription prices.</b></p>
+    <div class="pc-table-wrap card">
+      <table class="pc-table">
+        <thead><tr><th scope="col">Platform</th><th scope="col" class="num">Starting monthly price</th><th scope="col" class="num">Annual subscription cost</th><th scope="col">Additional fees</th></tr></thead>
+        <tbody id="pc-rows"></tbody>
+      </table>
+    </div>
+    <p class="pc-fine">Pricing comparison based on publicly advertised U.S. subscription prices reviewed <span id="pc-reviewed">November 25, 2026</span>. Plans differ in features, integrations, network reach, and services. Additional fees and contractual terms may apply. Annual costs are calculated using 12 monthly payments. Competitor pricing is subject to change. RBooked is not affiliated with the listed competitors.</p>
+    <p class="pc-fine">Pricing sources: <span id="pc-sources"></span></p>
+
+    <h3 class="serif pc-h">Keep more of what you earn</h3>
+    <div class="pc-cards" id="pc-cards"></div>
+    <p class="pc-fine center">These savings compare subscription prices alone, excluding additional fees.</p>
+
+    <div class="pc-split">
+      <div class="card pc-list">
+        <h3 class="serif">Your restaurant. Your reservations. Your control.</h3>
+        <p class="muted">For only <b class="pc-brand">$49/month</b>, enjoy:</p>
+        <ul class="pc-checks">
+          <li>Unlimited reservations</li><li>Restaurant management dashboard</li><li>Dedicated online booking page</li>
+          <li>Customizable availability and operating hours</li><li>Direct booking link for your website and social media</li>
+          <li>Restaurant profile on the RBooked discovery platform</li><li>Exposure through the “Pick for me” restaurant discovery feature</li>
+          <li>Zero per-guest fees</li><li>Zero reservation commissions</li><li>Month-to-month subscription</li><li>Cancel anytime</li>
+        </ul>
+      </div>
+      <div class="card pc-calc">
+        <h3 class="serif">Savings calculator</h3>
+        <label for="pc-spend" class="muted">What do you pay for reservation software each month?</label>
+        <div class="pc-input"><span>$</span><input id="pc-spend" inputmode="decimal" value="149" aria-describedby="pc-calc-out"></div>
+        <div id="pc-calc-out" class="pc-calc-out" aria-live="polite"></div>
+        <p class="pc-fine">Based on RBooked's $49/month subscription. Doesn't include per-guest or other fees you may pay today.</p>
+      </div>
+    </div>
+
+    <div class="pc-size">
+      <h3 class="serif pc-h">Built for restaurants of every size</h3>
+      <p class="muted">Whether you're a neighborhood café, family-owned restaurant, upscale dining destination, or growing restaurant group, RBooked makes online reservations accessible without expensive subscription fees.</p>
+    </div>
+
+    <div class="pc-cta">
+      <h3 class="serif">Great hospitality shouldn't come with expensive software.</h3>
+      <p>Start accepting online reservations today.</p>
+      <p class="pc-cta-price"><b>$49/month</b> — simple, predictable pricing.</p>
+      <div class="pc-btns"><a class="btn lg pc-go" href="#signup">Start Your 14-Day Free Trial</a><a class="btn lg pc-ghost" href="/">Explore RBooked</a></div>
     </div>
   </section>
 
@@ -65,12 +122,12 @@
           </div>
           <div id="s-err"></div>
           <button class="btn lg block" type="submit">Start 14-day free trial</button>
-          <p class="muted small" style="margin-top:10px">14 days free, then $29.95/month. Cancel anytime. No credit card required to sign up.</p>
+          <p class="muted small" style="margin-top:10px">14 days free, then $49/month. Cancel anytime. No credit card required to sign up.</p>
         </form>
       </div>
       <div class="card price-card">
         <div class="muted">One simple plan</div>
-        <div class="price">$29.95<span style="font-size:20px" class="muted">/month</span></div>
+        <div class="price">$49<span style="font-size:20px" class="muted">/month</span></div>
         <p><b>First 14 days free.</b><br><span class="muted small">No credit card required to sign up. Cancel anytime.</span></p>
         <ul style="text-align:left;line-height:2">
           <li>Unlimited reservations & covers</li><li>Listing in ZIP code search</li><li>Website booking widget</li>
@@ -84,6 +141,7 @@
 <script src="/js/common.js"></script>
 <script src="/js/places.js"></script>
 <script src="/js/site-apply.js"></script>
+<script src="/js/pricing.js"></script>
 <script>
 (function () {
   document.getElementById('s-cuisine').insertAdjacentHTML('beforeend', TBPlaces.CUISINES.map((c) => `<option>${TB.esc(c)}</option>`).join(''));
@@ -145,6 +203,53 @@
     }
   };
 })();
+</script>
+<script>
+// ----- Pricing comparison (numbers come from /js/pricing.js) -----
+(function () {
+  const P = window.TBPricing; if (!P) return;
+  const esc = TB.esc;
+  const usd = (n) => `$${Math.round(n).toLocaleString('en-US')}`;
+  const usd2 = (n) => `$${n.toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
+  const me = P.rbooked;
+  document.getElementById('pc-price').textContent = usd(me.monthly);
+  document.getElementById('pc-pct').textContent = P.maxSavingPct();
+  document.getElementById('pc-reviewed').textContent = P.reviewed;
+  const row = (c, mine) => `<tr class="${mine ? 'pc-me' : ''}"><th scope="row">${esc(c.name)}${mine ? ' <span class="pc-badge">You save</span>' : ''}</th>
+    <td class="num" data-label="Starting monthly price">${c.monthly ? usd(c.monthly) : 'Custom pricing'}</td>
+    <td class="num" data-label="Annual subscription cost">${c.monthly ? usd(c.monthly * 12) : 'Request quote'}</td>
+    <td data-label="Additional fees">${esc(c.fees)}</td></tr>`;
+  document.getElementById('pc-rows').innerHTML = row(me, true) + P.competitors.map((c) => row(c, false)).join('');
+  document.getElementById('pc-sources').innerHTML = P.sources.map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noopener nofollow">${esc(s.name)}</a>`).join(' · ');
+  document.getElementById('pc-cards').innerHTML = P.competitors.filter((c) => c.card && c.monthly).map((c) => `<div class="card pc-save">
+    <div class="pc-save-n serif"><span data-count="${P.yearlySaving(c.monthly)}">${usd(P.yearlySaving(c.monthly))}</span><small>/year</small></div>
+    <div class="muted">compared with ${esc(c.name)}</div></div>`).join('');
+
+  // Savings calculator
+  const spend = document.getElementById('pc-spend'); const outEl = document.getElementById('pc-calc-out');
+  const calc = () => {
+    const n = Number(String(spend.value).replace(/[^0-9.]/g, ''));
+    if (!n) { outEl.innerHTML = '<p class="muted">Enter your current monthly cost to see your savings.</p>'; return; }
+    const m = n - me.monthly;
+    outEl.innerHTML = m > 0
+      ? `<div class="pc-calc-grid"><div><span class="muted small">Monthly savings</span><b class="serif">${usd2(Math.round(m * 100) / 100)}</b></div><div><span class="muted small">Annual savings</span><b class="serif">${usd2(Math.round(m * 1200) / 100)}</b></div></div>`
+      : `<p class="muted">You already pay ${usd2(n)} or less a month. RBooked is ${usd(me.monthly)}/month with no per-guest fees or commissions.</p>`;
+  };
+  spend.addEventListener('input', calc); calc();
+
+  // Savings amounts count up once when they scroll into view.
+  const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const els = [...document.querySelectorAll('.pc [data-count]')];
+  if (still || !('IntersectionObserver' in window)) return;
+  const io = new IntersectionObserver((entries) => entries.forEach((en) => {
+    if (!en.isIntersecting) return; io.unobserve(en.target);
+    const el = en.target; const end = Number(el.dataset.count || el.textContent); const money = el.textContent.startsWith('$');
+    const t0 = performance.now(); const dur = 900;
+    const step = (t) => { const k = Math.min(1, (t - t0) / dur); const v = end * (1 - Math.pow(1 - k, 3)); el.textContent = money ? usd(v) : Math.round(v); if (k < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  }), { threshold: 0.4 });
+  els.forEach((el) => io.observe(el));
+}());
 </script>
 </body>
 </html>

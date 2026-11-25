@@ -316,3 +316,71 @@ table.data tr:hover td { background: #fcfaf7; }
 
 /* Dish options (sizes, add-ons) */
 .dish-opts { margin-top: 4px; display: grid; gap: 2px; }
+
+/* ---------- For restaurants: pricing comparison ---------- */
+.pc { max-width: 1040px; margin: 0 auto; }
+.pc-head { text-align: center; max-width: 680px; margin: 0 auto 40px; }
+.pc-title { font-size: clamp(30px, 5vw, 44px); }
+.pc-lede { font-size: 19px; margin: 0 0 8px; }
+.pc-price { margin: 22px 0 6px; display: flex; align-items: baseline; justify-content: center; gap: 6px; }
+.pc-price b { font-size: clamp(56px, 10vw, 80px); color: var(--brand); line-height: 1; }
+.pc-just, .pc-per { font-size: 20px; color: var(--muted); }
+.pc-terms { font-weight: 600; margin: 0; }
+.pc-h { font-size: clamp(22px, 3.4vw, 28px); text-align: center; margin: 48px 0 14px; }
+.pc-banner { text-align: center; background: var(--brand-soft); color: #7c2d12; border-radius: var(--radius); padding: 14px 18px; margin: 0 auto 16px; max-width: 760px; }
+.pc-table-wrap { padding: 0; overflow: hidden; }
+.pc-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.pc-table th, .pc-table td { padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--line); }
+.pc-table thead th { font-size: 13px; color: var(--muted); font-weight: 600; background: var(--surface-2); }
+.pc-table tbody tr:last-child th, .pc-table tbody tr:last-child td { border-bottom: none; }
+.pc-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.pc-table tbody th { font-weight: 600; }
+.pc-me { background: var(--brand); color: #fff; }
+.pc-me th, .pc-me td { border-bottom-color: transparent; font-weight: 700; }
+.pc-me td.num { font-size: 18px; }
+.pc-badge { display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; background: #fff; color: var(--brand); border-radius: 999px; padding: 2px 8px; margin-left: 6px; vertical-align: 2px; }
+.pc-fine { font-size: 12.5px; color: var(--muted); margin: 10px 0 0; }
+.pc-fine.center { text-align: center; }
+.pc-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.pc-save { text-align: center; padding: 28px 18px; border-top: 4px solid var(--brand); }
+.pc-save-n { font-size: clamp(34px, 5vw, 46px); color: var(--brand); line-height: 1.1; font-variant-numeric: tabular-nums; }
+.pc-save-n small { font-size: 17px; color: var(--muted); font-family: var(--font); font-weight: 500; margin-left: 2px; }
+.pc-split { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; margin-top: 48px; align-items: start; }
+.pc-list h3, .pc-calc h3 { font-size: 22px; }
+.pc-brand { color: var(--brand); }
+.pc-checks { list-style: none; padding: 0; margin: 10px 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
+.pc-checks li { position: relative; padding-left: 26px; }
+.pc-checks li::before { content: '✓'; position: absolute; left: 0; top: 0; width: 18px; height: 18px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); font-size: 12px; font-weight: 700; display: grid; place-items: center; margin-top: 3px; }
+.pc-input { margin: 10px 0 14px; }
+.pc-input input { font-size: 22px; font-weight: 600; }
+.pc-calc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.pc-calc-grid > div { background: var(--brand-soft); border-radius: 10px; padding: 14px; display: grid; }
+.pc-calc-grid b { font-size: 30px; color: #7c2d12; font-variant-numeric: tabular-nums; }
+.pc-size { max-width: 680px; margin: 0 auto; text-align: center; }
+.pc-cta { margin-top: 48px; text-align: center; background: linear-gradient(135deg, #c2410c, #9a3412); color: #fff; border-radius: 18px; padding: 44px 24px; }
+.pc-cta h3 { font-size: clamp(24px, 4vw, 32px); max-width: 620px; margin: 0 auto 8px; }
+.pc-cta p { margin: 0 0 6px; opacity: .95; }
+.pc-cta-price { font-size: 18px; }
+.pc-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 20px; }
+.pc-go { background: #fff; color: #7c2d12; }
+.pc-ghost { background: transparent; color: #fff; border: 1.5px solid rgba(255,255,255,.7); }
+@media (max-width: 820px) {
+  .pc-split { grid-template-columns: 1fr; }
+  .pc-cards { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .pc-checks { grid-template-columns: 1fr; }
+  .pc-table thead { display: none; }
+  .pc-table, .pc-table tbody, .pc-table tr, .pc-table th, .pc-table td { display: block; width: 100%; }
+  .pc-table tr { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .pc-table th, .pc-table td { border: none; padding: 3px 0; }
+  .pc-table tbody th { font-size: 17px; margin-bottom: 4px; }
+  .pc-table td { display: flex; justify-content: space-between; gap: 12px; text-align: right; }
+  .pc-table td::before { content: attr(data-label); color: var(--muted); font-weight: 500; text-align: left; }
+  .pc-me td::before { color: rgba(255,255,255,.85); }
+  .pc-input input { font-size: 22px; }
+  .pc-btns .btn { width: 100%; }
+}
+.pc-input { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 10px; background: #fff; padding-left: 12px; }
+.pc-input span { color: var(--muted); font-size: 22px; } .pc-input input { border: 0; box-shadow: none; outline: none; width: 100%; padding: 10px; background: transparent; }
+.pc-input:focus-within { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }

@@ -46,9 +46,9 @@
     const el = document.getElementById('banner');
     if (b.billingOff) { el.innerHTML = ''; return; }
     if (b.status === 'expired' || b.status === 'canceled') {
-      el.innerHTML = `<div class="alert error"><b>Your restaurant is hidden from search and the widget is paused.</b> ${b.status === 'expired' ? 'Your free trial has ended.' : 'Your subscription was cancelled.'} <a href="#billing">Subscribe for $29.95/month</a> to start taking reservations again.</div>`;
+      el.innerHTML = `<div class="alert error"><b>Your restaurant is hidden from search and the widget is paused.</b> ${b.status === 'expired' ? 'Your free trial has ended.' : 'Your subscription was cancelled.'} <a href="#billing">Subscribe for $49/month</a> to start taking reservations again.</div>`;
     } else if (b.status === 'trialing') {
-      el.innerHTML = `<div class="alert">Free trial: <b>${b.trialDaysLeft} day${b.trialDaysLeft === 1 ? '' : 's'} left</b>. <a href="#billing">Add a payment method</a> to keep bookings flowing after your trial ($29.95/month).</div>`;
+      el.innerHTML = `<div class="alert">Free trial: <b>${b.trialDaysLeft} day${b.trialDaysLeft === 1 ? '' : 's'} left</b>. <a href="#billing">Add a payment method</a> to keep bookings flowing after your trial ($49/month).</div>`;
     } else if (b.status === 'past_due') {
       el.innerHTML = '<div class="alert error">Your last payment failed. <a href="#billing">Update your card</a> to avoid interruption.</div>';
     } else el.innerHTML = '';
@@ -109,7 +109,7 @@
       ['Food photos in your gallery (3 or more)', gallery.length >= 3, '#gallery'],
       ['Tables, seats and combinations', floor.tables.filter((t) => t.active).length >= 2, '#floor'],
       ['Services and reservation length', shifts.shifts.some((s) => s.active), '#services'],
-      ['Payment method ($29.95/month after the trial)', b.hasPaymentMethod || b.status === 'active', '#billing'],
+      ['Payment method ($49/month after the trial)', b.hasPaymentMethod || b.status === 'active', '#billing'],
     ].filter((s) => !(b.billingOff && s[2] === '#billing'));
     const done = steps.filter((s) => s[1]).length;
     const pill = document.getElementById('setup-pill');
@@ -1504,24 +1504,24 @@
       view.innerHTML = `<div class="card" style="max-width:640px"><h2>Your plan</h2>
         <p style="font-size:28px;margin:0" class="serif">Free</p>
         <p>Rbooked is free while we launch. There's nothing to pay and no card needed. Your restaurant stays visible in search and the booking widget stays on.</p>
-        <p class="muted small">Later the plan will be $29.95/month with a 14-day free trial. We'll email you well before anything changes.</p></div>`;
+        <p class="muted small">Later the plan will be $49/month with a 14-day free trial. We'll email you well before anything changes.</p></div>`;
       return;
     }
     const ok = location.hash.includes('checkout=success');
     view.innerHTML = `<div class="two-col"><div class="card">
       ${ok ? '<div class="alert ok" style="margin-bottom:14px">Thanks! Your payment method was saved. It can take a few seconds for the status to update.</div>' : ''}
       <h2>Your plan</h2>
-      <p style="font-size:28px;margin:0" class="serif">$29.95<span class="muted" style="font-size:16px">/month</span></p>
+      <p style="font-size:28px;margin:0" class="serif">$49<span class="muted" style="font-size:16px">/month</span></p>
       <p>Status: <b>${statusText}</b>${b.status === 'trialing' ? `<br><span class="muted small">Trial ends ${new Date(b.trialEndsAt).toLocaleDateString()}. You won't be charged before then.</span>` : ''}</p>
       <div class="row">
-        ${b.hasPaymentMethod ? '<button class="btn" id="portal">Manage billing & invoices</button>' : `<button class="btn" id="checkout">${b.status === 'trialing' ? 'Add payment method' : 'Subscribe for $29.95/month'}</button>`}
+        ${b.hasPaymentMethod ? '<button class="btn" id="portal">Manage billing & invoices</button>' : `<button class="btn" id="checkout">${b.status === 'trialing' ? 'Add payment method' : 'Subscribe for $49/month'}</button>`}
       </div>
       ${b.demoMode ? `<div class="alert" style="margin-top:18px"><b>Demo mode:</b> Stripe keys aren't configured, so no real payments happen. Use these buttons to try each state.
         <div class="row" style="margin-top:10px"><button class="btn secondary sm" data-sim="active">Simulate paid</button><button class="btn secondary sm" data-sim="expired">Simulate trial ended</button></div></div>` : ''}
     </div>
     <div class="card"><h2>How billing works</h2><ul style="line-height:1.9">
       <li>Every restaurant gets <b>14 days free</b>. No credit card required to sign up.</li>
-      <li>Add a card any time during the trial. Your first $29.95 charge happens when the trial ends.</li>
+      <li>Add a card any time during the trial. Your first $49 charge happens when the trial ends.</li>
       <li>If the trial ends without a card, you're hidden from search and the widget pauses. Your data is kept.</li>
       <li>Cancel any time from “Manage billing”.</li></ul></div></div>`;
     const go = async (path) => { try { const { url } = await api(path, { body: {} }); location.href = url; } catch (e) { fail(e); } };
