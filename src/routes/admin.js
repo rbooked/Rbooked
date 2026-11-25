@@ -518,9 +518,16 @@ router.delete('/menu/:id', wrap(async (req, res) => {
 // ---------- Photo & logo upload ----------
 router.post('/images', wrap(async (req, res) => {
   const kind = ['logo', 'gallery'].includes(req.body.kind) ? req.body.kind : 'cover';
-  const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(req.body.data || ''));
-  if (!m) throw new BookingError('Upload a JPG, PNG or WebP image.');
-  const buf = Buffer.from(m[2], 'base64');
+  let m; let buf;
+  if (req.body.url && !req.body.data) {
+    // A photo from the restaurant's own website (website import).
+    try { const a = await require('../site-import').fetchAsset(req.body.url, 'image'); m = [null, a.type]; buf = Buffer.from(a.buf); }
+    catch (e) { throw new BookingError(`Couldn’t get that photo. ${e.message || ''}`.trim()); }
+  } else {
+    m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(req.body.data || ''));
+    if (!m) throw new BookingError('Upload a JPG, PNG or WebP image.');
+    buf = Buffer.from(m[2], 'base64');
+  }
   if (buf.length > 4 * 1024 * 1024) throw new BookingError('That image is too large (4 MB max).');
   const rid = req.restaurant.id;
   if (kind === 'gallery') {
@@ -538,6 +545,15 @@ router.post('/images', wrap(async (req, res) => {
   run(`UPDATE restaurants SET ${col} = ? WHERE id = ?`, url, rid);
   run('DELETE FROM images WHERE restaurant_id = ? AND kind = ? AND id != ?', rid, kind, info.lastInsertRowid);
   res.status(201).json({ url, kind });
+}));
+
+// A PDF menu linked from the restaurant's website, passed to the browser's PDF reader (website import).
+router.get('/fetch-pdf', wrap(async (req, res) => {
+  let a;
+  try { a = await require('../site-import').fetchAsset(String(req.query.url || ''), 'pdf'); }
+  catch (e) { throw new BookingError(`Couldn’t get that menu. ${e.message || ''}`.trim()); }
+  res.set({ 'Content-Type': 'application/pdf', 'Cache-Control': 'no-store' });
+  res.send(Buffer.from(a.buf));
 }));
 
 // ---------- Gallery (food photos diners can like) ----------

@@ -58,7 +58,7 @@
     reservations: ['Reservations', viewReservations], floor: ['Floor plan & tables', viewFloor], services: ['Services & hours', viewServices],
     guests: ['Address book', viewGuests], widget: ['Website widget', viewWidget], settings: ['Settings', viewSettings],
     billing: ['Billing', viewBilling], emails: ['Email log', viewEmails], welcome: ['Welcome', viewWelcome], platform: ['Featured restaurants', viewPlatform],
-    profile: ['Restaurant profile', viewProfile], 'menu-items': ['Menu', viewMenu], gallery: ['Gallery', viewGallery],
+    profile: ['Restaurant profile', viewProfile], 'menu-items': ['Menu', viewMenu], gallery: ['Gallery', viewGallery], 'menu-import': ['Import your menu', viewMenuHandoff],
   };
   function route() {
     const key = (location.hash.slice(1).split('?')[0]) || 'reservations';
@@ -125,9 +125,9 @@
     const pct = Math.round((done / steps.length) * 100);
     view.innerHTML = `
       ${S.welcome ? `<div class="card welcome"><h2 class="serif">Welcome to Rbooked${r.name && r.name !== 'My restaurant' ? `, ${esc(r.name)}` : ''}! 🎉</h2><p style="margin:0">${S.me.billing.billingOff ? 'Your account is ready.' : 'Your 14-day free trial has started.'} Start by finding your restaurant below, then add photos and your menu. This is what guests see when they find you.</p></div>` : ''}
-      <div class="card find-card"><div class="row"><b>🔎 Find your restaurant online</b><span class="muted small">Fill in your address, phone, website, hours and cuisine in one step.</span></div>
-        <form class="find-row" id="pf-form" style="margin-top:10px"><input id="pf-q" placeholder="Restaurant name" value="${r.name === 'My restaurant' ? '' : esc(r.name)}" aria-label="Restaurant name"><input id="pf-near" placeholder="City or ZIP" value="${esc(r.city || r.zip || '')}" aria-label="City or ZIP"><button class="btn secondary" type="submit">Search</button></form>
-        <div id="pf-results" class="find-results"></div></div>
+      <div class="card find-card"><div class="row"><b>⚡ Import from your website</b><span class="muted small">Optional. Pull in your details, hours, photos and menu, then check them. Or fill everything in by hand below.</span></div>
+        <form class="find-row site-row" id="pf-form" style="margin-top:10px"><input id="pf-url" type="text" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="www.yourrestaurant.com" value="${esc(r.website_url || '')}" aria-label="Your restaurant's website"><button class="btn secondary" type="submit">Import</button></form>
+        <div id="pf-results" class="find-results" role="status"></div></div>
       <div class="card setup ${done === steps.length ? 'complete' : ''}">
         <div class="row"><h2 style="margin:0">${done === steps.length ? '✅ Your restaurant is ready for guests' : 'Get your restaurant ready'}</h2><span class="spacer"></span><b>${done} of ${steps.length}</b></div>
         <div class="progress"><i style="width:${pct}%"></i></div>
@@ -174,32 +174,33 @@
       </div>
       <div class="savebar"><button class="btn lg" type="submit">Save profile</button><span class="muted small">Changes show on your guest page right away.</span></div>
       </form>`;
-    // Find your restaurant (OpenStreetMap): pick a result to fill the profile.
+    // Import from your website: read it, let the owner untick anything, then save.
     document.getElementById('pf-form').onsubmit = async (e) => {
       e.preventDefault();
-      const box = document.getElementById('pf-results');
-      const q = document.getElementById('pf-q').value.trim(); const near = document.getElementById('pf-near').value.trim();
-      if (q.length < 2) { box.innerHTML = '<p class="muted small">Type your restaurant name.</p>'; return; }
-      box.innerHTML = '<p class="muted small">Searching…</p>';
+      const box = document.getElementById('pf-results'); const btn = e.target.querySelector('button');
+      const url = document.getElementById('pf-url').value.trim();
+      if (!url) { box.innerHTML = '<p class="muted small">Paste your website address.</p>'; return; }
+      btn.disabled = true; box.innerHTML = '<p class="muted small">Reading your website… this takes a few seconds.</p>';
       try {
-        const { results } = await api(`/api/public/place-search?${new URLSearchParams({ q, near })}`);
-        if (!results.length) { box.innerHTML = '<p class="muted small">No match found. Try adding your city, or fill in the details below.</p>'; return; }
-        box.innerHTML = results.map((p, i) => `<button type="button" class="find-item" data-i="${i}"><b>${esc(p.name)}</b><span class="muted small">${esc([p.address, p.city, p.state].filter(Boolean).join(', ') || p.label)}</span></button>`).join('');
-        box.querySelectorAll('.find-item').forEach((b) => {
-          b.onclick = async () => {
-            const p = results[Number(b.dataset.i)];
-            const body = { name: p.name };
-            for (const k of ['phone', 'address', 'city', 'state', 'zip', 'cuisine', 'website_url']) if (p[k]) body[k] = p[k];
-            if (p.hours) body.hours = p.hours;
-            try {
-              await api('/api/admin/restaurant', { method: 'PUT', body });
-              S.me = await api('/api/admin/restaurant'); document.getElementById('rest-name').textContent = S.me.restaurant.name;
-              TB.toast(`Filled in from ${p.name}. Check the details and save.`); viewProfile().catch(fail);
-            } catch (err) { fail(err); }
-          };
-        });
-      } catch (err) { box.innerHTML = `<p class="muted small">${esc(err.message)}</p>`; }
+        const f = await TBSite.read(url);
+        if (!f.found.length) { box.innerHTML = '<div class="alert">We couldn’t find much on that site. Fill in your profile below instead.</div>'; return; }
+        box.innerHTML = `<div class="alert ok">Found ${esc(f.found.join(', '))}. Untick anything you don't want, then save.</div>${TBSite.choicesHtml(f, true)}
+          <div class="row" style="margin-top:10px"><button class="btn" type="button" id="pf-apply">Use what's ticked</button><button class="btn ghost" type="button" id="pf-skip">Cancel</button><span class="muted small" id="pf-status"></span></div>`;
+        TBSite.bindChoices(box);
+        document.getElementById('pf-skip').onclick = () => { box.innerHTML = ''; };
+        document.getElementById('pf-apply').onclick = async (ev) => {
+          ev.target.disabled = true;
+          try {
+            const res = await TBSite.apply(f, TBSite.picks(box), (t) => { document.getElementById('pf-status').textContent = t; });
+            S.me = await api('/api/admin/restaurant'); document.getElementById('rest-name').textContent = S.me.restaurant.name;
+            if (res.errors.length) TB.toast(`Saved. ${res.errors.length} photo${res.errors.length > 1 ? 's' : ''} couldn't be copied.`, true); else TB.toast('Saved from your website');
+            if (res.menuItems || res.menuPdf) { history.replaceState(null, '', '#menu-items'); viewMenuImport((await api('/api/admin/menu')).length, res.menuItems ? { items: res.menuItems } : { pdf: res.menuPdf }); return; }
+            viewProfile().catch(fail);
+          } catch (err) { ev.target.disabled = false; fail(err); }
+        };
+      } catch (err) { box.innerHTML = `<div class="alert error">${esc(err.message)}</div>`; } finally { btn.disabled = false; }
     };
+
     S.welcome = false;
     view.querySelectorAll('[data-jump]').forEach((a) => { a.onclick = (e) => { const el = document.getElementById(a.dataset.jump); if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1200); } }; });
     view.querySelectorAll('.h-row [data-open]').forEach((c) => { c.onchange = () => c.closest('.h-row').classList.toggle('closed', !c.checked); });
@@ -401,7 +402,14 @@
     throw new Error('Pick a PDF, a photo, an Excel/CSV file, or paste your menu as text.');
   }
 
-  function viewMenuImport(existing) {
+  // Signup handed us a menu from the restaurant's website.
+  async function viewMenuHandoff() {
+    let preset = null; try { preset = JSON.parse(sessionStorage.getItem('rb_site_menu') || 'null'); sessionStorage.removeItem('rb_site_menu'); } catch { /* ignore */ }
+    history.replaceState(null, '', '#menu-items');
+    viewMenuImport((await api('/api/admin/menu')).length, preset);
+  }
+
+  function viewMenuImport(existing, preset) {
     let rows = [];
     document.getElementById('view-title').textContent = 'Import your menu';
     view.innerHTML = `<div class="card imp-start"><h2>Import your menu</h2>
@@ -432,11 +440,21 @@
       run(async () => TBMenuImport.parseText(t));
     };
 
+    if (preset && preset.items) { rows = preset.items.map((x) => ({ section: x.section || 'Menu', name: x.name, description: x.description || '', price: x.price || '', tags: x.tags || [] })); setTimeout(review, 0); }
+    else if (preset && preset.pdf) {
+      status('Getting the menu from your website…');
+      run(async () => {
+        const r = await fetch(`/api/admin/fetch-pdf?url=${encodeURIComponent(preset.pdf)}`, { credentials: 'same-origin' });
+        if (!r.ok) { let m = 'Couldn’t get that menu.'; try { m = (await r.json()).error || m; } catch { /* */ } throw new Error(m); }
+        return readMenuFile(new File([await r.blob()], 'menu.pdf', { type: 'application/pdf' }), status);
+      });
+    }
+
     function review() {
       const box = document.getElementById('imp-review');
       const secs = [...new Set(rows.map((r) => r.section))];
       box.innerHTML = `<div class="card" style="margin-top:16px"><div class="row"><h2 style="margin:0">Check ${rows.length} dish${rows.length === 1 ? '' : 'es'}</h2><span class="spacer"></span><span class="muted small">${secs.length} section${secs.length === 1 ? '' : 's'}</span></div>
-        <p class="small muted">Fix anything we read wrong. Remove rows you don't want. Nothing is saved until you press Import.</p>
+        <p class="small muted">${preset ? 'From your website. ' : ''}Fix anything we read wrong. Remove rows you don't want. Nothing is saved until you press Import.</p>
         <div class="imp-list">${rows.map((r, i) => `<div class="imp-row" data-i="${i}">
           <div class="imp-top"><input data-k="name" value="${esc(r.name)}" aria-label="Dish name" placeholder="Dish name"><input data-k="price" value="${esc(r.price)}" inputmode="decimal" aria-label="Price" placeholder="Price" class="imp-price"><button class="btn ghost sm" data-rm aria-label="Remove ${esc(r.name)}">✕</button></div>
           <div class="imp-mid"><input data-k="section" value="${esc(r.section)}" list="imp-secs" aria-label="Section" class="imp-sec"><input data-k="description" value="${esc(r.description)}" aria-label="Description" placeholder="Description (optional)"></div>

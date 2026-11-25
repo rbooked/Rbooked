@@ -315,17 +315,6 @@ test('menu import: pasted text becomes dishes with sections, prices and diet tag
   assert.strictEqual((await call('GET', '/api/admin/menu')).data.length, 1);
 });
 
-test('find your restaurant: OpenStreetMap results become profile details', () => {
-  const L = require('../src/place-lookup');
-  const p = L.fromNominatim({ osm_type: 'node', osm_id: 5, lat: '30.27', lon: '-97.74', type: 'restaurant', name: 'Taco Spot',
-    address: { house_number: '12', road: 'Congress Ave', city: 'Austin', 'ISO3166-2-lvl4': 'US-TX', postcode: '78701' },
-    extratags: { cuisine: 'mexican;tex-mex', opening_hours: 'Mo-Fr 11:00-21:00; Sa 10:00-23:00; Su off', 'contact:phone': '+1 512 555 0100', website: 'tacospot.com' } });
-  assert.deepStrictEqual([p.name, p.address, p.city, p.state, p.zip, p.cuisine, p.website_url], ['Taco Spot', '12 Congress Ave', 'Austin', 'TX', '78701', 'Mexican', 'https://tacospot.com']);
-  assert.strictEqual(p.hours[0].closed, true);
-  assert.deepStrictEqual(p.hours[6], { closed: false, open: '10:00', close: '23:00' });
-  assert.deepStrictEqual(p.hours[1], { closed: false, open: '11:00', close: '21:00' });
-});
-
 test('start over wipes the restaurant but keeps the login', async () => {
   assert.strictEqual((await call('POST', '/api/admin/account/reset', { password: 'wrong-pass' })).status, 401);
   const r = await call('POST', '/api/admin/account/reset', { password: 'password123' });
@@ -369,4 +358,38 @@ test('gallery and likes: diners heart restaurants, dishes and food photos', asyn
   assert.ok(tr.data.some((g) => g.id === up.data.id && g.restaurant.slug === me.slug));
   assert.strictEqual((await call('DELETE', `/api/admin/gallery/${up.data.id}`)).status, 200);
   assert.strictEqual((await diner('GET', `/api/public/restaurants/${me.slug}`)).data.gallery.length, 0);
+});
+
+test('import from your website: schema.org data, a menu page and photos', async () => {
+  const site = {
+    'https://queenmamas.example/': `<html><head><title>Queen Mama's Kitchen | Soul food in Portland</title>
+      <meta property="og:image" content="/img/hero.jpg"><meta name="description" content="Fried chicken, greens and peach cobbler.">
+      <script type="application/ld+json">{"@context":"https://schema.org","@type":"Restaurant","name":"Queen Mama&#39;s Kitchen","servesCuisine":"Soul Food",
+        "telephone":"(503) 555-0142","priceRange":"$$","address":{"@type":"PostalAddress","streetAddress":"12 NE Alberta St","addressLocality":"Portland","addressRegion":"OR","postalCode":"97211"},
+        "openingHoursSpecification":[{"dayOfWeek":["Tuesday","Wednesday","Thursday"],"opens":"11:00","closes":"21:00"},{"dayOfWeek":"https://schema.org/Friday","opens":"11:00","closes":"23:00"}],
+        "logo":"https://queenmamas.example/logo.png"}</script></head>
+      <body><img src="/img/logo-small.png" width="80"><img src="/img/chicken.jpg" width="800"><a href="/our-menu">Menu</a></body></html>`,
+    'https://queenmamas.example/our-menu': `<html><body><h2>Plates</h2><p>Fried Chicken ........ $18</p><p>crispy, with honey hot sauce</p><p>Smothered Pork Chop ..... $21</p>
+      <h2>Sides</h2><p>Collard Greens (V) ..... $6</p><p>Mac &amp; Cheese ..... $7</p><h2>Dessert</h2><p>Peach Cobbler ..... $8</p></body></html>`,
+  };
+  const realFetch = global.fetch;
+  global.fetch = async (u) => {
+    if (site[u]) return new Response(site[u], { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+    return new Response('nope', { status: 404 });
+  };
+  try {
+    const out = await require('../src/site-import').importSite('queenmamas.example');
+    assert.strictEqual(out.name, "Queen Mama's Kitchen");
+    assert.deepStrictEqual([out.address, out.city, out.state, out.zip, out.phone, out.cuisine, out.price_level], ['12 NE Alberta St', 'Portland', 'OR', '97211', '(503) 555-0142', 'Soul Food', 2]);
+    assert.strictEqual(out.hours[0].closed, true);
+    assert.deepStrictEqual(out.hours[5], { closed: false, open: '11:00', close: '23:00' });
+    assert.deepStrictEqual(out.images, ['https://queenmamas.example/img/hero.jpg', 'https://queenmamas.example/img/chicken.jpg']);
+    assert.strictEqual(out.logo, 'https://queenmamas.example/logo.png');
+    assert.deepStrictEqual(out.menu.map((m) => [m.section, m.name, m.price]), [['Plates', 'Fried Chicken', '18'], ['Plates', 'Smothered Pork Chop', '21'], ['Sides', 'Collard Greens', '6'], ['Sides', 'Mac & Cheese', '7'], ['Dessert', 'Peach Cobbler', '8']]);
+    assert.strictEqual(out.menu[0].description, 'crispy, with honey hot sauce');
+  } finally { global.fetch = realFetch; }
+  const L = require('../src/site-import');
+  assert.strictEqual(L.safeUrl('http://localhost:3000/x'), null);
+  assert.strictEqual(L.safeUrl('http://169.254.169.254/latest'), null);
+  assert.ok(L.safeUrl('joes-diner.com'));
 });

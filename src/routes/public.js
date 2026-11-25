@@ -73,20 +73,17 @@ function closest(times, wantTime, n = 5) {
   return times.slice().sort((a, b) => Math.abs(toMin(a) - target) - Math.abs(toMin(b) - target)).slice(0, n).sort();
 }
 
-// "Find your restaurant" at signup (OpenStreetMap). Cached so repeat searches don't hit the free service.
-const placeCache = new Map();
-router.get('/place-search', wrap(async (req, res) => {
-  const q = String(req.query.q || '').trim(); const near = String(req.query.near || '').trim();
-  if (q.length < 2) throw new BookingError('Type your restaurant name.');
-  const key = `${q}|${near}`.toLowerCase();
-  const hit = placeCache.get(key);
-  if (hit && hit.at > Date.now() - 3600e3) return res.json({ results: hit.results });
-  let results;
-  try { results = await require('../place-lookup').searchPlaces(q, near); }
-  catch { throw new BookingError('Search is busy right now. Try again in a moment, or fill in the details yourself.', 503); }
-  placeCache.set(key, { at: Date.now(), results });
-  if (placeCache.size > 500) placeCache.delete(placeCache.keys().next().value);
-  res.json({ results });
+// "Import from your website": read a restaurant's own site and return what we found (nothing is saved).
+const importHits = new Map();
+router.post('/site-import', wrap(async (req, res) => {
+  const url = String(req.body.url || '').trim();
+  if (!url) throw new BookingError('Paste your restaurant’s website address.');
+  const ip = req.ip || ''; const now = Date.now();
+  const recent = (importHits.get(ip) || []).filter((t) => t > now - 60e3);
+  if (recent.length >= 6) throw new BookingError('Too many imports. Wait a minute and try again.', 429);
+  importHits.set(ip, [...recent, now]); if (importHits.size > 2000) importHits.clear();
+  try { res.json(await require('../site-import').importSite(url)); }
+  catch (e) { throw new BookingError(e.name === 'AbortError' ? 'That website took too long to answer. Try again, or fill in the details yourself.' : `We couldn’t read that website. ${e.message || ''}`.trim()); }
 }));
 
 router.get('/tags', (req, res) => res.json(matcher.TAGS));
