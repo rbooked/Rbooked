@@ -677,6 +677,10 @@
     for (const f of list) { delete f.sort_order; db.menu.push({ id: nextId(), restaurant_id: r.id, description: '', price_cents: null, tags: '', available: 1, created_at: nowSql(), ...f, sort_order: order++ }); }
     return { imported: list.length };
   });
+  // The demo has no photo gallery or likes; the live site does.
+  on('GET', '/api/admin/gallery', () => []);
+  on('GET', '/api/public/trending', () => []);
+  on('POST', '/api/public/like', () => { throw new E('Likes work on the live site.'); });
   on('PUT', '/api/admin/menu/order', (q, b) => { const { r } = me(); (b.ids || []).forEach((id, i) => { const m = db.menu.find((x) => x.id === Number(id) && x.restaurant_id === r.id); if (m) m.sort_order = i; }); return { ok: true }; });
   on('PUT', '/api/admin/menu/:id', (q, b, p) => { const { r } = me(); const m = owned('menu', p.id, r.id); const f = cleanMenuItem(b); if (f.name === '') throw new E('Give the dish a name.'); Object.assign(m, f); return m; });
   on('DELETE', '/api/admin/menu/:id', (q, b, p) => { const { r } = me(); owned('menu', p.id, r.id); db.menu = db.menu.filter((m) => m.id !== Number(p.id)); return { ok: true }; });

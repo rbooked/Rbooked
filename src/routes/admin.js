@@ -56,7 +56,7 @@ router.post('/account/reset', wrap(async (req, res) => {
   const rid = req.restaurant.id;
   tx(() => {
     run('DELETE FROM email_log WHERE reservation_id IN (SELECT id FROM reservations WHERE restaurant_id = ?)', rid);
-    for (const t of ['reservations', 'table_combos', 'guests', 'menu_items', 'images', 'closures', 'shifts', 'tables', 'areas']) run(`DELETE FROM ${t} WHERE restaurant_id = ?`, rid);
+    for (const t of ['reservations', 'table_combos', 'guests', 'menu_items', 'gallery_photos', 'likes', 'images', 'closures', 'shifts', 'tables', 'areas']) run(`DELETE FROM ${t} WHERE restaurant_id = ?`, rid);
     run(`UPDATE restaurants SET name = 'My restaurant', cuisine = '', price_level = 2, description = '', phone = '', address = '', city = '',
       image_url = '', logo_url = '', website_url = '', hours = '', tags = '', accent_color = '#c2410c', featured = 0, trial_notice_sent = 0,
       turn_times = '2:90,4:120,6:180,99:210', trial_ends_at = ?, subscription_status = 'trialing' WHERE id = ?`,
@@ -517,18 +517,51 @@ router.delete('/menu/:id', wrap(async (req, res) => {
 
 // ---------- Photo & logo upload ----------
 router.post('/images', wrap(async (req, res) => {
-  const kind = req.body.kind === 'logo' ? 'logo' : 'cover';
+  const kind = ['logo', 'gallery'].includes(req.body.kind) ? req.body.kind : 'cover';
   const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(req.body.data || ''));
   if (!m) throw new BookingError('Upload a JPG, PNG or WebP image.');
   const buf = Buffer.from(m[2], 'base64');
   if (buf.length > 4 * 1024 * 1024) throw new BookingError('That image is too large (4 MB max).');
   const rid = req.restaurant.id;
+  if (kind === 'gallery') {
+    if (one('SELECT COUNT(*) AS n FROM gallery_photos WHERE restaurant_id = ?', rid).n >= 60) throw new BookingError('Your gallery is full (60 photos). Remove some first.');
+    const img = run('INSERT INTO images (restaurant_id, kind, mime, data) VALUES (?,?,?,?)', rid, kind, m[1], buf).lastInsertRowid;
+    const dish = Number(req.body.menu_item_id) || null;
+    if (dish) owned('menu_items', dish, rid);
+    const order = (one('SELECT MIN(sort_order) AS m FROM gallery_photos WHERE restaurant_id = ?', rid).m ?? 1) - 1; // newest first
+    const g = run('INSERT INTO gallery_photos (restaurant_id, image_id, caption, menu_item_id, sort_order) VALUES (?,?,?,?,?)', rid, img, String(req.body.caption || '').trim().slice(0, 200), dish, order).lastInsertRowid;
+    return res.status(201).json({ id: g, url: `/img/${img}`, kind });
+  }
   const col = kind === 'logo' ? 'logo_url' : 'image_url';
   const info = run('INSERT INTO images (restaurant_id, kind, mime, data) VALUES (?,?,?,?)', rid, kind, m[1], buf);
   const url = `/img/${info.lastInsertRowid}`;
   run(`UPDATE restaurants SET ${col} = ? WHERE id = ?`, url, rid);
   run('DELETE FROM images WHERE restaurant_id = ? AND kind = ? AND id != ?', rid, kind, info.lastInsertRowid);
   res.status(201).json({ url, kind });
+}));
+
+// ---------- Gallery (food photos diners can like) ----------
+router.get('/gallery', wrap(async (req, res) => {
+  res.json(all(`SELECT g.id, '/img/' || g.image_id AS url, g.caption, g.menu_item_id, m.name AS dish, g.created_at,
+    (SELECT COUNT(*) FROM likes l WHERE l.kind = 'photo' AND l.target_id = g.id) AS likes
+    FROM gallery_photos g LEFT JOIN menu_items m ON m.id = g.menu_item_id WHERE g.restaurant_id = ? ORDER BY g.sort_order, g.id DESC`, req.restaurant.id));
+}));
+router.put('/gallery/:id', wrap(async (req, res) => {
+  const g = owned('gallery_photos', req.params.id, req.restaurant.id);
+  const f = {};
+  if (req.body.caption !== undefined) f.caption = String(req.body.caption).trim().slice(0, 200);
+  if (req.body.menu_item_id !== undefined) { const d = Number(req.body.menu_item_id) || null; if (d) owned('menu_items', d, req.restaurant.id); f.menu_item_id = d; }
+  if (Object.keys(f).length) update('gallery_photos', g.id, req.restaurant.id, f);
+  res.json({ ok: true });
+}));
+router.delete('/gallery/:id', wrap(async (req, res) => {
+  const g = owned('gallery_photos', req.params.id, req.restaurant.id);
+  tx(() => {
+    run('DELETE FROM gallery_photos WHERE id = ?', g.id);
+    run('DELETE FROM images WHERE id = ? AND restaurant_id = ?', g.image_id, req.restaurant.id);
+    run("DELETE FROM likes WHERE kind = 'photo' AND target_id = ?", g.id);
+  });
+  res.json({ ok: true });
 }));
 
 module.exports = router;

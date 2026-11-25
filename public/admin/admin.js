@@ -58,7 +58,7 @@
     reservations: ['Reservations', viewReservations], floor: ['Floor plan & tables', viewFloor], services: ['Services & hours', viewServices],
     guests: ['Address book', viewGuests], widget: ['Website widget', viewWidget], settings: ['Settings', viewSettings],
     billing: ['Billing', viewBilling], emails: ['Email log', viewEmails], welcome: ['Welcome', viewWelcome], platform: ['Featured restaurants', viewPlatform],
-    profile: ['Restaurant profile', viewProfile], 'menu-items': ['Menu', viewMenu],
+    profile: ['Restaurant profile', viewProfile], 'menu-items': ['Menu', viewMenu], gallery: ['Gallery', viewGallery],
   };
   function route() {
     const key = (location.hash.slice(1).split('?')[0]) || 'reservations';
@@ -96,7 +96,7 @@
   }
 
   async function setupSteps() {
-    const [floor, shifts, menu] = await Promise.all([api('/api/admin/floor'), api('/api/admin/shifts'), api('/api/admin/menu')]);
+    const [floor, shifts, menu, gallery] = await Promise.all([api('/api/admin/floor'), api('/api/admin/shifts'), api('/api/admin/menu'), api('/api/admin/gallery')]);
     const r = S.me.restaurant; const b = S.me.billing;
     S.menuCount = menu.length;
     const steps = [
@@ -106,6 +106,7 @@
       ['Opening hours', !!TBMatch.parseHours(r.hours), '#profile', 'p-hours'],
       ['Link to your website', !!r.website_url, '#profile', 'p-contact'],
       ['Menu with prices and dietary tags', menu.length >= 3, '#menu-items'],
+      ['Food photos in your gallery (3 or more)', gallery.length >= 3, '#gallery'],
       ['Tables, seats and combinations', floor.tables.filter((t) => t.active).length >= 2, '#floor'],
       ['Services and reservation length', shifts.shifts.some((s) => s.active), '#services'],
       ['Payment method ($29.95/month after the trial)', b.hasPaymentMethod || b.status === 'active', '#billing'],
@@ -303,6 +304,44 @@
         await api('/api/admin/menu/order', { method: 'PUT', body: { ids: order } }).catch(fail); viewMenu().catch(fail);
       };
       row.querySelector('[data-up]').onclick = () => move(-1); row.querySelector('[data-down]').onclick = () => move(1);
+    });
+  }
+
+  // ---------------- Gallery: food photos diners can heart ----------------
+  async function viewGallery() {
+    const [photos, menu] = await Promise.all([api('/api/admin/gallery'), api('/api/admin/menu')]);
+    const r = S.me.restaurant;
+    const total = photos.reduce((a, p) => a + p.likes, 0);
+    view.innerHTML = `<div class="card"><div class="row"><h2 style="margin:0">Food gallery</h2><span class="spacer"></span><span class="muted small">${photos.length} photo${photos.length === 1 ? '' : 's'} · ♥ ${total} like${total === 1 ? '' : 's'}</span></div>
+      <p class="small muted">Post photos of your dishes and your space. They show on your page and in “Dishes diners love” on the Rbooked home page. Diners tap ♡ on the ones they love.</p>
+      <label class="imp-drop" id="g-drop"><input type="file" id="g-file" accept="image/*" multiple hidden><b>📸 Add photos</b><span class="muted small">Choose one or more photos (JPG, PNG or WebP)</span></label>
+      <span class="muted small" id="g-status" role="status"></span></div>
+      ${photos.length ? `<div class="g-admin">${photos.map((p) => `<div class="card g-card" data-id="${p.id}"><div class="g-ph"><img src="${esc(p.url)}" alt="" loading="lazy"><span class="g-likes">♥ ${p.likes}</span></div>
+        <div class="field" style="margin:8px 0 6px"><label>Dish in the photo</label><select data-dish><option value="">None</option>${menu.map((m) => `<option value="${m.id}"${m.id === p.menu_item_id ? ' selected' : ''}>${esc(m.name)}</option>`).join('')}</select></div>
+        <div class="field" style="margin:0 0 8px"><label>Caption</label><input data-cap value="${esc(p.caption)}" maxlength="200" placeholder="e.g. Fresh out of the oven"></div>
+        <button class="btn ghost sm" data-del>Remove</button></div>`).join('')}</div>` : `<div class="card" style="margin-top:16px"><p class="muted" style="margin:0">No photos yet. Restaurants with food photos get more bookings: add a few of your best dishes.</p></div>`}
+      <p class="small" style="margin-top:12px"><a href="/restaurant?slug=${encodeURIComponent(r.slug)}" target="_blank" rel="noopener">See your page as a guest ↗</a></p>`;
+    const status = (t) => { document.getElementById('g-status').textContent = t; };
+    const upload = async (files) => {
+      const list = [...files].filter((f) => f.type.startsWith('image/')).slice(0, 20);
+      let n = 0;
+      for (const f of list) {
+        status(`Uploading ${++n} of ${list.length}…`);
+        try { const data = await resizeImage(f, 1600, 1600, 'image/jpeg'); await api('/api/admin/images', { body: { kind: 'gallery', data } }); } catch (e) { fail(e); break; }
+      }
+      status(''); if (n) TB.toast(`${n} photo${n > 1 ? 's' : ''} added`); setupSteps().catch(() => {}); viewGallery().catch(fail);
+    };
+    const inp = document.getElementById('g-file'); inp.onchange = () => { upload(inp.files); inp.value = ''; };
+    const drop = document.getElementById('g-drop');
+    drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
+    drop.ondragleave = () => drop.classList.remove('over');
+    drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove('over'); upload(e.dataTransfer.files); };
+    view.querySelectorAll('.g-card').forEach((c) => {
+      const id = c.dataset.id;
+      const save = (body) => api(`/api/admin/gallery/${id}`, { method: 'PUT', body }).then(() => TB.toast('Saved')).catch(fail);
+      c.querySelector('[data-dish]').onchange = (e) => save({ menu_item_id: e.target.value || null });
+      c.querySelector('[data-cap]').onchange = (e) => save({ caption: e.target.value });
+      c.querySelector('[data-del]').onclick = async () => { if (await ask('Remove this photo from your gallery?', 'Remove', true)) { await api(`/api/admin/gallery/${id}`, { method: 'DELETE' }).catch(fail); setupSteps().catch(() => {}); viewGallery().catch(fail); } };
     });
   }
 

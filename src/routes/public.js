@@ -14,6 +14,7 @@ const PUBLIC_FIELDS = ['slug', 'name', 'cuisine', 'price_level', 'description', 
   'lat', 'lng', 'timezone', 'image_url', 'max_party_size', 'booking_window_days', 'cancellation_policy', 'accent_color', 'tags', 'featured', 'website_url', 'logo_url', 'hours'];
 const matcher = require('../../public/js/matcher');
 const places = require('../../public/js/places');
+const config = require('../config');
 // Diet tags also come from the menu: 3+ vegan dishes makes a restaurant show up for "vegan", and so on.
 const MENU_DIET = ['vegan', 'vegetarian', 'gluten_free', 'halal'];
 function menuStats(rid) {
@@ -30,6 +31,7 @@ function publicRestaurant(r) {
   MENU_DIET.forEach((t) => { if ((counts[t] || 0) >= 3) tags.add(t); });
   out.tags = [...tags].join(',');
   out.menu_counts = counts;
+  out.likes = one("SELECT COUNT(*) AS n FROM likes WHERE kind = 'restaurant' AND target_id = ?", r.id).n;
   return out;
 }
 
@@ -152,7 +154,71 @@ router.get('/restaurants/:slug', wrap(async (req, res) => {
   const shifts = all('SELECT name, days, start_time, end_time FROM shifts WHERE restaurant_id = ? AND active = 1 ORDER BY start_time', r.id);
   const menu = all(`SELECT id, section, name, description, price_cents, tags FROM menu_items
     WHERE restaurant_id = ? AND available = 1 ORDER BY sort_order, id`, r.id);
-  res.json({ restaurant: publicRestaurant(r), shifts, menu, today: nowInZone(r.timezone).date });
+  const fan = fanId(req);
+  const counts = (kind, ids) => {
+    if (!ids.length) return {};
+    const rows = all(`SELECT target_id, COUNT(*) AS n, SUM(fan = ?) AS mine FROM likes WHERE kind = ? AND restaurant_id = ? GROUP BY target_id`, fan || '', kind, r.id);
+    return Object.fromEntries(rows.map((x) => [x.target_id, { likes: x.n, liked: !!x.mine }]));
+  };
+  const dishLikes = counts('dish', menu.map((m) => m.id));
+  menu.forEach((m) => Object.assign(m, dishLikes[m.id] || { likes: 0, liked: false }));
+  const gallery = all(`SELECT g.id, '/img/' || g.image_id AS url, g.caption, m.name AS dish FROM gallery_photos g
+    LEFT JOIN menu_items m ON m.id = g.menu_item_id WHERE g.restaurant_id = ? ORDER BY g.sort_order, g.id DESC LIMIT 60`, r.id);
+  const photoLikes = counts('photo', gallery.map((g) => g.id));
+  gallery.forEach((g) => Object.assign(g, photoLikes[g.id] || { likes: 0, liked: false }));
+  const rl = counts('restaurant', [r.id])[r.id] || { likes: 0, liked: false };
+  res.json({ restaurant: { ...publicRestaurant(r), likes: rl.likes, liked: rl.liked }, shifts, menu, gallery, today: nowInZone(r.timezone).date });
+}));
+
+// ---------- Likes ("hearts") from diners. No account needed: an anonymous id in a cookie. ----------
+function fanId(req, res) {
+  let id = require('../auth').parseCookies(req).rb_fan;
+  if (id && /^[a-f0-9]{32}$/.test(id)) return id;
+  if (!res) return null;
+  id = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
+  res.setHeader('Set-Cookie', `rb_fan=${id}; Path=/; Max-Age=${60 * 60 * 24 * 365 * 2}; SameSite=Lax; HttpOnly${config.isProduction ? '; Secure' : ''}`);
+  return id;
+}
+router.post('/like', wrap(async (req, res) => {
+  const kind = String(req.body.kind || ''); const id = Number(req.body.id);
+  if (!['restaurant', 'dish', 'photo'].includes(kind) || !id) throw new BookingError('Nothing to like.');
+  const rid = kind === 'restaurant' ? id
+    : (one(kind === 'dish' ? 'SELECT restaurant_id AS r FROM menu_items WHERE id = ? AND available = 1' : 'SELECT restaurant_id AS r FROM gallery_photos WHERE id = ?', id) || {}).r;
+  const r = rid && one('SELECT * FROM restaurants WHERE id = ?', rid);
+  if (!r || !isBookable(r)) throw new BookingError('Not found.', 404);
+  const fan = fanId(req, res);
+  const had = one('SELECT id FROM likes WHERE kind = ? AND target_id = ? AND fan = ?', kind, id, fan);
+  if (had) run('DELETE FROM likes WHERE id = ?', had.id);
+  else {
+    // A light limit so one browser can't flood likes.
+    if (one("SELECT COUNT(*) AS n FROM likes WHERE fan = ? AND created_at > datetime('now', '-1 hour')", fan).n >= 300) throw new BookingError('Slow down a little.', 429);
+    run('INSERT INTO likes (restaurant_id, kind, target_id, fan) VALUES (?,?,?,?)', rid, kind, id, fan);
+  }
+  res.json({ liked: !had, likes: one('SELECT COUNT(*) AS n FROM likes WHERE kind = ? AND target_id = ?', kind, id).n });
+}));
+
+// Food photos diners love right now (most-liked in the last 30 days, then newest), for the home page.
+router.get('/trending', wrap(async (req, res) => {
+  const zip = String(req.query.zip || '').trim();
+  let ids = null;
+  if (/^\d{5}$/.test(zip)) ids = new Set((await nearby(zip, 50)).list.map((x) => x.r.id));
+  const rows = all(`SELECT g.id, '/img/' || g.image_id AS url, g.caption, m.name AS dish, r.id AS rid,
+      (SELECT COUNT(*) FROM likes l WHERE l.kind = 'photo' AND l.target_id = g.id AND l.created_at > datetime('now', '-30 days')) AS recent,
+      (SELECT COUNT(*) FROM likes l WHERE l.kind = 'photo' AND l.target_id = g.id) AS likes
+    FROM gallery_photos g JOIN restaurants r ON r.id = g.restaurant_id LEFT JOIN menu_items m ON m.id = g.menu_item_id
+    ORDER BY recent DESC, g.id DESC LIMIT 200`);
+  const fan = fanId(req);
+  const mine = fan ? new Set(all("SELECT target_id FROM likes WHERE kind = 'photo' AND fan = ?", fan).map((x) => x.target_id)) : new Set();
+  const cache = {};
+  const out = [];
+  for (const g of rows) {
+    if (ids && !ids.has(g.rid)) continue;
+    const r = cache[g.rid] || (cache[g.rid] = one('SELECT * FROM restaurants WHERE id = ?', g.rid));
+    if (!isBookable(r)) continue;
+    out.push({ id: g.id, url: g.url, caption: g.caption, dish: g.dish, likes: g.likes, liked: mine.has(g.id), restaurant: { slug: r.slug, name: r.name, cuisine: r.cuisine, city: r.city } });
+    if (out.length >= 12) break;
+  }
+  res.json(out);
 }));
 
 router.get('/restaurants/:slug/availability', wrap(async (req, res) => {

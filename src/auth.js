@@ -69,4 +69,4 @@ function requireAuth(req, res, next) {
   next();
 }
 
-module.exports = { hashPassword, verifyPassword, createSession, destroySession, requireAuth, loadUser };
+module.exports = { parseCookies, hashPassword, verifyPassword, createSession, destroySession, requireAuth, loadUser };

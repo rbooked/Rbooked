@@ -191,6 +191,28 @@ CREATE TABLE IF NOT EXISTS images (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS gallery_photos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  restaurant_id INTEGER NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+  image_id INTEGER NOT NULL,
+  caption TEXT DEFAULT '',
+  menu_item_id INTEGER,                   -- optional: the dish in the photo
+  sort_order INTEGER DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_gallery_rest ON gallery_photos(restaurant_id, sort_order);
+-- Diner likes ("hearts") on restaurants, dishes and gallery photos. One per diner (browser) per thing.
+CREATE TABLE IF NOT EXISTS likes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  restaurant_id INTEGER NOT NULL,
+  kind TEXT NOT NULL,                     -- restaurant | dish | photo
+  target_id INTEGER NOT NULL,
+  fan TEXT NOT NULL,                      -- anonymous diner id from a cookie
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (kind, target_id, fan)
+);
+CREATE INDEX IF NOT EXISTS idx_likes_target ON likes(kind, target_id);
+CREATE INDEX IF NOT EXISTS idx_likes_rest ON likes(restaurant_id, created_at);
 CREATE TABLE IF NOT EXISTS email_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   reservation_id INTEGER,

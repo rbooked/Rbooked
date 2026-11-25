@@ -263,3 +263,37 @@ table.data tr:hover td { background: #fcfaf7; }
 .find-item:hover { border-color: var(--brand); }
 .find-item .tagchip { justify-self: start; margin-top: 4px; }
 @media (max-width: 560px) { .find-row { grid-template-columns: 1fr 1fr; } .find-row .btn { grid-column: span 2; } }
+
+/* Hearts (likes) */
+.heart { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 6px 12px; font: 600 14px var(--font); cursor: pointer; line-height: 1; }
+.heart i { font-style: normal; font-size: 16px; color: #e11d48; }
+.heart.on { background: #fff1f2; border-color: #fecdd3; }
+.heart span:empty { display: none; }
+.heart.light { background: rgba(255,255,255,.92); border-color: transparent; padding: 10px 14px; border-radius: 10px; }
+.heart.sm { padding: 3px 8px; font-size: 12px; margin-left: 8px; vertical-align: middle; }
+.heart.sm i { font-size: 13px; }
+.heart.on-photo { position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,.92); border: 0; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+.heart.pop i { animation: heartpop .35s ease; }
+@keyframes heartpop { 0% { transform: scale(1); } 50% { transform: scale(1.45); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .heart.pop i { animation: none; } }
+/* Gallery */
+.gal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); gap: 8px; margin-top: 12px; }
+.gal-item { position: relative; margin: 0; border-radius: 10px; overflow: hidden; aspect-ratio: 1; background: var(--surface-2); cursor: zoom-in; }
+.gal-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gal-item figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 10px 8px; color: #fff; font-size: 13px; font-weight: 600; background: linear-gradient(transparent, rgba(0,0,0,.65)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gal-big { margin: 0 0 12px; }
+.gal-big img { width: 100%; max-height: 70vh; object-fit: contain; border-radius: 10px; background: #000; }
+.gal-big figcaption { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
+@media (max-width: 480px) { .gal-grid { grid-template-columns: repeat(2, 1fr); gap: 6px; } }
+/* Trending on home */
+.trend-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 12px; margin-top: 14px; }
+.trend { position: relative; border-radius: 12px; overflow: hidden; background: var(--surface); border: 1px solid var(--line); text-decoration: none; color: inherit; display: block; }
+.trend .ph { aspect-ratio: 4 / 3; position: relative; background: var(--surface-2); }
+.trend .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.trend .tx { padding: 10px 12px; }
+.trend .tx b { display: block; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trend .tx span { font-size: 13px; color: var(--muted); }
+@media (max-width: 480px) { .trend-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; } .trend .tx { padding: 8px 10px; } .trend .tx b { font-size: 14px; } }
+.dish-price { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.dish-price .heart.sm { margin-left: 0; }
+.loves { color: #e11d48; font-weight: 600; }

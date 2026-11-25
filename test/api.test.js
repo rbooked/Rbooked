@@ -337,3 +337,36 @@ test('start over wipes the restaurant but keeps the login', async () => {
   assert.strictEqual((await call('GET', '/api/admin/floor')).data.tables.length, 6, 'fresh starter tables');
   assert.strictEqual((await call('POST', '/api/auth/login', { email: 'owner@test.local', password: 'password123' })).status, 200);
 });
+
+test('gallery and likes: diners heart restaurants, dishes and food photos', async () => {
+  await call('PUT', '/api/admin/restaurant', { name: 'Heart Cafe', cuisine: 'Cafe', description: 'Cozy cafe with pastries.' });
+  const dish = (await call('POST', '/api/admin/menu', { name: 'Croissant', price: '4', section: 'Bakery' })).data;
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  const up = await call('POST', '/api/admin/images', { kind: 'gallery', data: png, caption: 'Fresh out of the oven', menu_item_id: dish.id });
+  assert.strictEqual(up.status, 201, JSON.stringify(up.data));
+  const me = (await call('GET', '/api/admin/restaurant')).data.restaurant;
+  // A diner (no login, own cookie jar) likes things.
+  let fan = '';
+  const diner = async (method, url, body) => {
+    const r = await fetch(base + url, { method, headers: { 'Content-Type': 'application/json', ...(fan ? { Cookie: fan } : {}) }, body: body ? JSON.stringify(body) : undefined });
+    const sc = r.headers.get('set-cookie'); if (sc) fan = sc.split(';')[0];
+    return { status: r.status, data: await r.json() };
+  };
+  const page = await diner('GET', `/api/public/restaurants/${me.slug}`);
+  assert.strictEqual(page.data.gallery.length, 1);
+  assert.strictEqual(page.data.gallery[0].dish, 'Croissant');
+  const l1 = await diner('POST', '/api/public/like', { kind: 'photo', id: up.data.id });
+  assert.deepStrictEqual(l1.data, { liked: true, likes: 1 });
+  await diner('POST', '/api/public/like', { kind: 'dish', id: dish.id });
+  await diner('POST', '/api/public/like', { kind: 'restaurant', id: me.id });
+  const again = await diner('GET', `/api/public/restaurants/${me.slug}`);
+  assert.strictEqual(again.data.restaurant.likes, 1); assert.strictEqual(again.data.restaurant.liked, true);
+  assert.strictEqual(again.data.menu.find((m) => m.id === dish.id).likes, 1);
+  assert.strictEqual(again.data.gallery[0].liked, true);
+  const un = await diner('POST', '/api/public/like', { kind: 'photo', id: up.data.id });
+  assert.deepStrictEqual(un.data, { liked: false, likes: 0 }, 'tapping again un-likes');
+  const tr = await diner('GET', '/api/public/trending');
+  assert.ok(tr.data.some((g) => g.id === up.data.id && g.restaurant.slug === me.slug));
+  assert.strictEqual((await call('DELETE', `/api/admin/gallery/${up.data.id}`)).status, 200);
+  assert.strictEqual((await diner('GET', `/api/public/restaurants/${me.slug}`)).data.gallery.length, 0);
+});

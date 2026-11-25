@@ -48,6 +48,10 @@
     <div class="row" style="align-items:baseline"><h2 class="serif" style="font-size:26px;margin:0">Featured restaurants</h2><span class="muted small" id="featured-where"></span></div>
     <div class="featured" id="featured"><p class="muted">Loading…</p></div>
   </section>
+  <section class="section hidden" id="trend-wrap">
+    <div class="row" style="align-items:baseline"><h2 class="serif" style="font-size:26px;margin:0">Dishes diners love</h2><span class="muted small" id="trend-where"></span></div>
+    <div class="trend-grid" id="trend"></div>
+  </section>
   <section class="section steps" id="how">
     <div class="step"><span class="step-n">1</span><div><h3>Search by ZIP</h3><p>Real open times at places near you.</p></div></div>
     <div class="step"><span class="step-n">2</span><div><h3>Tap a time</h3><p>Your table is held live. No account needed.</p></div></div>
@@ -197,7 +201,7 @@
       <a href="${bookLink(r, party)}" class="mini-img" style="${TB.thumbStyle(r)}" aria-hidden="true" tabindex="-1">${r.image_url ? '' : esc(TB.initials(r.name))}</a>
       <div class="mini-body">
         <div class="row" style="gap:6px"><h3 style="margin:0;font-size:17px"><a href="${bookLink(r, party)}" style="color:inherit;text-decoration:none">${esc(r.name)}</a></h3><span class="spacer"></span>${badge ? `<span class="feat-badge">${esc(badge)}</span>` : ''}</div>
-        <div class="r-meta">${esc(r.cuisine)} · ${TB.price(r.price_level)} · ${esc(r.city)}${r.miles != null ? ` · ${r.miles} mi` : ''}</div>
+        <div class="r-meta">${esc(r.cuisine)} · ${TB.price(r.price_level)} · ${esc(r.city)}${r.miles != null ? ` · ${r.miles} mi` : ''}${r.likes ? ` · <span class="loves">♥ ${r.likes}</span>` : ''}</div>
         <div class="tagchips">${tagChips(r, [], 3)}</div>
         <div class="slots">${slots.length ? slots.map((t) => `<a class="slot sm" style="background:${esc(r.accent_color)}" href="${bookLink(r, party, t)}">${TB.time(t)}</a>`).join('') : `<a class="small" href="${bookLink(r, party)}">See times</a>`}</div>
       </div></article>`;
@@ -217,8 +221,23 @@
     } catch { document.getElementById('featured-wrap').classList.add('hidden'); }
   }
 
-  loadFeatured();
-  f.zip.addEventListener('change', loadFeatured);
+  async function loadTrending() {
+    const zip = f.zip.value.trim();
+    try {
+      let rows = await api('/api/public/trending' + (/^\d{5}$/.test(zip) ? `?zip=${zip}` : ''));
+      let where = /^\d{5}$/.test(zip) ? `· near ${zip}` : '';
+      if (!rows.length && where) { rows = await api('/api/public/trending'); where = ''; }
+      document.getElementById('trend-where').textContent = where;
+      const box = document.getElementById('trend');
+      box.innerHTML = rows.map((g) => `<a class="trend" href="/restaurant?slug=${encodeURIComponent(g.restaurant.slug)}"><div class="ph"><img src="${esc(g.url)}" alt="${esc(g.dish || g.caption || g.restaurant.name)}" loading="lazy">${TB.heart('photo', g.id, g.likes, g.liked, 'on-photo')}</div>
+        <div class="tx"><b>${esc(g.dish || g.caption || g.restaurant.name)}</b><span>${esc(g.restaurant.name)}${g.restaurant.city ? ` · ${esc(g.restaurant.city)}` : ''}</span></div></a>`).join('');
+      TB.bindHearts(box);
+      document.getElementById('trend-wrap').classList.toggle('hidden', !rows.length);
+    } catch { document.getElementById('trend-wrap').classList.add('hidden'); }
+  }
+
+  loadFeatured(); loadTrending();
+  f.zip.addEventListener('change', () => { loadFeatured(); loadTrending(); });
   if (f.zip.value && params.get('zip')) (mode === 'pick' ? pick(false) : search(false));
 })();
 </script>

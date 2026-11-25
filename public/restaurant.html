@@ -21,6 +21,7 @@
   <div class="booking">
     <div>
       <div class="card" id="about"></div>
+      <div class="card" id="gallery" style="margin-top:16px" hidden></div>
       <div class="card" id="menu" style="margin-top:16px" hidden></div>
     </div>
     <div><div class="card sticky-book" id="booking"></div></div>
@@ -63,7 +64,8 @@
   document.getElementById('r-meta').innerHTML = `${esc(r.cuisine)} · ${TB.price(r.price_level)} · ${esc(r.city)}, ${esc(r.state)}
     ${open === null ? '' : `<span class="open-badge ${open ? 'yes' : 'no'}">${open ? 'Open now' : 'Closed now'}</span>`}${r.featured ? ' <span class="feat-badge">Featured</span>' : ''}`;
   document.getElementById('r-actions').innerHTML = `${web ? `<a class="btn light" href="${esc(web)}" target="_blank" rel="noopener nofollow">🌐 Website</a>` : ''}
-    <a class="btn light" href="tel:${esc(r.phone)}">📞 Call</a>${state.menu.length ? '<a class="btn light" href="#menu" id="to-menu">🍽️ Menu</a>' : ''}`;
+    <a class="btn light" href="tel:${esc(r.phone)}">📞 Call</a>${state.menu.length ? '<a class="btn light" href="#menu" id="to-menu">🍽️ Menu</a>' : ''}${TB.heart('restaurant', r.id, r.likes, r.liked, 'light')}`;
+  TB.bindHearts(document.getElementById('r-actions'));
 
   // Phones: a floating "Reserve a table" button until the booking card is on screen.
   const mb = document.getElementById('mobile-book');
@@ -104,8 +106,9 @@
       ? secs.map((s) => `<h3 class="menu-h">${esc(s)}</h3>${list.filter((m) => m.section === s).map((m) => `<div class="dish">
           <div><b>${esc(m.name)}</b>${m.description ? `<div class="muted small">${esc(m.description)}</div>` : ''}
           <div class="dish-tags">${TBMatch.sortMenuTags(m.tags).map((t) => { const x = TBMatch.menuTag(t); return `<span class="dtag">${x.icon} ${esc(x.label)}</span>`; }).join('')}</div></div>
-          <div class="dish-price">${money(m.price_cents)}</div></div>`).join('')}`).join('')
+          <div class="dish-price">${money(m.price_cents)}${TB.heart('dish', m.id, m.likes, m.liked, 'sm')}</div></div>`).join('')}`).join('')
       : `<p class="muted">No dishes match ${want.size ? 'those filters' : 'your search'}. <button class="btn ghost sm" id="m-reset">Clear filters</button></p>`;
+    TB.bindHearts(box);
     const reset = box.querySelector('#m-reset');
     if (reset) {
       reset.onclick = () => {
@@ -125,6 +128,28 @@
   });
   box.querySelector('#m-q').oninput = (e) => { q = e.target.value.trim().toLowerCase(); draw(); };
   draw();
+  // Food gallery: photos from the restaurant that diners can heart.
+  const gal = document.getElementById('gallery');
+  if (state.gallery.length) {
+    gal.hidden = false;
+    gal.innerHTML = `<div class="row"><h2 class="serif" style="margin:0">Gallery</h2><span class="muted small">${state.gallery.length} photo${state.gallery.length > 1 ? 's' : ''} · tap ♡ on the ones you love</span></div>
+      <div class="gal-grid">${state.gallery.map((g, i) => `<figure class="gal-item" data-i="${i}"><img src="${esc(g.url)}" alt="${esc(g.caption || g.dish || r.name)}" loading="lazy">
+        ${TB.heart('photo', g.id, g.likes, g.liked, 'on-photo')}${g.dish || g.caption ? `<figcaption>${esc(g.dish || g.caption)}</figcaption>` : ''}</figure>`).join('')}</div>`;
+    TB.bindHearts(gal);
+    gal.querySelectorAll('.gal-item').forEach((f) => {
+      f.onclick = () => {
+        const g = state.gallery[Number(f.dataset.i)];
+        const live = gal.querySelector(`[data-like="photo:${g.id}"]`);
+        const close = TB.modal(`<figure class="gal-big"><img src="${esc(g.url)}" alt="${esc(g.caption || g.dish || '')}">
+          <figcaption><div>${g.dish ? `<b>${esc(g.dish)}</b>` : ''}${g.caption ? `<div class="muted small">${esc(g.caption)}</div>` : ''}</div>${TB.heart('photo', g.id, Number(live.querySelector('span').textContent) || 0, live.classList.contains('on'))}</figcaption></figure>
+          <button class="btn secondary block" data-close>Close</button>`, (root) => {
+          TB.bindHearts(root);
+        });
+        void close;
+      };
+    });
+  }
+
   const toMenu = document.getElementById('to-menu');
   if (toMenu) toMenu.onclick = (e) => { e.preventDefault(); box.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
   if (location.hash === '#menu') setTimeout(() => box.scrollIntoView({ block: 'start' }), 50);

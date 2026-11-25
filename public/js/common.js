@@ -65,6 +65,27 @@
     return close;
   };
 
+  // Hearts: tap to like / un-like a restaurant, dish or food photo. No account needed.
+  TB.heart = (kind, id, likes, liked, extraClass = '') => `<button type="button" class="heart ${liked ? 'on' : ''} ${extraClass}" data-like="${kind}:${id}" aria-pressed="${liked}" aria-label="${liked ? 'Unlike' : 'Like'}"><i>${liked ? '♥' : '♡'}</i><span>${likes || ''}</span></button>`;
+  TB.bindHearts = (root) => {
+    root.querySelectorAll('[data-like]').forEach((b) => {
+      if (b.dataset.bound) return; b.dataset.bound = '1';
+      b.onclick = async (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const [kind, id] = b.dataset.like.split(':');
+        const was = b.classList.contains('on'); const cnt = b.querySelector('span');
+        const n0 = Number(cnt.textContent) || 0;
+        b.classList.toggle('on', !was); b.querySelector('i').textContent = was ? '♡' : '♥'; cnt.textContent = Math.max(0, n0 + (was ? -1 : 1)) || '';
+        if (!was) { b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop'); }
+        try {
+          const r = await TB.api('/api/public/like', { body: { kind, id: Number(id) } });
+          b.classList.toggle('on', r.liked); b.querySelector('i').textContent = r.liked ? '♥' : '♡'; cnt.textContent = r.likes || ''; b.setAttribute('aria-pressed', r.liked);
+          document.querySelectorAll(`[data-like="${b.dataset.like}"]`).forEach((o) => { if (o !== b) { o.classList.toggle('on', r.liked); o.querySelector('i').textContent = r.liked ? '♥' : '♡'; o.querySelector('span').textContent = r.likes || ''; } });
+        } catch (err) { b.classList.toggle('on', was); b.querySelector('i').textContent = was ? '♥' : '♡'; cnt.textContent = n0 || ''; TB.toast(err.message, true); }
+      };
+    });
+  };
+
   TB.formData = (form) => {
     const out = {};
     for (const el of form.elements) {
