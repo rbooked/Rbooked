@@ -53,9 +53,9 @@
     <div class="step"><span class="step-n">2</span><div><h3>Tap a time</h3><p>Your table is held live. No account needed.</p></div></div>
     <div class="step"><span class="step-n">3</span><div><h3>Get it by email</h3><p>Confirmation, calendar invite and a reminder.</p></div></div>
   </section>
-  <section class="owner-cta"><div><b>Own a restaurant?</b> <span class="muted">Take reservations free for 14 days.</span></div><a class="btn secondary" href="/for-restaurants">List your restaurant</a></section>
+
 </main>
-<footer class="footer"><div class="container row"><span>© Rbooked</span><span class="spacer"></span><a href="/for-restaurants">List your restaurant</a><a href="/login">Restaurant login</a></div></footer>
+<footer class="footer"><div class="container row"><span>© Rbooked</span><span class="spacer"></span><a href="/for-restaurants">For restaurants</a><a href="/login">Restaurant login</a></div></footer>
 <script src="/js/common.js"></script>
 <script src="/js/matcher.js"></script>
 <script src="/js/places.js"></script>
@@ -115,7 +115,7 @@
   function noneNear(zip, cuisine) {
     empty.classList.remove('hidden');
     empty.innerHTML = `<h3>No ${cuisine ? `${esc(cuisine)} ` : ''}restaurants on Rbooked near ${esc(zip)} yet.</h3>
-      <p class="muted">${cuisine ? 'Try "Any cuisine". ' : ''}Know a great spot? <a href="/for-restaurants">Restaurants can try Rbooked free for 14 days.</a></p>`;
+      <p class="muted">${cuisine ? 'Try "Any cuisine", or a' : 'Try a'} nearby ZIP code. New restaurants join every week.</p>`;
   }
 
   async function search(push) {
