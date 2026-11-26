@@ -65,6 +65,7 @@ class Res {
   type(t) { this.headers.set('Content-Type', t.includes('/') ? t : t === 'html' ? 'text/html; charset=utf-8' : `text/${t}`); return this; }
   json(o) { if (!this.headers.has('Content-Type')) this.headers.set('Content-Type', 'application/json; charset=utf-8'); return this.end(JSON.stringify(o)); }
   send(b) { if (typeof b === 'object' && b !== null && !(b instanceof Uint8Array)) return this.json(b); if (!this.headers.has('Content-Type')) this.headers.set('Content-Type', 'text/html; charset=utf-8'); return this.end(b); }
+  redirect(a, b) { const [code, loc] = typeof a === 'number' ? [a, b] : [302, a]; this.statusCode = code; this.headers.set('Location', loc); return this.end(''); }
   sendStatus(c) { this.statusCode = c; return this.end(STATUS_TEXT[c] || String(c)); }
   end(b) { if (this.finished) return this; this.body = b ?? null; this.finished = true; this.onDone(); return this; }
 }

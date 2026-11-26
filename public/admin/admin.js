@@ -119,6 +119,7 @@
   async function viewProfile() {
     const r = S.me.restaurant;
     const { steps, done } = await setupSteps();
+    setTimeout(() => { const b = document.getElementById('tag-copy'); if (b) b.onclick = async () => { const t = TBMatch.hashtag(S.me.restaurant.name); try { await navigator.clipboard.writeText(t); TB.toast(`${t} copied`); } catch { TB.toast(t); } }; }, 0);
     const hours = TBMatch.parseHours(r.hours) || TBSamples.hoursFromShifts((await api('/api/admin/shifts')).shifts);
     const hadHours = !!TBMatch.parseHours(r.hours);
     const pct = Math.round((done / steps.length) * 100);
@@ -127,6 +128,9 @@
       <div class="card find-card"><div class="row"><b>⚡ Import from your website</b><span class="muted small">Optional. Pull in your details, hours, photos and menu, then check them. Or fill everything in by hand below.</span></div>
         <form class="find-row site-row" id="pf-form" style="margin-top:10px"><input id="pf-url" type="text" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="www.yourrestaurant.com" value="${esc(r.website_url || '')}" aria-label="Your restaurant's website"><button class="btn secondary" type="submit">Import</button></form>
         <div id="pf-results" class="find-results" role="status"></div></div>
+      ${r.name && r.name !== 'My restaurant' ? `<div class="card tag-card"><div><span class="muted small">Your Rbooked hashtag</span><div class="tag-big">${esc(TBMatch.hashtag(r.name))}</div>
+        <p class="small muted" style="margin:4px 0 0">Put it on your Instagram, menus and receipts. Guests can type it on Rbooked to land on your page: <b>rbooked.com/tag/${esc(TBMatch.hashtag(r.name).slice(1))}</b></p></div>
+        <button class="btn secondary sm" type="button" id="tag-copy">Copy</button></div>` : ''}
       <div class="card setup ${done === steps.length ? 'complete' : ''}">
         <div class="row"><h2 style="margin:0">${done === steps.length ? '✅ Your restaurant is ready for guests' : 'Get your restaurant ready'}</h2><span class="spacer"></span><b>${done} of ${steps.length}</b></div>
         <div class="progress"><i style="width:${pct}%"></i></div>

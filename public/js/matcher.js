@@ -118,5 +118,12 @@
     return false;
   }
 
-  return { TAGS, TAG_IDS, label, parseTags, rank, DEFAULT_TURNS, parseTurns, formatTurns, turnFor, MENU_TAGS, parseMenuTags, menuTag, sortMenuTags, parseHours, openAt };
+  /** A restaurant's own hashtag, from its name: "Queen Mama's Kitchen" -> "#QueenMamasKitchen". */
+  function hashtag(name) {
+    const words = String(name || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/['’`]/g, '').replace(/&/g, ' And ').split(/[^A-Za-z0-9]+/).filter(Boolean);
+    const tag = words.map((w) => w[0].toUpperCase() + w.slice(1)).join('').slice(0, 40);
+    return tag ? `#${tag}` : '';
+  }
+
+  return { hashtag, TAGS, TAG_IDS, label, parseTags, rank, DEFAULT_TURNS, parseTurns, formatTurns, turnFor, MENU_TAGS, parseMenuTags, menuTag, sortMenuTags, parseHours, openAt };
 });

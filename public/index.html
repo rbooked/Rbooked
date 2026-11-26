@@ -6,10 +6,10 @@
 <link rel="stylesheet" href="/css/app.css">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%229%22 fill=%22%23c2410c%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2218%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Georgia%22%3ER%3C/text%3E%3C/svg%3E">
 <title>Rbooked · Book a table near you</title>
-<meta name="description" content="Find restaurants near your ZIP code and book a table instantly, or let Rbooked pick one for you.">
+<meta name="description" content="Find food you'll love near you. Heart dishes, follow restaurants by their #hashtag, and book a table in seconds.">
 <link rel="canonical" href="https://rbooked.com/">
 <meta property="og:type" content="website"><meta property="og:site_name" content="Rbooked"><meta property="og:url" content="https://rbooked.com/">
-<meta property="og:title" content="Rbooked · Book a table near you"><meta property="og:description" content="Find restaurants near your ZIP code and book a table instantly.">
+<meta property="og:title" content="Rbooked · Book a table near you"><meta property="og:image" content="https://rbooked.com/img/og-rbooked.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><meta property="og:description" content="Find restaurants near your ZIP code and book a table instantly.">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Rbooked","url":"https://rbooked.com/"}</script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Rbooked","url":"https://rbooked.com/","email":"rbookedsupport@gmail.com"}</script>
 </head>
@@ -20,8 +20,10 @@
 </div></header>
 <section class="hero">
   <div class="container">
-    <h1>Find a table near you.</h1>
-    <p>Search by ZIP code and book in seconds, or let us pick for you.</p>
+    <h1>Find food you'll love. Book it in seconds.</h1>
+    <p>Heart the dishes you crave, follow your favorite spots by their <b>#hashtag</b>, and grab a table near you.</p>
+    <form class="tag-find" id="tag-find" role="search"><span aria-hidden="true">#</span><input id="tag-in" placeholder="Got a restaurant's hashtag? e.g. QueenMamasKitchen" aria-label="Find a restaurant by its hashtag" autocapitalize="off" autocorrect="off" spellcheck="false"><button class="btn sm" type="submit">Go</button></form>
+    <p class="tag-miss" id="tag-miss" hidden></p>
     <div class="mode-tabs" role="tablist" aria-label="How do you want to find a table?">
       <button type="button" role="tab" id="tab-search" aria-selected="true" data-mode="search">Search restaurants</button>
       <button type="button" role="tab" id="tab-pick" aria-selected="false" data-mode="pick">✨ Pick for me</button>
@@ -147,6 +149,7 @@
       <a href="${link()}" class="r-thumb" style="${TB.thumbStyle(r)}" aria-hidden="true" tabindex="-1">${r.image_url ? '' : esc(TB.initials(r.name))}</a>
       <div>
         <h3><a href="${link()}">${esc(r.name)}</a>${r.featured ? ' <span class="feat-badge">Featured</span>' : ''}</h3>
+        <a class="r-card-tag" href="/tag/${esc(TBMatch.hashtag(r.name).slice(1))}">${esc(TBMatch.hashtag(r.name))}</a>
         <div class="r-meta">${esc(r.cuisine)} · ${TB.price(r.price_level)} · ${esc(r.city)}${r.miles != null ? ` · ${r.miles} mi` : ''}</div>
         <div class="r-meta">${esc(r.address)}, ${esc(r.zip)} · <a href="tel:${esc(r.phone)}">${esc(r.phone)}</a></div>
         <div class="tagchips">${tagChips(r)}</div>
@@ -245,6 +248,13 @@
   f.zip.addEventListener('change', () => { loadFeatured(); loadTrending(); });
   if (f.zip.value && params.get('zip')) (mode === 'pick' ? pick(false) : search(false));
 })();
+  // Find a restaurant by its hashtag.
+  (function () {
+    const f = document.getElementById('tag-find'); if (!f) return;
+    f.onsubmit = (e) => { e.preventDefault(); const t = document.getElementById('tag-in').value.trim().replace(/^#+/, '').replace(/[^A-Za-z0-9]/g, ''); if (t) location.href = `/tag/${encodeURIComponent(t)}`; };
+    const miss = new URLSearchParams(location.search).get('tag');
+    if (miss) { const m = document.getElementById('tag-miss'); m.hidden = false; m.textContent = `We couldn't find #${miss}. Search by ZIP code below.`; }
+  }());
 </script>
 </body>
 </html>

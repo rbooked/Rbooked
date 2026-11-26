@@ -5,7 +5,8 @@ const express = require('express');
 const config = require('./config');
 const { one, all } = require('./db');
 const { isBookable } = require('./billing');
-const { parseHours } = require('../public/js/matcher');
+const { parseHours, hashtag } = require('../public/js/matcher');
+const OG_DEFAULT = '/img/og-rbooked.png';
 
 const router = express.Router();
 
@@ -29,7 +30,7 @@ function jsonLd(r, url) {
     priceRange: r.price_level ? '$'.repeat(r.price_level) : undefined,
     image: r.image_url ? [abs(r.image_url)] : undefined, logo: r.logo_url ? abs(r.logo_url) : undefined,
     address: { '@type': 'PostalAddress', streetAddress: r.address, addressLocality: r.city, addressRegion: r.state, postalCode: r.zip, addressCountry: 'US' },
-    acceptsReservations: 'True',
+    acceptsReservations: 'True', keywords: hashtag(r.name) || undefined,
     potentialAction: { '@type': 'ReserveAction', target: { '@type': 'EntryPoint', urlTemplate: url, actionPlatform: ['http://schema.org/DesktopWebPlatform', 'http://schema.org/MobileWebPlatform'] }, result: { '@type': 'FoodEstablishmentReservation', name: 'Reserve a table' } },
   };
   if (r.lat && r.lng) ld.geo = { '@type': 'GeoCoordinates', latitude: r.lat, longitude: r.lng };
@@ -46,9 +47,10 @@ router.get('/r/:slug', (req, res) => {
     return res.status(404).type('html').send(html.replace(HEAD, '<title>Restaurant not found · Rbooked</title>\n<meta name="robots" content="noindex">'));
   }
   const url = `${config.baseUrl}/r/${encodeURIComponent(r.slug)}`;
+  const tag = hashtag(r.name);
   const title = `${r.name} · Book a table in ${r.city}, ${r.state} · Rbooked`;
-  const desc = (r.description || `Book a table at ${r.name}, ${r.cuisine ? `${r.cuisine} ` : ''}restaurant in ${r.city}, ${r.state}. See the menu, photos and open times, and reserve online in seconds.`).replace(/\s+/g, ' ').slice(0, 160);
-  const img = abs(r.image_url);
+  const desc = (r.description || `Book a table at ${r.name}, ${r.cuisine ? `${r.cuisine} ` : ''}restaurant in ${r.city}, ${r.state}. See the menu, photos and open times, and reserve online in seconds.`).replace(/\s+/g, ' ').slice(0, 150 - tag.length) + (tag ? ` ${tag}` : '');
+  const img = abs(r.image_url) || abs(OG_DEFAULT);
   const head = `<title>${esc(title)}</title>
 <meta name="description" content="${esc(desc)}">
 <link rel="canonical" href="${esc(url)}">
@@ -59,6 +61,13 @@ ${img ? `<meta property="og:image" content="${esc(img)}"><meta name="twitter:car
   res.setHeader('Cache-Control', 'public, max-age=300');
   res.type('html').send(html.replace(HEAD, head)
     .replace('<h1 id="r-name">Loading…</h1>', `<h1 id="r-name">${esc(r.name)}</h1>`));
+});
+
+// rbooked.com/tag/QueenMamasKitchen (or #QueenMamasKitchen typed on the home page) opens that restaurant.
+router.get('/tag/:tag', (req, res) => {
+  const want = String(req.params.tag || '').replace(/^#/, '').toLowerCase();
+  const r = want && all('SELECT * FROM restaurants ORDER BY id').find((x) => isBookable(x) && hashtag(x.name).slice(1).toLowerCase() === want);
+  res.redirect(r ? `/r/${encodeURIComponent(r.slug)}` : `/?tag=${encodeURIComponent(want)}`);
 });
 
 router.get('/sitemap.xml', (req, res) => {

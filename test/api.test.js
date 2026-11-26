@@ -429,6 +429,12 @@ test('search engines: restaurant pages, sitemap and robots', async () => {
   const sm = await (await fetch(`${base}/sitemap.xml`)).text();
   assert.ok(sm.includes(`/r/${slug}</loc>`) && sm.includes('<urlset'));
   assert.ok((await (await fetch(`${base}/robots.txt`)).text()).includes('Sitemap:'));
+  const { hashtag } = require('../public/js/matcher');
+  assert.strictEqual(hashtag("Queen Mama's Kitchen"), '#QueenMamasKitchen');
+  const name = (await call('GET', '/api/admin/restaurant')).data.restaurant.name;
+  const go = await fetch(`${base}/tag/${hashtag(name).slice(1).toLowerCase()}`, { redirect: 'manual' });
+  assert.strictEqual(go.status, 302); assert.strictEqual(go.headers.get('location'), `/r/${slug}`);
+  assert.ok(html.includes(hashtag(name)), 'hashtag in the page description');
 });
 
 test('gallery and likes: diners heart restaurants, dishes and food photos', async () => {

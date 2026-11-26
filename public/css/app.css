@@ -384,3 +384,14 @@ table.data tr:hover td { background: #fcfaf7; }
 .pc-input { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 10px; background: #fff; padding-left: 12px; }
 .pc-input span { color: var(--muted); font-size: 22px; } .pc-input input { border: 0; box-shadow: none; outline: none; width: 100%; padding: 10px; background: transparent; }
 .pc-input:focus-within { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+
+/* Hashtags: every restaurant has one */
+.r-tagline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; font-size: 13px; opacity: .95; }
+.r-hashtag { font: inherit; font-weight: 700; color: #fff; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.45); border-radius: 999px; padding: 3px 12px; cursor: pointer; }
+.r-hashtag.sm { color: var(--brand); background: var(--brand-soft); border-color: transparent; font-size: 13px; cursor: default; margin-left: 8px; }
+.r-card-tag { display: inline-block; font-size: 13px; font-weight: 600; color: var(--brand); text-decoration: none; margin: -2px 0 4px; }
+.tag-find { display: flex; align-items: center; gap: 6px; max-width: 520px; margin: 14px auto 6px; background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 4px 4px 4px 16px; box-shadow: var(--shadow); }
+.tag-find span { font-weight: 800; color: var(--brand); font-size: 18px; }
+.tag-find input { flex: 1; min-width: 0; border: 0; outline: none; font: inherit; font-size: 16px; background: transparent; padding: 8px 4px; }
+.tag-find .btn { border-radius: 999px; }
+.tag-miss { color: var(--bad); font-size: 14px; margin: 0 0 8px; }

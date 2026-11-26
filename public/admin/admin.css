@@ -346,3 +346,6 @@ body.rf-dragging, body.rf-dragging * { cursor: grabbing !important; }
 .wk-warn { color: #b45309; font-weight: 600; }
 .save-bar { position: sticky; bottom: 12px; display: flex; align-items: center; gap: 10px; background: var(--ink); color: #fff; padding: 10px 12px 10px 16px; border-radius: 12px; box-shadow: var(--shadow); margin-top: 12px; z-index: 5; }
 @media (max-width: 640px) { .week { grid-template-columns: repeat(4, minmax(0, 1fr)); } .save-bar { bottom: 8px; } }
+
+.tag-card { display: flex; align-items: center; gap: 14px; justify-content: space-between; background: linear-gradient(135deg, #fff, var(--brand-soft, #fde8dc)); }
+.tag-big { font-family: var(--serif, Georgia); font-size: 26px; font-weight: 700; color: var(--brand); line-height: 1.2; word-break: break-all; }
