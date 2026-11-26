@@ -246,9 +246,9 @@
   async function loadTrending() {
     const zip = f.zip.value.trim();
     try {
-      let rows = await api('/api/public/trending' + (/^\d{5}$/.test(zip) ? `?zip=${zip}` : ''));
+      let rows = await getOnce('/api/public/trending' + (/^\d{5}$/.test(zip) ? `?zip=${zip}` : ''));
       let where = /^\d{5}$/.test(zip) ? `· near ${zip}` : '';
-      if (!rows.length && where) { rows = await api('/api/public/trending'); where = ''; }
+      if (!rows.length && where) { rows = await getOnce('/api/public/trending'); where = ''; }
       document.getElementById('trend-where').textContent = where;
       const box = document.getElementById('trend');
       box.innerHTML = rows.map((g) => `<a class="trend" href="${TB.rlink(g.restaurant.slug)}"><div class="ph"><img src="${esc(g.url)}" alt="${esc(g.dish || g.caption || g.restaurant.name)}" loading="lazy">${TB.heart('photo', g.id, g.likes, g.liked, 'on-photo')}</div>
@@ -258,10 +258,14 @@
     } catch { document.getElementById('trend-wrap').classList.add('hidden'); }
   }
 
+  // Several sections use the same data: fetch each address once and share it (fewer requests on phones).
+  const cache = new Map();
+  const getOnce = (url) => { if (!cache.has(url)) cache.set(url, api(url).catch((e) => { cache.delete(url); throw e; })); return cache.get(url); };
+  const mapUrl = () => { const z = f.zip.value.trim(); return '/api/public/map' + (/^\d{5}$/.test(z) ? `?zip=${z}` : ''); };
   async function loadMap() {
     const zip = f.zip.value.trim();
     try {
-      const data = await api('/api/public/map' + (/^\d{5}$/.test(zip) ? `?zip=${zip}` : ''));
+      const data = await getOnce(mapUrl());
       const wrap = document.getElementById('map-wrap');
       wrap.classList.toggle('hidden', !data.pins.length);
       if (!data.pins.length) return;
@@ -272,13 +276,13 @@
   // "Spin it": a reel of restaurants (and their dishes) that whizzes past and stops on one to book.
   const spin = { pool: [], busy: false, idx: 0 };
   const CARD_W = 220; const GAP = 12;
-  const reelCard = (it) => `<div class="reel-card" style="${it.img ? `background-image:url('${esc(it.img)}')` : `background:linear-gradient(135deg, ${esc(it.accent || '#c2410c')}, #2b1a10)`}">
-    ${it.img ? '' : `<span class="reel-ini">${esc(TB.initials(it.name))}</span>`}
+  const reelCard = (it) => `<div class="reel-card"${it.img ? '' : ` style="background:linear-gradient(135deg, ${esc(it.accent || '#c2410c')}, #2b1a10)"`}>
+    ${it.img ? `<img src="${esc(it.img)}" alt="" loading="lazy" decoding="async" draggable="false">` : `<span class="reel-ini">${esc(TB.initials(it.name))}</span>`}
     <div class="reel-tx"><b>${esc(it.title)}</b><span>${esc(it.sub)}</span></div></div>`;
   async function loadSpin() {
     try {
       const zip = f.zip.value.trim();
-      const [m, t] = await Promise.all([api('/api/public/map' + (/^\d{5}$/.test(zip) ? `?zip=${zip}` : '')), api('/api/public/trending').catch(() => [])]);
+      const [m, t] = await Promise.all([getOnce(mapUrl()), getOnce('/api/public/trending').catch(() => [])]);
       const pool = m.pins.map((p) => ({ slug: p.slug, name: p.name, tag: p.tag, img: p.image_url, title: p.name, sub: [p.cuisine, p.city].filter(Boolean).join(' · '), city: p.city, cuisine: p.cuisine }));
       // Few restaurants so far: add their food photos so the reel still has plenty to spin through.
       for (const g of t) {
@@ -288,20 +292,28 @@
       spin.pool = pool;
       document.getElementById('spin-wrap').classList.toggle('hidden', !pool.length);
       if (!pool.length) return;
-      fillReel(0);
+      // Build the reel only when it's about to scroll into view, so the top of the page stays quick.
+      const reelEl = document.getElementById('reel');
+      if (spin.items) fillReel(0);
+      else if ('IntersectionObserver' in window) {
+        const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { io.disconnect(); if (!spin.items) fillReel(0); } }, { rootMargin: '300px' });
+        io.observe(reelEl);
+      } else fillReel(0);
     } catch { document.getElementById('spin-wrap').classList.add('hidden'); }
   }
   function fillReel(offset) {
     const track = document.getElementById('reel-track'); const p = spin.pool;
-    const n = Math.max(48, p.length * 4);
+    const n = Math.max(24, Math.min(60, p.length * 3));
     spin.items = Array.from({ length: n }, (_, i) => p[(i + offset) % p.length]);
     track.style.transition = 'none'; track.style.transform = 'translateX(0)';
     track.innerHTML = spin.items.map(reelCard).join('');
     centerOn(2, false);
   }
+  let reelW = 0;
   function centerOn(i, animate, ms = 3200) {
     const reel = document.getElementById('reel'); const track = document.getElementById('reel-track');
-    const x = i * (CARD_W + GAP) + CARD_W / 2 - reel.clientWidth / 2;
+    if (!reelW || !animate) reelW = reel.clientWidth;
+    const x = i * (CARD_W + GAP) + CARD_W / 2 - reelW / 2;
     track.style.transition = animate ? `transform ${ms}ms cubic-bezier(.12,.75,.12,1)` : 'none';
     track.style.transform = `translateX(${-x}px)`;
   }
@@ -312,15 +324,16 @@
     const out = document.getElementById('spin-out'); out.classList.remove('show');
     fillReel(Math.floor(Math.random() * spin.pool.length));
     const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const target = spin.items.length - 6 - Math.floor(Math.random() * Math.min(6, spin.pool.length));
+    const target = spin.items.length - 4 - Math.floor(Math.random() * Math.min(4, spin.pool.length));
     document.getElementById('reel').offsetWidth; // apply the reset before animating
-    requestAnimationFrame(() => centerOn(target, true, reduce ? 300 : 3200));
+    const phone = window.matchMedia && matchMedia('(max-width: 560px)').matches;
+    requestAnimationFrame(() => centerOn(target, true, reduce ? 300 : phone ? 2200 : 3200));
     setTimeout(() => {
       const cards = document.querySelectorAll('#reel-track .reel-card');
       cards[target] && cards[target].classList.add('won');
       showWinner(spin.items[target]);
       spin.busy = false; btn.disabled = false; btn.innerHTML = '<span aria-hidden="true">🎰</span> Spin again';
-    }, reduce ? 350 : 3300);
+    }, reduce ? 350 : (window.matchMedia && matchMedia('(max-width: 560px)').matches) ? 2300 : 3300);
   }
   async function showWinner(it) {
     const out = document.getElementById('spin-out'); const party = f.party.value; const date = f.date.value;
@@ -340,11 +353,14 @@
     } catch { document.getElementById('spin-slots').innerHTML = ''; }
   }
   document.getElementById('spin-go').onclick = doSpin;
-  window.addEventListener('resize', () => { if (!spin.busy && spin.items) centerOn(2, false); });
+  // iPhones fire "resize" whenever the address bar shows or hides while scrolling: only react to real width changes.
+  let lastW = window.innerWidth;
+  window.addEventListener('resize', () => { if (window.innerWidth === lastW) return; lastW = window.innerWidth; if (!spin.busy && spin.items) { reelW = 0; centerOn(2, false); } });
   // Spin once on its own the first time the reel comes into view.
   loadSpin().then(() => {
     const el = document.getElementById('reel');
     if (!spin.pool.length || !('IntersectionObserver' in window)) return;
+    if (window.matchMedia && matchMedia('(max-width: 560px), (prefers-reduced-motion: reduce)').matches) return; // phones: spin when they tap
     const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { io.disconnect(); setTimeout(doSpin, 400); } }, { threshold: 0.6 });
     io.observe(el);
   });

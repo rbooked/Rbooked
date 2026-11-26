@@ -71,6 +71,11 @@ async function runAll() {
     console.error('[jobs]', e);
     await require('./ops').alertError('scheduled jobs (reminders, no-shows)', e);
   }
+  try { // put map pins on street addresses, a few restaurants per run
+    const { ensureGeo, addrLine } = require('./geo');
+    const todo = all('SELECT * FROM restaurants WHERE address != \'\'').filter((r) => r.geo_addr !== addrLine(r)).slice(0, 5);
+    for (const r of todo) await ensureGeo(r);
+  } catch (e) { console.error('[geo]', e); }
   try { await require('./ops').dailyBackup(); } catch (e) { console.error('[backup]', e); await require('./ops').alertError('daily backup', e); }
 }
 

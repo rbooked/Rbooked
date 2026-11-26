@@ -32,7 +32,18 @@
     if (!el) return;
     whenVisible(el, () => loadLeaflet().then((L) => {
       if (el._rbMap) { el._rbMap.remove(); el._rbMap = null; }
-      const map = L.map(el, { scrollWheelZoom: false, tap: true, zoomControl: !opts.single, attributionControl: true });
+      // On phones the map doesn't grab your finger while you scroll the page; tap "Move map" to explore it.
+      const touch = L.Browser.mobile || ('ontouchstart' in window);
+      const map = L.map(el, { scrollWheelZoom: false, tap: !touch, dragging: !touch, touchZoom: !touch, doubleClickZoom: !touch, zoomControl: !opts.single && !touch, attributionControl: true, fadeAnimation: !touch, zoomAnimation: !touch, markerZoomAnimation: !touch });
+      if (touch && !opts.single) {
+        const btn = L.DomUtil.create('button', 'rb-map-move', el); btn.type = 'button'; btn.textContent = 'Move map';
+        L.DomEvent.disableClickPropagation(btn);
+        btn.onclick = () => {
+          const on = !map.dragging.enabled();
+          [map.dragging, map.touchZoom].forEach((h) => (on ? h.enable() : h.disable()));
+          btn.textContent = on ? 'Done' : 'Move map'; btn.classList.toggle('on', on);
+        };
+      }
       el._rbMap = map; map.attributionControl.setPrefix(false);
       L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>' }).addTo(map);
       const pts = [];
