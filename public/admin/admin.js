@@ -920,21 +920,23 @@
         const fb = resFilterBar(rows, () => renderResFloor(body, rows, floor));
         const seatLabel = (x) => (x.combo_id ? (combos.get(x.combo_id) || {}).name : (floor.tables.find((z) => z.id === x.table_id) || {}).label) || '';
         p.innerHTML = `<div class="row"><h2 style="margin:0">All reservations</h2><span class="spacer"></span><span class="muted small">${today.length} · ${today.filter(movable).reduce((a, x) => a + x.party_size, 0)} guests</span></div>
-          <p class="muted small" style="margin:4px 0 10px">Tap a name, then tap a table to move it. Or press and drag it onto a table.</p>
+          <p class="muted small" style="margin:4px 0 10px">Tap a name to seat, mark late or no-show, or cancel. Then tap a table to move it, or press and drag it onto a table.</p>
           ${fb.html}<div class="rf-list">${resSections(today).map((g) => `<div class="rf-sec">${esc(g.label)} <span>${g.rows.length}</span></div>${g.rows.map((x) => `<button type="button" class="rf-item ${x.status} ${S.rfMove === x.id ? 'moving' : ''} ${movable(x) ? '' : 'done'}" data-x="${x.id}" aria-pressed="${S.rfMove === x.id}">
             <span class="rf-at">${TB.time(x.time)}</span>
             <span class="rf-item-main"><b>${esc(x.guest_name)}</b><span class="small muted">${x.party_size} ${x.party_size === 1 ? 'guest' : 'guests'}${lateBy(x) ? ' · <b class="late-txt">Late</b>' : x.status === 'confirmed' ? '' : ` · ${STATUS_LABEL[x.status]}`}</span></span>
-            <span class="rf-tbl ${seatLabel(x) ? '' : 'none'}">${seatLabel(x) ? esc(seatLabel(x)) : 'No table'}</span></button>`).join('')}`).join('') || '<p class="muted small">No reservations here.</p>'}</div>
+            <span class="rf-tbl ${seatLabel(x) ? '' : 'none'}">${seatLabel(x) ? esc(seatLabel(x)) : 'No table'}</span></button>${S.rfPick === x.id ? `<div class="rf-acts">${lateBy(x) ? lateTag(x) : ''}${movable(x) ? '<div class="small muted">Tap a table to move them, or:</div>' : ''}<div class="res-actions">${statusButtons(x, 'data-a', `data-x="${x.id}"`)}</div></div>` : ''}`).join('')}`).join('') || '<p class="muted small">No reservations here.</p>'}</div>
           <div class="rf-len"><h3 class="rf-h">Reservation length</h3><p class="small muted" style="margin:0">${turnSummary()} <a href="#services">Change</a></p></div>`;
         fb.bind(p);
         p.querySelectorAll('.rf-item').forEach((el) => {
           const x = rows.find((r) => r.id === Number(el.dataset.x));
-          if (!movable(x)) { el.onclick = () => resAction('edit', x); return; }
-          el.onclick = () => { if (el.dataset.dragged) return; S.rfMove = S.rfMove === x.id ? null : x.id; renderResFloor(body, rows, floor); };
+          const pick = () => { const on = S.rfPick !== x.id; S.rfPick = on ? x.id : null; S.rfMove = on && movable(x) ? x.id : null; renderResFloor(body, rows, floor); };
+          if (!movable(x)) { el.onclick = pick; return; }
+          el.onclick = () => { if (el.dataset.dragged) return; pick(); };
           el.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') dragRes(e, x, el); });
           longPressDrag(el, x);
         });
-        const sel0 = p.querySelector('.rf-item.moving'); if (sel0) sel0.scrollIntoView({ block: 'nearest' });
+        p.querySelectorAll('.rf-acts [data-a]').forEach((b) => { b.onclick = () => { S.rfPick = null; S.rfMove = null; resAction(b.dataset.a, rows.find((r) => r.id === Number(b.dataset.x))); }; });
+        const sel0 = p.querySelector('.rf-acts') || p.querySelector('.rf-item.moving'); if (sel0) sel0.scrollIntoView({ block: 'nearest' });
         return;
       }
       const st = state(t);
@@ -988,7 +990,7 @@
       cv.style.zoom = k < 1 ? String(k) : '';
     }
     const moveTo = (x, tableId) => {
-      S.rfMove = null;
+      S.rfMove = null; S.rfPick = null;
       if (!x || seatVal(x) === `t${tableId}`) { renderResFloor(body, rows, floor); return; }
       const t = floor.tables.find((z) => z.id === tableId);
       withForce((force) => api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { ...seatBody(`t${tableId}`), force } }))
@@ -1064,7 +1066,7 @@
     if (S.rfMove) {
       const mx = rows.find((r) => r.id === S.rfMove);
       if (mx) body.querySelector('.floor-wrap').insertAdjacentHTML('beforebegin', `<div class="alert rf-move-bar"><span>Tap a table for <b>${esc(mx.guest_name)} · ${mx.party_size}</b></span><span class="spacer"></span><button class="btn ghost sm" id="rf-move-x">Cancel</button></div>`);
-      const mb = document.getElementById('rf-move-x'); if (mb) mb.onclick = () => { S.rfMove = null; renderResFloor(body, rows, floor); };
+      const mb = document.getElementById('rf-move-x'); if (mb) mb.onclick = () => { S.rfMove = null; S.rfPick = null; renderResFloor(body, rows, floor); };
 
     }
     body.querySelectorAll('#rf-canvas .ftable').forEach((el) => {
