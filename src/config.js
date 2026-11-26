@@ -19,7 +19,7 @@ module.exports = {
     pass: e.SMTP_PASS || '',
   },
   // Rbooked staff who can feature restaurants (comma-separated emails; set in Cloudflare, not in the repo).
-  platformAdmins: String(e.PLATFORM_ADMIN_EMAILS || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean),
+  platformAdmins: [], // no longer used: featuring restaurants is on the support page (/staff.html)
   resendApiKey: e.RESEND_API_KEY || '',
   // Mail goes out from the verified rbooked.com domain. A personal address (like Gmail) set as EMAIL_FROM can't
   // be sent from, so it becomes the Reply-To instead: replies still reach that inbox.

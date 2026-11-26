@@ -67,11 +67,22 @@ router.post('/signup', wrap(async (req, res) => {
   res.status(201).json({ ok: true, slug: restaurant.slug });
 }));
 
+// Password guessing guard: after 8 wrong tries for one email (or 20 from one connection) in 15 minutes, wait.
+const loginFails = new Map();
+const recentFails = (k, now) => (loginFails.get(k) || []).filter((t) => now - t < 15 * 60000);
 router.post('/login', wrap(async (req, res) => {
-  const user = one('SELECT * FROM users WHERE email = ?', String(req.body.email || '').trim().toLowerCase());
+  const email = String(req.body.email || '').trim().toLowerCase();
+  const now = Date.now(); const ipKey = `ip:${req.ip}`; const emKey = `em:${email}`;
+  if (recentFails(emKey, now).length >= 8 || recentFails(ipKey, now).length >= 20) {
+    throw new BookingError('Too many wrong tries. Please wait 15 minutes, or email rbookedsupport@gmail.com for help.', 429);
+  }
+  const user = one('SELECT * FROM users WHERE email = ?', email);
   if (!user || !auth.verifyPassword(String(req.body.password || ''), user.password_hash)) {
+    for (const k of [emKey, ipKey]) loginFails.set(k, [...recentFails(k, now), now]);
+    if (loginFails.size > 5000) loginFails.clear();
     throw new BookingError('Wrong email or password.', 401);
   }
+  loginFails.delete(emKey);
   auth.createSession(res, user.id);
   res.json({ ok: true });
 }));

@@ -22,7 +22,7 @@ router.use((req, res, next) => {
 });
 
 router.get('/restaurants', wrap(async (req, res) => {
-  res.json(all(`SELECT r.id, r.name, r.slug, r.city, r.state, r.created_at, (SELECT COUNT(*) FROM menu_items m WHERE m.restaurant_id = r.id) AS dishes,
+  res.json(all(`SELECT r.id, r.name, r.slug, r.city, r.state, r.created_at, r.featured, (SELECT COUNT(*) FROM menu_items m WHERE m.restaurant_id = r.id) AS dishes,
     (SELECT GROUP_CONCAT(u.email) FROM users u WHERE u.restaurant_id = r.id) AS logins FROM restaurants r ORDER BY r.id`));
 }));
 
@@ -31,6 +31,14 @@ router.post('/restaurants/:id/reset', wrap(async (req, res) => {
   if (!r) return res.status(404).json({ error: 'No such restaurant' });
   require('./admin').resetRestaurant(r.id);
   res.json({ ok: true, reset: r.name, logins_kept: one('SELECT COUNT(*) AS n FROM users WHERE restaurant_id = ?', r.id).n });
+}));
+
+// Show a restaurant first on the home page (or stop).
+router.put('/restaurants/:id/featured', wrap(async (req, res) => {
+  const r = one('SELECT id, name FROM restaurants WHERE id = ?', Number(req.params.id));
+  if (!r) return res.status(404).json({ error: 'No such restaurant' });
+  run('UPDATE restaurants SET featured = ? WHERE id = ?', req.body.featured ? 1 : 0, r.id);
+  res.json({ ok: true, name: r.name, featured: !!req.body.featured });
 }));
 
 // Change a login's email (support request from the owner).

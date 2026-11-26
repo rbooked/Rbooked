@@ -53,7 +53,11 @@
     try {
       const rows = await call('GET', '/api/staff/restaurants'); msg.textContent = '';
       document.getElementById('list').innerHTML = rows.map((r) => `<div class="st-row"><div><b>${esc(r.name)}</b> <span class="muted small">${esc([r.city, r.state].filter(Boolean).join(', '))} · ${r.dishes} dishes</span><div class="small">Login: ${esc(r.logins || '')}</div></div>
-        <button class="btn danger sm" data-reset="${r.id}" data-name="${esc(r.name)}">Reset…</button></div>`).join('') || 'No restaurants yet.';
+        <div class="row" style="gap:6px"><button class="btn secondary sm" data-feat="${r.id}" data-on="${r.featured ? 1 : 0}">${r.featured ? '★ Featured' : '☆ Feature'}</button>
+        <button class="btn danger sm" data-reset="${r.id}" data-name="${esc(r.name)}">Reset…</button></div></div>`).join('') || 'No restaurants yet.';
+      document.querySelectorAll('[data-feat]').forEach((b) => { b.onclick = async () => {
+        try { await call('PUT', `/api/staff/restaurants/${b.dataset.feat}/featured`, { featured: b.dataset.on !== '1' }); await load(); } catch (e) { msg.textContent = e.message; }
+      }; });
       document.querySelectorAll('[data-reset]').forEach((b) => { b.onclick = async () => {
         if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Tap again to erase everything'; setTimeout(() => { b.dataset.armed = ''; b.textContent = 'Reset…'; }, 5000); return; }
         b.disabled = true;

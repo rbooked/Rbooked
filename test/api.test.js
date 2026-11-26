@@ -194,6 +194,64 @@ test('admin API requires login and is scoped to own restaurant', async () => {
   assert.strictEqual(r.status, 401);
 });
 
+test('a second restaurant can only ever touch its own data', async () => {
+  // Restaurant A (the main test login) has these:
+  const aRes = (await call('POST', '/api/admin/reservations', { date: addDays(tomorrow, 9), time: '18:00', party_size: 2, name: 'Private Guest', email: 'private@example.com', phone: '5550001111', source: 'phone' })).data;
+  const aFloor = (await call('GET', '/api/admin/floor')).data;
+  const aTable = aFloor.tables[0]; const aArea = aFloor.areas[0];
+  const aDish = (await call('POST', '/api/admin/menu', { name: 'Secret Soup', price: '9', section: 'Soups' })).data;
+  const aGuest = (await call('GET', '/api/admin/guests')).data.guests?.[0] || (await call('GET', '/api/admin/guests')).data[0];
+  const aShift = (await call('GET', '/api/admin/shifts')).data.shifts[0];
+  // Restaurant B signs up with its own cookie.
+  let b = '';
+  const asB = async (method, url, body) => {
+    const r = await fetch(base + url, { method, headers: { 'Content-Type': 'application/json', ...(b ? { Cookie: b } : {}) }, body: body ? JSON.stringify(body) : undefined });
+    const sc = r.headers.get('set-cookie'); if (sc && !b) b = sc.split(';')[0];
+    let data = null; try { data = await r.json(); } catch { /* html */ }
+    return { status: r.status, data };
+  };
+  const su = await asB('POST', '/api/auth/signup', { restaurant_name: 'Other Place', owner_name: 'B', email: 'b-owner@test.local', password: 'password123', phone: '555-999-0000', address: '2 Side St', city: 'New York', state: 'NY', zip: '10011', cuisine: 'Pizza' });
+  assert.strictEqual(su.status, 201, JSON.stringify(su.data));
+  // B sees none of A's things in its lists...
+  const list = await asB('GET', `/api/admin/reservations?date=${addDays(tomorrow, 9)}`);
+  assert.ok(!JSON.stringify(list.data).includes('Private Guest'));
+  assert.ok(!JSON.stringify((await asB('GET', '/api/admin/menu')).data).includes('Secret Soup'));
+  // ...and can't read, change or delete them by id.
+  const tries = [
+    ['PATCH', `/api/admin/reservations/${aRes.id}`, { guest_name: 'Hacked' }], ['POST', `/api/admin/reservations/${aRes.id}/cancel`, {}],
+    ['POST', `/api/admin/reservations/${aRes.id}/no-show`, {}], ['POST', `/api/admin/reservations/${aRes.id}/resend`, {}],
+    ['PUT', `/api/admin/tables/${aTable.id}`, { label: 'X' }], ['DELETE', `/api/admin/tables/${aTable.id}`],
+    ['PUT', `/api/admin/areas/${aArea.id}`, { name: 'X' }], ['DELETE', `/api/admin/areas/${aArea.id}`],
+    ['PUT', `/api/admin/menu/${aDish.id}`, { name: 'X' }], ['DELETE', `/api/admin/menu/${aDish.id}`],
+    ['PUT', `/api/admin/shifts/${aShift.id}`, { name: 'X' }], ['DELETE', `/api/admin/shifts/${aShift.id}`],
+    ...(aGuest ? [['GET', `/api/admin/guests/${aGuest.id}`], ['PUT', `/api/admin/guests/${aGuest.id}`, { name: 'X' }], ['DELETE', `/api/admin/guests/${aGuest.id}`]] : []),
+  ];
+  for (const [m, u, body] of tries) {
+    const r = await asB(m, u, body);
+    assert.ok([400, 404].includes(r.status), `${m} ${u} gave ${r.status}`);
+  }
+  // A booking from B can't be put on A's table, and B can't combine A's tables.
+  const bb = await asB('POST', '/api/admin/reservations', { date: addDays(tomorrow, 9), time: '18:00', party_size: 2, name: 'B guest', email: 'bg@example.com', phone: '5550002222', source: 'phone', table_id: aTable.id });
+  assert.ok([400, 404].includes(bb.status), `table from other restaurant gave ${bb.status}`);
+  assert.strictEqual((await asB('POST', '/api/admin/combos', { table_ids: [aFloor.tables[0].id, aFloor.tables[1].id] })).status, 400);
+  // Nothing of A's changed.
+  assert.strictEqual(one('SELECT guest_name FROM reservations WHERE id = ?', aRes.id).guest_name, 'Private Guest');
+  assert.ok(one('SELECT id FROM menu_items WHERE id = ?', aDish.id));
+  // No platform or support powers for restaurant logins.
+  assert.strictEqual((await asB('GET', '/api/admin/platform/restaurants')).status, 404);
+  assert.strictEqual((await asB('PUT', `/api/admin/platform/restaurants/${aRes.restaurant_id}`, { featured: true })).status, 404);
+  assert.notStrictEqual((await asB('GET', '/api/staff/restaurants')).status, 200);
+  const me = await asB('GET', '/api/admin/restaurant');
+  assert.ok(!('password_hash' in me.data.user) && !('platformAdmin' in me.data.user));
+  await call('DELETE', `/api/admin/menu/${aDish.id}`); await call('POST', `/api/admin/reservations/${aRes.id}/cancel`, { notify: false });
+});
+
+test('login: too many wrong passwords makes you wait', async () => {
+  let last;
+  for (let i = 0; i < 9; i++) last = await call('POST', '/api/auth/login', { email: 'nobody-here@test.local', password: 'wrong' }, false);
+  assert.strictEqual(last.status, 429);
+});
+
 test('table combinations seat larger parties and block their member tables', async () => {
   const floor = await call('GET', '/api/admin/floor');
   const byLabel = Object.fromEntries(floor.data.tables.map((t) => [t.label, t]));
@@ -302,7 +360,7 @@ test('home page always has restaurants to show; only Rbooked staff can feature',
   run('UPDATE restaurants SET featured = 0');
   const f = await call('GET', '/api/public/featured', null, false);
   assert.ok(f.data.length >= 1, 'newest restaurants fill in when none are featured');
-  assert.strictEqual((await call('GET', '/api/admin/platform/restaurants')).status, 403);
+  assert.strictEqual((await call('GET', '/api/admin/platform/restaurants')).status, 404);
 });
 
 test('menu import: pasted text becomes dishes with sections, prices and diet tags', async () => {
