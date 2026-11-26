@@ -349,3 +349,12 @@ body.rf-dragging, body.rf-dragging * { cursor: grabbing !important; }
 
 .tag-card { display: flex; align-items: center; gap: 14px; justify-content: space-between; background: linear-gradient(135deg, #fff, var(--brand-soft, #fde8dc)); }
 .tag-big { font-family: var(--serif, Georgia); font-size: 26px; font-weight: 700; color: var(--brand); line-height: 1.2; word-break: break-all; }
+
+/* Late guests */
+.badge.late { background: #fde68a; color: #92400e; }
+tr.is-late > td { background: #fffbeb; }
+tr.is-late > td:first-child { box-shadow: inset 4px 0 0 #f59e0b; }
+.late-tag { font-weight: 700; }
+.late-txt { color: #b45309; }
+.res-list tr.is-late { background: #fffbeb; }
+.stat.stat-late { background: #fffbeb; border-color: #f59e0b; } .stat.stat-late b { color: #b45309; }

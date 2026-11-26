@@ -77,7 +77,7 @@ window.RBOOKED_DEMO = true;
         id: id(), slug, name, cuisine, price_level: price, description, phone: `(555) 01${String(idx).padStart(2, '0')}-${1000 + idx * 7}`,
         email: `hello@${slug}.example`, address, city: z[2], state: z[3], zip, lat: z[0] + ((idx % 5) - 2) * 0.002, lng: z[1] + ((idx % 3) - 1) * 0.002,
         timezone: tz, image_url: '', max_party_size: 8, booking_window_days: 60, min_notice_minutes: 60, reminder_hours: 24,
-        no_show_grace_minutes: 30, auto_no_show: 0, send_no_show_email: 1, cancellation_policy: 'Please cancel at least 2 hours before your reservation.',
+        no_show_grace_minutes: 30, auto_no_show: 1, send_no_show_email: 1, cancellation_policy: 'Please cancel at least 2 hours before your reservation.',
         accent_color: color, trial_ends_at: new Date(Date.now() + 30 * 86400000).toISOString(), subscription_status: idx === 0 ? 'trialing' : 'active',
         stripe_subscription_id: null, tags: TAGS[name] || '', featured: FEATURED.has(name) ? 1 : 0, turn_times: '2:90,4:120,6:180,99:210',
       };
@@ -450,7 +450,7 @@ window.RBOOKED_DEMO = true;
       id: nextId(), slug: slugify(b.restaurant_name), name: String(b.restaurant_name).trim(), cuisine: b.cuisine || '', price_level: 2, description: '',
       phone: b.phone, email: em, address: b.address, city: b.city, state: String(b.state).toUpperCase().slice(0, 2), zip: b.zip,
       lat: z ? z[0] : near ? near.lat : null, lng: z ? z[1] : near ? near.lng : null, timezone: window.TBPlaces.timezoneFor(b.zip, b.state), image_url: '',
-      max_party_size: 8, booking_window_days: 60, min_notice_minutes: 60, reminder_hours: 24, no_show_grace_minutes: 30, auto_no_show: 0, send_no_show_email: 1,
+      max_party_size: 8, booking_window_days: 60, min_notice_minutes: 60, reminder_hours: 24, no_show_grace_minutes: 30, auto_no_show: 1, send_no_show_email: 1,
       cancellation_policy: 'Please cancel at least 2 hours before your reservation.', accent_color: '#c2410c',
       trial_ends_at: new Date(Date.now() + 14 * 86400000).toISOString(), subscription_status: 'trialing', stripe_subscription_id: null, tags: '', featured: 0, turn_times: '2:90,4:120,6:180,99:210', website_url: '', logo_url: '', hours: '',
     };

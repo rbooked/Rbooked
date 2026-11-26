@@ -639,12 +639,13 @@
     S.lastStats = stats;
     const tiles = [
       ['Reservations', data.reservations.filter((x) => x.status !== 'cancelled').length, 'bookings'],
-      ['Covers', stats.covers || 0, 'covers'], ['Upcoming', stats.upcoming || 0, 'upcoming'], ['Seated', stats.seated || 0, 'seated'],
+      ['Covers', stats.covers || 0, 'covers'], ...(() => { const late = data.reservations.filter((x) => lateBy(x) > 0).length; stats.late = late;
+        return [...(late ? [['Late', late, 'late']] : []), ['Upcoming', Math.max(0, (stats.upcoming || 0) - late), 'upcoming']]; })(), ['Seated', stats.seated || 0, 'seated'],
       ['Finished', stats.completed || 0, 'completed'], ['No-shows', stats.no_shows || 0, 'no_shows'], ['Cancelled', stats.cancelled || 0, 'cancelled'],
       ['Seats', stats.seats, 'seats'],
     ];
     document.getElementById('stats').innerHTML = tiles.map(([k, v, key]) =>
-      `<div class="stat${quiet && prev && prev[key] !== stats[key] ? ' bump' : ''}"><b>${v}</b><span>${k}</span></div>`).join('');
+      `<div class="stat${quiet && prev && prev[key] !== stats[key] ? ' bump' : ''}${key === 'late' ? ' stat-late' : ''}"><b>${v}</b><span>${k}</span></div>`).join('');
     const live = document.getElementById('live');
     if (live) live.title = `Updated ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
     renderUpNext(data.reservations);
@@ -682,9 +683,25 @@
   }
 
   // Reservation sections, in this order: Seated, Upcoming, Finished, then Cancelled / no-show last.
+  /** Minutes a booked (not yet seated) guest is past their time, or 0 if they aren't late. */
+  function lateBy(x) {
+    if (x.status !== 'confirmed') return 0;
+    const now = nowLocal();
+    if (x.date < now.date) return 24 * 60;
+    if (x.date > now.date) return 0;
+    return Math.max(0, now.minutes - toMin(x.time));
+  }
+  const graceMin = () => (S.me.restaurant.auto_no_show ? Number(S.me.restaurant.no_show_grace_minutes) || 30 : 0);
+  function lateTag(x) {
+    const m = lateBy(x); if (!m) return '';
+    const g = graceMin(); const left = g - m;
+    const dur = m >= 24 * 60 ? '' : m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`;
+    return `<span class="tag warn late-tag">Late ${dur}</span>${g && !x.keep_late && left > 0 ? `<div class="small muted">No-show in ${left} min</div>` : ''}`;
+  }
   const RES_GROUPS = [
+    { id: 'late', label: 'Late', has: (x) => lateBy(x) > 0 },
     { id: 'seated', label: 'Seated', has: (x) => x.status === 'seated' },
-    { id: 'upcoming', label: 'Upcoming', has: (x) => x.status === 'confirmed' },
+    { id: 'upcoming', label: 'Upcoming', has: (x) => x.status === 'confirmed' && !lateBy(x) },
     { id: 'finished', label: 'Finished', has: (x) => x.status === 'completed' },
     { id: 'off', label: 'Cancelled / no-show', has: (x) => ['cancelled', 'no_show'].includes(x.status) },
   ];
@@ -711,16 +728,16 @@
     body.innerHTML = `${fb.html}<div class="card" style="padding:0"><div class="table-wrap"><table class="data res-list">
       <thead><tr><th>Time</th><th>Guest</th><th>Party</th><th>Table</th><th>Status</th><th>Actions</th></tr></thead>
       ${secs.map((g) => `<tbody><tr class="res-sec"><th colspan="6">${esc(g.label)} <span class="muted">${g.rows.length} · ${g.rows.reduce((a, x) => a + x.party_size, 0)} guests</span></th></tr>${g.rows.map((x) => {
-        const late = x.status === 'confirmed' && x.date === now.date && toMin(x.time) + 15 < now.minutes;
+        const late = lateBy(x) > 0;
         const dim = ['cancelled', 'no_show', 'completed'].includes(x.status);
-        return `<tr class="${dim ? 'dim' : ''}" data-id="${x.id}">
-          <td class="time-cell">${TB.time(x.time)}${late ? '<br><span class="tag warn">Late</span>' : ''}</td>
+        return `<tr class="${dim ? 'dim' : ''}${late ? ' is-late' : ''}" data-id="${x.id}">
+          <td class="time-cell">${TB.time(x.time)}${late ? `<br>${lateTag(x)}` : ''}</td>
           <td>${x.guest_id ? `<a href="#guests" class="guest-link" data-guest="${x.guest_id}"><b>${esc(x.guest_name)}</b></a>` : `<b>${esc(x.guest_name)}</b>`}<br><a href="tel:${esc(x.guest_phone)}">${esc(x.guest_phone)}</a> · <span class="muted">${esc(x.guest_email)}</span>
             ${guestTags(x)}${x.notes ? `<div class="small" style="margin-top:4px">📝 ${esc(x.notes)}</div>` : ''}${x.guest_notes ? `<div class="small muted">📇 ${esc(x.guest_notes)}</div>` : ''}${x.internal_notes ? `<div class="small muted">🔒 ${esc(x.internal_notes)}</div>` : ''}
             <div class="small muted">#${esc(x.code)}</div></td>
           <td class="party-cell" data-label="Party">${x.party_size}<span class="show-sm"> ${x.party_size === 1 ? 'guest' : 'guests'}</span></td>
           <td data-label="Table"><select data-act="table" ${dim ? 'disabled' : ''} style="min-width:130px" aria-label="Table">${seatOptions(seatVal(x))}</select></td>
-          <td data-label="Status"><span class="badge ${x.status}">${STATUS_LABEL[x.status]}</span></td>
+          <td data-label="Status"><span class="badge ${late ? 'late' : x.status}">${late ? 'Late' : STATUS_LABEL[x.status]}</span></td>
           <td><div class="res-actions">
             ${statusButtons(x, 'data-act')}
             ${x.guest_email !== 'walkin@guest.local' ? '<button class="btn ghost sm" data-act="resend" title="Resend email" aria-label="Resend email">✉️</button>' : ''}
@@ -745,14 +762,18 @@
     const b = (act, label, cls = 'secondary') => `<button class="btn ${cls} sm" ${attr}="${act}" ${extra}>${label}</button>`;
     if (x.status === 'confirmed') return b('seat', '✓ Seat', 'ok') + b('noshow', 'No-show') + b('cancel', 'Cancel') + b('edit', 'Edit');
     if (x.status === 'seated') return b('complete', '✓ Finished', 'ok') + b('undo', 'Undo seat') + b('cancel', 'Cancel') + b('edit', 'Edit');
-    if (['no_show', 'completed'].includes(x.status)) return b('undo', 'Undo');
+    if (x.status === 'no_show') {
+      const past = x.date < nowLocal().date || (x.date === nowLocal().date && toMin(x.time) < nowLocal().minutes);
+      return b('seat', '✓ Seat', 'ok') + b('undo', past ? '⏱ Late' : 'Upcoming') + b('cancel', 'Cancel');
+    }
+    if (x.status === 'completed') return b('undo', 'Undo');
     return '';
   }
   async function resAction(act, x) {
     try {
       if (act === 'seat') { await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { status: 'seated' } }); TB.toast(`${x.guest_name} seated`); }
       if (act === 'complete') { await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { status: 'completed' } }); TB.toast(`${x.guest_name}'s table is finished`); }
-      if (act === 'undo') await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { status: 'confirmed' } });
+      if (act === 'undo') { await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { status: 'confirmed' } }); if (x.status === 'no_show') TB.toast(`${x.guest_name} is back on the list`); }
       if (act === 'resend') { await api(`/api/admin/reservations/${x.id}/resend`, { body: {} }); TB.toast('Email sent'); return; }
       if (act === 'edit') return reservationModal(x, load);
       if (act === 'noshow' || act === 'cancel') {
@@ -902,7 +923,7 @@
           <p class="muted small" style="margin:4px 0 10px">Tap a name, then tap a table to move it. Or press and drag it onto a table.</p>
           ${fb.html}<div class="rf-list">${resSections(today).map((g) => `<div class="rf-sec">${esc(g.label)} <span>${g.rows.length}</span></div>${g.rows.map((x) => `<button type="button" class="rf-item ${x.status} ${S.rfMove === x.id ? 'moving' : ''} ${movable(x) ? '' : 'done'}" data-x="${x.id}" aria-pressed="${S.rfMove === x.id}">
             <span class="rf-at">${TB.time(x.time)}</span>
-            <span class="rf-item-main"><b>${esc(x.guest_name)}</b><span class="small muted">${x.party_size} ${x.party_size === 1 ? 'guest' : 'guests'}${x.status === 'confirmed' ? '' : ` · ${STATUS_LABEL[x.status]}`}</span></span>
+            <span class="rf-item-main"><b>${esc(x.guest_name)}</b><span class="small muted">${x.party_size} ${x.party_size === 1 ? 'guest' : 'guests'}${lateBy(x) ? ' · <b class="late-txt">Late</b>' : x.status === 'confirmed' ? '' : ` · ${STATUS_LABEL[x.status]}`}</span></span>
             <span class="rf-tbl ${seatLabel(x) ? '' : 'none'}">${seatLabel(x) ? esc(seatLabel(x)) : 'No table'}</span></button>`).join('')}`).join('') || '<p class="muted small">No reservations here.</p>'}</div>
           <div class="rf-len"><h3 class="rf-h">Reservation length</h3><p class="small muted" style="margin:0">${turnSummary()} <a href="#services">Change</a></p></div>`;
         fb.bind(p);

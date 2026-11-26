@@ -180,6 +180,9 @@ router.patch('/reservations/:id', wrap(async (req, res) => {
     }
   }
   if (f.date || f.time) { f.starts_at_utc = zonedToUtc(next.date, next.time, r.timezone).toISOString(); f.reminder_sent_at = null; }
+  // Brought back from no-show by staff: keep it on the list as Late instead of marking it no-show again.
+  if (f.status === 'confirmed' && rv.status === 'no_show') f.keep_late = 1;
+  if ((f.date && f.date !== rv.date) || (f.time && f.time !== rv.time)) f.keep_late = 0;
   f.updated_at = new Date().toISOString().replace('T', ' ').slice(0, 19);
   update('reservations', rv.id, r.id, f);
   const updated = one('SELECT * FROM reservations WHERE id = ?', rv.id);

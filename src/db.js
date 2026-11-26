@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS restaurants (
   min_notice_minutes INTEGER DEFAULT 60,
   reminder_hours INTEGER DEFAULT 24,
   no_show_grace_minutes INTEGER DEFAULT 30,
-  auto_no_show INTEGER DEFAULT 0,          -- 1 = automatically mark unseated guests as no-show after the grace period
+  auto_no_show INTEGER DEFAULT 1,          -- 1 = automatically mark unseated guests as no-show after the grace period
   send_no_show_email INTEGER DEFAULT 1,
   cancellation_policy TEXT DEFAULT 'Please cancel at least 2 hours before your reservation.',
   accent_color TEXT DEFAULT '#c2410c',
@@ -132,6 +132,7 @@ CREATE TABLE IF NOT EXISTS reservations (
   occasion TEXT DEFAULT '',
   source TEXT NOT NULL DEFAULT 'online', -- online | widget | phone | walk_in | admin
   status TEXT NOT NULL DEFAULT 'confirmed', -- confirmed | seated | completed | cancelled | no_show
+  keep_late INTEGER DEFAULT 0,            -- 1 = staff brought it back from no-show: don't auto-mark it again
   reminder_sent_at TEXT,
   cancelled_at TEXT,
   cancelled_by TEXT,
@@ -250,6 +251,11 @@ function migrate(d) {
   if (!cols.has('tags')) d.exec("ALTER TABLE restaurants ADD COLUMN tags TEXT DEFAULT ''");
   if (!rcols.has('combo_id')) d.exec('ALTER TABLE reservations ADD COLUMN combo_id INTEGER');
   if (!rcols.has('guest_id')) d.exec('ALTER TABLE reservations ADD COLUMN guest_id INTEGER');
+  if (!rcols.has('keep_late')) {
+    d.exec('ALTER TABLE reservations ADD COLUMN keep_late INTEGER DEFAULT 0');
+    // Late guests now show as "Late" for 30 minutes, then turn into no-shows (person's request, 2026-11-26).
+    d.exec('UPDATE restaurants SET auto_no_show = 1, no_show_grace_minutes = 30');
+  }
   if (!cols.has('turn_times')) d.exec("ALTER TABLE restaurants ADD COLUMN turn_times TEXT DEFAULT '2:90,4:120,6:180,99:210'");
   for (const [c, def] of [['website_url', "''"], ['logo_url', "''"], ['hours', "''"]]) if (!cols.has(c)) d.exec(`ALTER TABLE restaurants ADD COLUMN ${c} TEXT DEFAULT ${def}`);
   if (!cols.has('featured')) d.exec('ALTER TABLE restaurants ADD COLUMN featured INTEGER DEFAULT 0');

@@ -169,6 +169,13 @@ test('auto no-show marks unseated guests after the grace period', async () => {
   const n = jobs.autoNoShows(new Date(new Date(res.starts_at_utc).getTime() + 31 * 60000));
   assert.ok(n >= 1);
   assert.strictEqual(one('SELECT status FROM reservations WHERE id = ?', res.id).status, 'no_show');
+  // Staff bring it back: it stays (shown as Late) and isn't marked no-show again.
+  const back = await call('PATCH', `/api/admin/reservations/${res.id}`, { status: 'confirmed' });
+  assert.strictEqual(back.status, 200, JSON.stringify(back.data));
+  assert.strictEqual(back.data.keep_late, 1);
+  jobs.autoNoShows(new Date(new Date(res.starts_at_utc).getTime() + 90 * 60000));
+  assert.strictEqual(one('SELECT status FROM reservations WHERE id = ?', res.id).status, 'confirmed');
+  assert.ok((await call('PATCH', `/api/admin/reservations/${res.id}`, { status: 'seated' })).data.status === 'seated');
 });
 
 test('expired trial hides restaurant until subscribed', async () => {

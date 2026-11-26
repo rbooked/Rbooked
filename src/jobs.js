@@ -25,12 +25,13 @@ async function sendReminders(now = new Date()) {
 
 function autoNoShows(now = new Date()) {
   const rows = all(`SELECT r.* FROM reservations r JOIN restaurants x ON x.id = r.restaurant_id
-    WHERE r.status = 'confirmed' AND x.auto_no_show = 1 AND r.starts_at_utc < ?`, now.toISOString());
+    WHERE r.status = 'confirmed' AND COALESCE(r.keep_late, 0) = 0 AND x.auto_no_show = 1 AND r.starts_at_utc < ?`, now.toISOString());
   let n = 0;
   for (const res of rows) {
     const restaurant = one('SELECT * FROM restaurants WHERE id = ?', res.restaurant_id);
     const deadline = new Date(res.starts_at_utc).getTime() + restaurant.no_show_grace_minutes * 60000;
-    if (now.getTime() >= deadline) { markNoShow(restaurant, res, !!restaurant.send_no_show_email); n++; }
+    // No email when it happens on its own: staff often bring late guests back.
+    if (now.getTime() >= deadline) { markNoShow(restaurant, res, false); n++; }
   }
   return n;
 }
