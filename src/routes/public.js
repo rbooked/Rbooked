@@ -225,6 +225,7 @@ router.get('/restaurants/:slug/availability', wrap(async (req, res) => {
   const date = String(req.query.date || nowInZone(r.timezone).date);
   const av = getAvailability(r, date, Number(req.query.party) || 2);
   av.slots = av.slots.map(({ time, shiftName, available }) => ({ time, shiftName, available }));
+  if (!av.slots.length) av.nextOpen = require('../availability').nextOpenDate(r.id, date);
   res.json(av);
 }));
 

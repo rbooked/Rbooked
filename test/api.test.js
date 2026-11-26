@@ -397,6 +397,27 @@ test('special hours replace the usual services on one date only', async () => {
   await call('DELETE', `/api/admin/closures/${(await call('GET', '/api/admin/shifts')).data.closures.find((c) => c.date === day).id}`);
 });
 
+test('services can follow opening hours, and closed days point to the next open day', async () => {
+  const slug = (await call('GET', '/api/admin/restaurant')).data.restaurant.slug;
+  const H = (o, c) => ({ closed: false, open: o, close: c });
+  const hours = [H('10:00', '15:00'), { closed: true, open: '17:00', close: '22:00' }, { closed: true, open: '17:00', close: '22:00' }, H('17:00', '22:00'), H('17:00', '22:00'), H('17:00', '23:00'), H('17:00', '23:00')];
+  await call('PUT', '/api/admin/restaurant', { hours: JSON.stringify(hours) });
+  const before = (await call('GET', '/api/admin/shifts')).data.shifts;
+  const r = await call('POST', '/api/admin/shifts/from-hours', {});
+  assert.strictEqual(r.status, 200, JSON.stringify(r.data));
+  const sh = r.data.shifts.map((x) => [x.days, x.start_time, x.end_time]).sort();
+  assert.deepStrictEqual(sh, [['0', '10:00', '14:00'], ['3,4', '17:00', '21:00'], ['5,6', '17:00', '22:00']]);
+  // Find the next Monday (closed): availability is empty and points to Wednesday.
+  let d = addDays(nowInZone('America/New_York').date, 2); while (new Date(`${d}T12:00:00Z`).getUTCDay() !== 1) d = addDays(d, 1);
+  const av = (await call('GET', `/api/public/restaurants/${slug}/availability?date=${d}&party=2`)).data;
+  assert.strictEqual(av.slots.length, 0); assert.strictEqual(av.nextOpen, addDays(d, 2));
+  // put the original services back for later tests
+  await call('POST', '/api/admin/shifts/from-hours', {}).catch(() => {});
+  for (const x of (await call('GET', '/api/admin/shifts')).data.shifts) await call('DELETE', `/api/admin/shifts/${x.id}`);
+  for (const x of before) await call('POST', '/api/admin/shifts', { name: x.name, days: x.days.split(','), start_time: x.start_time, end_time: x.end_time, slot_interval: x.slot_interval, turn_minutes: x.turn_minutes, active: x.active });
+  await call('PUT', '/api/admin/restaurant', { hours: '' });
+});
+
 test('gallery and likes: diners heart restaurants, dishes and food photos', async () => {
   await call('PUT', '/api/admin/restaurant', { name: 'Heart Cafe', cuisine: 'Cafe', description: 'Cozy cafe with pastries.' });
   const dish = (await call('POST', '/api/admin/menu', { name: 'Croissant', price: '4', section: 'Bakery' })).data;

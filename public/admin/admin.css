@@ -335,3 +335,14 @@ body.rf-dragging, body.rf-dragging * { cursor: grabbing !important; }
 .res-list tr.res-sec th .muted { font-weight: 500; margin-left: 6px; }
 .rf-sec { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 8px 2px 2px; display: flex; justify-content: space-between; }
 @media (max-width: 760px) { .res-list tr.res-sec { padding: 8px 16px; background: var(--surface-2); } .res-list tr.res-sec th { display: block; padding: 0; background: none; } }
+
+/* Services: week at a glance, one Save button */
+.week-card { padding: 12px; margin-bottom: 14px; }
+.week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.wk-day { border-radius: 10px; padding: 8px 6px; font-size: 12px; display: grid; gap: 4px; align-content: start; text-align: center; }
+.wk-day b { font-size: 13px; }
+.wk-day.on { background: #dcfce7; color: #14532d; }
+.wk-day.off { background: var(--surface-2); color: var(--muted); }
+.wk-warn { color: #b45309; font-weight: 600; }
+.save-bar { position: sticky; bottom: 12px; display: flex; align-items: center; gap: 10px; background: var(--ink); color: #fff; padding: 10px 12px 10px 16px; border-radius: 12px; box-shadow: var(--shadow); margin-top: 12px; z-index: 5; }
+@media (max-width: 640px) { .week { grid-template-columns: repeat(4, minmax(0, 1fr)); } .save-bar { bottom: 8px; } }

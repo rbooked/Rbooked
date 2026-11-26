@@ -147,4 +147,13 @@ function anyFreeSeating(restaurantId, party, date, time, duration) {
     isSeatingFree(restaurantId, o, date, time, duration)) || null;
 }
 
-module.exports = { specialDay, getAvailability, findSlot, isTableFree, isSeatingFree, anyFreeSeating, shiftsForDate, comboMap, occupiedTables };
+/** The next date (after `date`, within `days`) that has bookable services, or null. */
+function nextOpenDate(restaurantId, date, days = 30) {
+  for (let i = 1; i <= days; i++) {
+    const d = addDays(date, i);
+    if (!isClosed(restaurantId, d) && shiftsForDate(restaurantId, d).length) return d;
+  }
+  return null;
+}
+
+module.exports = { nextOpenDate, specialDay, getAvailability, findSlot, isTableFree, isSeatingFree, anyFreeSeating, shiftsForDate, comboMap, occupiedTables };

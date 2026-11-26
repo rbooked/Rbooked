@@ -40,8 +40,13 @@
       box.innerHTML = '<p class="muted">Loading times…</p>';
       try {
         const av = await api(`/api/public/restaurants/${r.slug}/availability?date=${state.date}&party=${state.party}`);
-        if (av.closed) { box.innerHTML = '<div class="alert">The restaurant is closed on this date.</div>'; return; }
-        if (!av.slots.length) { box.innerHTML = '<div class="alert">No service on this date. Try another day.</div>'; return; }
+        if (av.closed || !av.slots.length) {
+          const nice = (d) => TB.date(d, { weekday: 'long', month: 'long' });
+          box.innerHTML = `<div class="alert">${av.closed ? 'The restaurant is closed' : 'No reservations are taken'} on ${esc(nice(state.date))}.${av.nextOpen ? ` <button class="btn sm" id="bk-next" style="margin-left:6px">See ${esc(nice(av.nextOpen))}</button>` : ''}</div>`;
+          const nb = box.querySelector('#bk-next');
+          if (nb) nb.onclick = () => { state.date = av.nextOpen; const di = root.querySelector('#bk-date'); if (di) di.value = av.nextOpen; loadSlots(); };
+          return;
+        }
         const byShift = {};
         av.slots.forEach((s) => { (byShift[s.shiftName] = byShift[s.shiftName] || []).push(s); });
         const anyOpen = av.slots.some((s) => s.available);

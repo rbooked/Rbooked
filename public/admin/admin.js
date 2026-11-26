@@ -1373,11 +1373,15 @@
 
   // ---------------- Services / shifts ----------------
   async function viewServices() {
-    const { shifts, closures } = await api('/api/admin/shifts');
+    const [{ shifts, closures }, me] = await Promise.all([api('/api/admin/shifts'), api('/api/admin/restaurant')]);
+    S.me.restaurant = { ...S.me.restaurant, ...me.restaurant };
     S.today0 = nowLocal().date;
     view.innerHTML = `<div class="two-col"><div>
-        <div class="row" style="margin-bottom:12px"><h2 style="margin:0">Services</h2><span class="spacer"></span><button class="btn" id="add-shift">+ Add service</button></div>
-        <div id="shift-list"></div></div>
+        <div class="row" style="margin-bottom:8px"><h2 style="margin:0">Services</h2><span class="spacer"></span><button class="btn secondary" id="add-shift">+ Add service</button></div>
+        <p class="small muted" style="margin:0 0 10px">Services are the times guests can book online. Tick the days each one runs, then press <b>Save changes</b> once.</p>
+        <div class="card week-card" id="week"></div>
+        <div id="shift-list"></div>
+        <div class="save-bar" id="save-bar" hidden><span>You have unsaved changes</span><span class="spacer"></span><button class="btn" id="save-all">Save changes</button></div></div>
       <div><div class="card" id="turns" style="margin-bottom:16px"></div><div class="card"><h2>Special hours & holidays</h2><p class="muted small">Different hours, or closed, on specific dates only. Your usual services stay the same on every other day.</p>
         <form id="c-form" class="sp-form">
           <div class="grid-2"><div class="field"><label for="sp-date">Date</label><input id="sp-date" type="date" name="date" required></div>
@@ -1403,28 +1407,56 @@
         <div class="field"><label>Turn time (min) <span class="muted small">used if lengths by party size are off</span></label><input type="number" name="turn_minutes" min="15" step="15" value="${s.turn_minutes}"></div>
         <div class="field"><label>Max covers per slot (0 = no limit)</label><input type="number" name="max_covers_per_slot" min="0" value="${s.max_covers_per_slot}"></div>
       </div>
-      <div class="row"><button class="btn" type="submit">${s.id ? 'Save' : 'Create service'}</button>${s.id ? '<button class="btn ghost" type="button" data-del-shift>Delete</button>' : ''}</div></form>`;
+      <div class="row">${s.id ? '<button class="btn ghost" type="button" data-del-shift>Delete service</button>' : '<span class="small muted">New service: press Save changes below.</span>'}</div></form>`;
     list.innerHTML = shifts.map(card).join('') || '<p class="muted">No services yet. Add one so guests can book.</p>';
-    const bind = () => list.querySelectorAll('form').forEach((f) => {
-      f.onsubmit = async (e) => {
-        e.preventDefault();
+    // The week at a glance: which days take bookings, and when. Warns when the profile says open but no service runs.
+    const hours = TBMatch.parseHours(S.me.restaurant.hours);
+    const week = () => {
+      const cur = [...list.querySelectorAll('form')].map((f) => ({ name: f.name.value, active: f.active.checked, start: f.start_time.value, end: f.end_time.value, days: [...f.querySelectorAll('input[name=day]:checked')].map((x) => Number(x.value)) }));
+      document.getElementById('week').innerHTML = `<div class="week">${[1, 2, 3, 4, 5, 6, 0].map((d) => {
+        const on = cur.filter((s) => s.active && s.days.includes(d));
+        const openDay = hours && !hours[d].closed;
+        return `<div class="wk-day ${on.length ? 'on' : 'off'}"><b>${DAY_NAMES[d]}</b>${on.length ? on.map((s) => `<span>${esc(s.name)}<br>${TB.time(s.start)}–${TB.time(s.end)}</span>`).join('') : `<span>No bookings</span>${openDay ? '<span class="wk-warn">Open in your profile</span>' : ''}`}</div>`;
+      }).join('')}</div>
+      ${hours ? '<div class="row" style="margin-top:10px"><span class="small muted">Want bookings to follow your opening hours?</span><button class="btn ghost sm" id="from-hours">Match my opening hours</button></div>' : ''}`;
+      const fh = document.getElementById('from-hours');
+      if (fh) fh.onclick = async () => {
+        if (!await ask('Replace your services with ones that match your opening hours? Last seating is an hour before closing.', 'Replace services')) return;
+        try { await api('/api/admin/shifts/from-hours', { body: {} }); TB.toast('Services now follow your opening hours'); viewServices().catch(fail); } catch (e) { fail(e); }
+      };
+    };
+    week();
+    const dirty = new Set();
+    const bar = document.getElementById('save-bar');
+    const markDirty = (f) => { dirty.add(f); bar.hidden = false; week(); };
+    const saveOne = async (f) => {
         const days = [...f.querySelectorAll('input[name=day]:checked')].map((x) => x.value);
         const body = { name: f.name.value, active: f.active.checked, days, start_time: f.start_time.value, end_time: f.end_time.value,
           slot_interval: Number(f.slot_interval.value), turn_minutes: Number(f.turn_minutes.value), max_covers_per_slot: Number(f.max_covers_per_slot.value) };
-        if (!days.length) return TB.toast('Pick at least one day', true);
-        if (body.end_time < body.start_time) return TB.toast('Last seating must be after first seating', true);
-        try {
-          await api(f.dataset.id ? `/api/admin/shifts/${f.dataset.id}` : '/api/admin/shifts', { method: f.dataset.id ? 'PUT' : 'POST', body });
-          TB.toast('Service saved'); viewServices().catch(fail);
-        } catch (err) { fail(err); }
-      };
+        if (!days.length) throw new Error(`Pick at least one day for ${body.name || 'each service'}.`);
+        if (!body.start_time || !body.end_time) throw new Error('Set the first and last seating.');
+        if (body.end_time < body.start_time) throw new Error(`${body.name}: last seating must be after first seating.`);
+        const saved = await api(f.dataset.id ? `/api/admin/shifts/${f.dataset.id}` : '/api/admin/shifts', { method: f.dataset.id ? 'PUT' : 'POST', body });
+        f.dataset.id = saved.id;
+    };
+    document.getElementById('save-all').onclick = async (e) => {
+      e.target.disabled = true;
+      try {
+        for (const f of [...dirty]) { if (!f.reportValidity()) throw new Error('Fill in the highlighted field.'); await saveOne(f); dirty.delete(f); }
+        TB.toast('Services saved'); viewServices().catch(fail);
+      } catch (err) { fail(err); } finally { e.target.disabled = false; }
+    };
+    const bind = () => list.querySelectorAll('form').forEach((f) => {
+      f.oninput = () => markDirty(f); f.onchange = () => markDirty(f);
+      f.onsubmit = (e) => { e.preventDefault(); markDirty(f); document.getElementById('save-all').click(); };
       const del = f.querySelector('[data-del-shift]');
       if (del) del.onclick = async () => { if (await ask('Delete this service?', 'Delete', true)) { await api(`/api/admin/shifts/${f.dataset.id}`, { method: 'DELETE' }).catch(fail); viewServices().catch(fail); } };
     });
     bind();
     document.getElementById('add-shift').onclick = () => {
+      if (!list.querySelector('form')) list.innerHTML = '';
       list.insertAdjacentHTML('afterbegin', card({ name: 'Dinner', active: 1, days: '0,1,2,3,4,5,6', start_time: '17:00', end_time: '21:30', slot_interval: 15, turn_minutes: 90, max_covers_per_slot: 0 }));
-      bind();
+      bind(); markDirty(list.querySelector('form'));
     };
     const cf = document.getElementById('c-form');
     const kind = () => cf.querySelector('input[name=kind]:checked').value;

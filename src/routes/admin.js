@@ -340,6 +340,35 @@ router.post('/shifts', wrap(async (req, res) => {
   const info = run(`INSERT INTO shifts (restaurant_id, ${keys.join(',')}) VALUES (?, ${keys.map(() => '?').join(',')})`, req.restaurant.id, ...keys.map((k) => f[k]));
   res.status(201).json(one('SELECT * FROM shifts WHERE id = ?', info.lastInsertRowid));
 }));
+// Replace the services with ones that follow the opening hours in the profile: days with the same hours share
+// a service. First seating at opening, last seating an hour before closing.
+router.post('/shifts/from-hours', wrap(async (req, res) => {
+  const { parseHours } = require('../../public/js/matcher');
+  const h = parseHours(req.restaurant.hours);
+  if (!h) throw new BookingError('Add your opening hours in your Restaurant profile first.');
+  const toM = (t) => { const [a, b] = t.split(':').map(Number); return a * 60 + b; };
+  const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  const groups = new Map();
+  h.forEach((d, i) => {
+    if (d.closed) return;
+    const open = toM(d.open); let close = toM(d.close); if (close <= open) close = 23 * 60 + 59; // closes after midnight
+    const last = Math.max(open, close - 60 - (close - 60 - open) % 15);
+    const key = `${hhmm(open)}-${hhmm(last)}`;
+    groups.set(key, [...(groups.get(key) || []), i]);
+  });
+  if (!groups.size) throw new BookingError('Your opening hours say you are closed every day.');
+  const old = one('SELECT slot_interval, turn_minutes, max_covers_per_slot FROM shifts WHERE restaurant_id = ? ORDER BY id LIMIT 1', req.restaurant.id) || { slot_interval: 15, turn_minutes: 90, max_covers_per_slot: 0 };
+  const name = (s) => { const m = toM(s); return m < 11 * 60 ? 'Breakfast & lunch' : m < 16 * 60 ? 'Lunch & dinner' : 'Dinner'; };
+  tx(() => {
+    run('DELETE FROM shifts WHERE restaurant_id = ?', req.restaurant.id);
+    for (const [key, days] of groups) {
+      const [start, end] = key.split('-');
+      run('INSERT INTO shifts (restaurant_id, name, days, start_time, end_time, slot_interval, turn_minutes, max_covers_per_slot) VALUES (?,?,?,?,?,?,?,?)',
+        req.restaurant.id, name(start), days.join(','), start, end, old.slot_interval || 15, old.turn_minutes || 90, old.max_covers_per_slot || 0);
+    }
+  });
+  res.json({ shifts: all('SELECT * FROM shifts WHERE restaurant_id = ? ORDER BY start_time', req.restaurant.id) });
+}));
 router.put('/shifts/:id', wrap(async (req, res) => {
   owned('shifts', req.params.id, req.restaurant.id);
   update('shifts', req.params.id, req.restaurant.id, cleanShift(req.body));
