@@ -39,6 +39,9 @@ CREATE TABLE IF NOT EXISTS restaurants (
   featured INTEGER DEFAULT 0,            -- set by the platform, shown in "Featured" sections
   geo_addr TEXT DEFAULT '',              -- the address the map pin was looked up from
   verified INTEGER DEFAULT 1,            -- 0 = owner hasn't confirmed their email yet: not shown or bookable
+  referred_by INTEGER,                   -- the restaurant whose referral link they signed up with
+  referral_credited INTEGER DEFAULT 0,   -- 1 = the referrer already got its free month for this one
+  free_months INTEGER DEFAULT 0,         -- free months earned by referring other restaurants
   -- billing
   trial_ends_at TEXT NOT NULL,
   subscription_status TEXT NOT NULL DEFAULT 'trialing', -- trialing | active | past_due | canceled | expired
@@ -276,6 +279,7 @@ function migrate(d) {
   if (!cols.has('turn_times')) d.exec("ALTER TABLE restaurants ADD COLUMN turn_times TEXT DEFAULT '2:90,4:120,6:180,99:210'");
   for (const [c, def] of [['website_url', "''"], ['logo_url', "''"], ['hours', "''"]]) if (!cols.has(c)) d.exec(`ALTER TABLE restaurants ADD COLUMN ${c} TEXT DEFAULT ${def}`);
   if (!cols.has('featured')) d.exec('ALTER TABLE restaurants ADD COLUMN featured INTEGER DEFAULT 0');
+  if (!cols.has('referred_by')) { d.exec('ALTER TABLE restaurants ADD COLUMN referred_by INTEGER'); d.exec('ALTER TABLE restaurants ADD COLUMN referral_credited INTEGER DEFAULT 0'); d.exec('ALTER TABLE restaurants ADD COLUMN free_months INTEGER DEFAULT 0'); }
   if (!cols.has('verified')) d.exec('ALTER TABLE restaurants ADD COLUMN verified INTEGER DEFAULT 1');
   try { const ucols = new Set(d.all('PRAGMA table_info(users)').map((c) => c.name)); if (ucols.size && !ucols.has('email_verified')) d.exec('ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 1'); } catch { /* */ }
   if (!cols.has('geo_addr')) d.exec("ALTER TABLE restaurants ADD COLUMN geo_addr TEXT DEFAULT ''");

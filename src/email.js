@@ -228,6 +228,16 @@ async function sendVerify(user, verifyUrl) {
   });
 }
 
+async function sendReferralEarned(restaurant, to, newName) {
+  return send({
+    to, kind: 'referral',
+    subject: `You earned a free month on Rbooked 🎉`,
+    html: layout(null, 'You earned a free month', `<p><b>${esc(newName)}</b> just joined Rbooked with your referral link. Thank you!</p>
+      <p>We've added <b>1 free month</b> to <b>${esc(restaurant.name)}</b>. Keep sharing your link from the dashboard: every restaurant that joins earns you another month.</p>
+      <p>${button(`${config.baseUrl}/admin/#refer`, 'See your referrals')}</p>`),
+  });
+}
+
 async function sendPasswordReset(user, resetUrl) {
   return send({
     to: user.email, kind: 'password_reset',
@@ -238,4 +248,4 @@ async function sendPasswordReset(user, resetUrl) {
   });
 }
 
-module.exports = { flush, sendReservationEmail, sendWelcome, sendTrialEnding, sendVerify, sendPasswordReset, send, esc, layout };
+module.exports = { flush, sendReservationEmail, sendWelcome, sendTrialEnding, sendVerify, sendPasswordReset, sendReferralEarned, send, esc, layout };

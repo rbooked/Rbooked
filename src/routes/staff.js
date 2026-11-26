@@ -22,7 +22,7 @@ router.use((req, res, next) => {
 });
 
 router.get('/restaurants', wrap(async (req, res) => {
-  res.json(all(`SELECT r.id, r.name, r.slug, r.city, r.state, r.created_at, r.featured, (SELECT COUNT(*) FROM menu_items m WHERE m.restaurant_id = r.id) AS dishes,
+  res.json(all(`SELECT r.id, r.name, r.slug, r.city, r.state, r.created_at, r.featured, r.verified, r.free_months, (SELECT COUNT(*) FROM restaurants x WHERE x.referred_by = r.id) AS referred, (SELECT name FROM restaurants y WHERE y.id = r.referred_by) AS referred_by_name, (SELECT COUNT(*) FROM menu_items m WHERE m.restaurant_id = r.id) AS dishes,
     (SELECT GROUP_CONCAT(u.email) FROM users u WHERE u.restaurant_id = r.id) AS logins FROM restaurants r ORDER BY r.id`));
 }));
 

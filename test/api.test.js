@@ -289,6 +289,38 @@ test('daily backup is emailed once a day and errors email support', async () => 
   assert.ok(one("SELECT id FROM email_log WHERE kind = 'alert' AND subject LIKE '%Boom test%'"));
 });
 
+test('referrals: both restaurants get a free month once the new one confirms its email', async () => {
+  const me = (await call('GET', '/api/admin/restaurant')).data.restaurant;
+  run('UPDATE restaurants SET free_months = 0 WHERE id = ?', me.id);
+  const before = one('SELECT trial_ends_at, subscription_status FROM restaurants WHERE id = ?', me.id);
+  const info = await (await fetch(`${base}/api/auth/referrer/${me.slug}`)).json();
+  assert.strictEqual(info.name, me.name);
+  const r = await fetch(`${base}/api/auth/signup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+    restaurant_name: 'Friend Diner', owner_name: 'F', email: 'friend@test.local', password: 'password123', phone: '555-222-3333',
+    address: '3 Elm St', city: 'New York', state: 'NY', zip: '10011', cuisine: 'American', ref: me.slug }) });
+  assert.strictEqual(r.status, 201);
+  const friend = one("SELECT * FROM restaurants WHERE name = 'Friend Diner'");
+  assert.strictEqual(friend.referred_by, me.id);
+  const days = (new Date(friend.trial_ends_at) - Date.now()) / 86400000;
+  assert.ok(days > 43 && days < 45, `new restaurant gets 14 + 30 days (got ${days})`);
+  let list = (await call('GET', '/api/admin/referrals')).data;
+  assert.strictEqual(list.referred[0].status, 'waiting'); assert.strictEqual(list.free_months, 0);
+  const mail = one("SELECT html FROM email_log WHERE kind = 'welcome' AND to_addr = 'friend@test.local'");
+  await fetch(`${base}/api/auth/verify?t=${mail.html.match(/verify\?t=([\w%-]+)/)[1]}`, { redirect: 'manual' });
+  list = (await call('GET', '/api/admin/referrals')).data;
+  assert.strictEqual(list.referred[0].status, 'earned'); assert.strictEqual(list.free_months, 1);
+  assert.ok(list.link.includes(`ref=${me.slug}`));
+  if (before.subscription_status === 'trialing') {
+    const after = one('SELECT trial_ends_at FROM restaurants WHERE id = ?', me.id).trial_ends_at;
+    assert.ok(new Date(after) - Math.max(Date.now(), new Date(before.trial_ends_at)) > 29 * 86400000, 'a month was added');
+  }
+  assert.ok(one("SELECT id FROM email_log WHERE kind = 'referral'"));
+  // Confirming again (or a reset link) never pays twice.
+  await call('POST', '/api/auth/forgot', { email: 'friend@test.local' }, false);
+  assert.strictEqual((await call('GET', '/api/admin/referrals')).data.free_months, 1);
+  assert.strictEqual((await fetch(`${base}/api/auth/referrer/no-such-place`)).status, 404);
+});
+
 test('login: too many wrong passwords makes you wait', async () => {
   let last;
   for (let i = 0; i < 9; i++) last = await call('POST', '/api/auth/login', { email: 'nobody-here@test.local', password: 'wrong' }, false);

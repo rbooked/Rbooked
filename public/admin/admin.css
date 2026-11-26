@@ -410,3 +410,8 @@ tr.is-late > td:first-child { box-shadow: inset 4px 0 0 #f59e0b; }
 }
 .rf-item.is-late { border-left-color: #f59e0b; }
 .alert.warn-box { background: #fff7ed; border: 1px solid #fdba74; color: #7c2d12; } .alert.warn-box .btn { margin-left: 8px; }
+.refer-hero { display: flex; gap: 16px; align-items: center; background: linear-gradient(135deg, #fff7ed, #fde8dc); border-color: #fdba74; }
+.refer-big { font-size: 44px; line-height: 1; }
+.refer-copy { display: flex; gap: 8px; margin-top: 6px; }
+.refer-copy input { flex: 1; min-width: 0; font-size: 14px; }
+@media (max-width: 560px) { .refer-hero { flex-direction: column; align-items: flex-start; } }

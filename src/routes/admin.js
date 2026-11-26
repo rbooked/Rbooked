@@ -459,6 +459,17 @@ router.get('/emails/:id', wrap(async (req, res) => {
   res.type('html').send(e.html);
 }));
 
+// ---------- Referrals ----------
+router.get('/referrals', wrap(async (req, res) => {
+  const r = req.restaurant;
+  const rows = all('SELECT name, city, state, created_at, verified, referral_credited FROM restaurants WHERE referred_by = ? ORDER BY id DESC', r.id);
+  res.json({
+    code: r.slug, link: `${config.baseUrl}/for-restaurants?ref=${encodeURIComponent(r.slug)}#signup`,
+    free_months: r.free_months || 0, max_months: 12,
+    referred: rows.map((x) => ({ name: x.name, city: x.city, state: x.state, joined: String(x.created_at || '').slice(0, 10), status: x.referral_credited ? 'earned' : x.verified ? 'joined' : 'waiting' })),
+  });
+}));
+
 // ---------- Billing ----------
 router.get('/billing', wrap(async (req, res) => res.json(billing.billingSummary(req.restaurant))));
 router.post('/billing/checkout', wrap(async (req, res) => res.json({ url: await billing.createCheckout(req.restaurant, req.user) })));

@@ -30,9 +30,39 @@ const verifyUrl = (t) => `${config.baseUrl}/api/auth/verify?t=${encodeURICompone
 function markVerified(userId) {
   const u = one('SELECT restaurant_id FROM users WHERE id = ?', userId);
   run('UPDATE users SET email_verified = 1 WHERE id = ?', userId);
-  if (u) run('UPDATE restaurants SET verified = 1 WHERE id = ?', u.restaurant_id);
+  if (u) { run('UPDATE restaurants SET verified = 1 WHERE id = ?', u.restaurant_id); creditReferral(u.restaurant_id); }
   run("DELETE FROM auth_tokens WHERE user_id = ? AND kind = 'verify'", userId);
 }
+
+// ---------- Referrals: a restaurant that brings in another one gets a free month once the new one confirms its email ----------
+const MONTH_MS = 30 * 86400000;
+const MAX_FREE_MONTHS = 12; // per referring restaurant, to keep it fair
+function creditReferral(rid) {
+  const r = one('SELECT id, name, referred_by, referral_credited FROM restaurants WHERE id = ?', rid);
+  if (!r || !r.referred_by || r.referral_credited) return;
+  const ref = one('SELECT * FROM restaurants WHERE id = ?', r.referred_by);
+  run('UPDATE restaurants SET referral_credited = 1 WHERE id = ?', rid);
+  if (!ref || (ref.free_months || 0) >= MAX_FREE_MONTHS) return;
+  run('UPDATE restaurants SET free_months = COALESCE(free_months, 0) + 1 WHERE id = ?', ref.id);
+  // While billing isn't charging yet, the month is added to their free time right away.
+  if (ref.subscription_status === 'trialing') {
+    const from = Math.max(Date.now(), new Date(ref.trial_ends_at).getTime() || 0);
+    run('UPDATE restaurants SET trial_ends_at = ? WHERE id = ?', new Date(from + MONTH_MS).toISOString(), ref.id);
+  }
+  const owner = one("SELECT email FROM users WHERE restaurant_id = ? ORDER BY id LIMIT 1", ref.id);
+  if (owner) email.sendReferralEarned(ref, owner.email, r.name).catch(() => {});
+}
+const referrerFor = (code) => {
+  const c = String(code || '').trim().toLowerCase();
+  return c ? one('SELECT id, name, city, state, slug FROM restaurants WHERE slug = ?', c) : null;
+};
+
+// For the sign-up page: "Invited by …".
+router.get('/referrer/:code', wrap(async (req, res) => {
+  const r = referrerFor(req.params.code);
+  if (!r) return res.status(404).json({ error: 'Not found' });
+  res.json({ name: r.name, city: r.city, state: r.state });
+}));
 
 function slugify(name) {
   const base = String(name).toLowerCase().normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/[\s_-]+/g, '-').slice(0, 50) || 'restaurant';
@@ -70,7 +100,9 @@ router.post('/signup', wrap(async (req, res) => {
   const tz = places.timezoneFor(String(b.zip).trim(), st); // automatic from the ZIP code
 
   const geo = await lookupZip(b.zip);
-  const trialEnds = new Date(Date.now() + config.plan.trialDays * 86400000).toISOString();
+  const referrer = referrerFor(b.ref);
+  // Signing up with a referral link adds a free month to the new restaurant's trial too.
+  const trialEnds = new Date(Date.now() + config.plan.trialDays * 86400000 + (referrer ? MONTH_MS : 0)).toISOString();
 
   const { restaurant, user } = tx(() => {
     const r = run(`INSERT INTO restaurants (slug, name, cuisine, phone, email, address, city, state, zip, lat, lng, timezone, description, trial_ends_at, subscription_status)
@@ -80,6 +112,7 @@ router.post('/signup', wrap(async (req, res) => {
     geo ? geo.lat : null, geo ? geo.lng : null, tz, String(b.description || ''), trialEnds);
     const rid = r.lastInsertRowid;
     run('UPDATE restaurants SET verified = 0 WHERE id = ?', rid); // goes live once the owner confirms their email
+    if (referrer) run('UPDATE restaurants SET referred_by = ? WHERE id = ?', referrer.id, rid);
     const u = run('INSERT INTO users (restaurant_id, name, email, password_hash, role, email_verified) VALUES (?,?,?,?,?,0)',
       rid, String(b.owner_name).trim(), em, auth.hashPassword(String(b.password)), 'owner');
     starterSetup(rid);

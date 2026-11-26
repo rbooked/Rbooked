@@ -98,6 +98,7 @@
   <section class="section" id="signup" style="padding-top:0">
     <div class="booking" style="padding:0;align-items:start">
       <div class="card">
+        <div class="alert ref-invite" id="ref-invite" hidden></div>
         <h2 class="serif" style="font-size:26px">Create your restaurant account</h2>
         <p class="muted">No credit card required to sign up. We'll set up a starter floor plan and dinner service you can edit.</p>
         <div class="find-box" id="site-box">
@@ -107,6 +108,7 @@
           <div id="site-out" class="find-results" role="status"></div>
         </div>
         <form id="signup-form" novalidate>
+          <input type="hidden" name="ref" id="s-ref">
           <div class="field"><label for="s-rname">Restaurant name</label><input id="s-rname" name="restaurant_name" required></div>
           <div class="grid-2">
             <div class="field"><label for="s-cuisine">Cuisine</label><select id="s-cuisine" name="cuisine" required><option value="">Pick a cuisine…</option></select></div>
@@ -194,6 +196,7 @@
     btn.disabled = true; btn.textContent = 'Creating your account…';
     try {
       await TB.api('/api/auth/signup', { body: TB.formData(e.target) });
+      try { localStorage.removeItem('rb_ref'); } catch { /* */ }
       // Save what the website import found (hours, photos, logo…) to the new profile.
       if (found) {
         try {
@@ -207,6 +210,20 @@
       btn.disabled = false; btn.textContent = 'Start 14-day free trial';
     }
   };
+})();
+</script>
+<script>
+// Referral links: rbooked.com/for-restaurants?ref=<restaurant> gives the new restaurant an extra free month.
+(function () {
+  let ref = new URLSearchParams(location.search).get('ref') || '';
+  try { if (ref) localStorage.setItem('rb_ref', ref); else ref = localStorage.getItem('rb_ref') || ''; } catch { /* */ }
+  if (!ref) return;
+  TB.api(`/api/auth/referrer/${encodeURIComponent(ref)}`).then((r) => {
+    document.getElementById('s-ref').value = ref;
+    const box = document.getElementById('ref-invite');
+    box.innerHTML = `🎁 <b>${TB.esc(r.name)}</b> invited you. Sign up and get <b>an extra free month</b>: 14 days + 30 days free.`;
+    box.hidden = false;
+  }).catch(() => { try { localStorage.removeItem('rb_ref'); } catch { /* */ } });
 })();
 </script>
 <script>

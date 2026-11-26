@@ -68,7 +68,7 @@
     msg.textContent = 'Loading…';
     try {
       const rows = await call('GET', '/api/staff/restaurants'); msg.textContent = '';
-      document.getElementById('list').innerHTML = rows.map((r) => `<div class="st-row"><div><b>${esc(r.name)}</b> <span class="muted small">${esc([r.city, r.state].filter(Boolean).join(', '))} · ${r.dishes} dishes</span><div class="small">Login: ${esc(r.logins || '')}</div></div>
+      document.getElementById('list').innerHTML = rows.map((r) => `<div class="st-row"><div><b>${esc(r.name)}</b> <span class="muted small">${esc([r.city, r.state].filter(Boolean).join(', '))} · ${r.dishes} dishes</span><div class="small">Login: ${esc(r.logins || '')}${r.verified === 0 ? ' · <b>email not confirmed</b>' : ''}</div><div class="small muted">Referred ${r.referred} · ${r.free_months || 0} free month${r.free_months === 1 ? '' : 's'} earned${r.referred_by_name ? ` · invited by ${esc(r.referred_by_name)}` : ''}</div></div>
         <div class="row" style="gap:6px"><button class="btn secondary sm" data-feat="${r.id}" data-on="${r.featured ? 1 : 0}">${r.featured ? '★ Featured' : '☆ Feature'}</button>
         <button class="btn danger sm" data-reset="${r.id}" data-name="${esc(r.name)}">Reset…</button></div></div>`).join('') || 'No restaurants yet.';
       document.querySelectorAll('[data-feat]').forEach((b) => { b.onclick = async () => {

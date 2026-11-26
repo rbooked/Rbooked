@@ -68,7 +68,7 @@
   const VIEWS = {
     reservations: ['Reservations', viewReservations], floor: ['Floor plan & tables', viewFloor], services: ['Services & hours', viewServices],
     guests: ['Address book', viewGuests], widget: ['Website widget', viewWidget], settings: ['Settings', viewSettings],
-    billing: ['Billing', viewBilling], emails: ['Email log', viewEmails], welcome: ['Welcome', viewWelcome],
+    billing: ['Billing', viewBilling], refer: ['Refer a restaurant', viewRefer], emails: ['Email log', viewEmails], welcome: ['Welcome', viewWelcome],
     profile: ['Restaurant profile', viewProfile], 'menu-items': ['Menu', viewMenu], gallery: ['Gallery', viewGallery], 'menu-import': ['Import your menu', viewMenuHandoff],
   };
   function route() {
@@ -1693,10 +1693,46 @@
       } catch (err) { fail(err); }
     };
     view.insertAdjacentHTML('beforeend', `<div class="card" style="margin-top:16px"><h2>Login and account</h2>
-      <p class="small muted" style="margin:0">You log in with <b>${esc(S.me.user.email)}</b>. To change your login email, or for anything else about your account, email <a href="mailto:rbookedsupport@gmail.com">rbookedsupport@gmail.com</a>.</p></div>`);
+      <p class="small muted" style="margin:0">You log in with <b>${esc(S.me.user.email)}</b>. To change your login email, or for anything else about your account, email <a href="mailto:rbookedsupport@gmail.com">rbookedsupport@gmail.com</a>.</p>
+      <p class="small muted" style="margin:10px 0 0">🎁 Know a restaurant owner who'd like Rbooked? <a href="#refer">Share your referral link</a> and you both get a free month.</p></div>`);
   }
 
   // ---------------- Billing ----------------
+  async function viewRefer() {
+    const d = await api('/api/admin/referrals');
+    const msg = encodeURIComponent(`I take reservations with Rbooked and love it. Sign up with my link and you get an extra free month: ${d.link}`);
+    const st = { earned: ['Free month earned', 'good'], joined: ['Joined', ''], waiting: ['Waiting for them to confirm their email', 'warn'] };
+    view.innerHTML = `
+      <div class="card refer-hero">
+        <div class="refer-big">🎁</div>
+        <div>
+          <h2 style="margin:0 0 6px">Give a month, get a month</h2>
+          <p style="margin:0">Share your link with other restaurants. When one joins and confirms its email, <b>you get 1 free month</b> of Rbooked, and <b>they get an extra free month</b> on top of their trial.</p>
+        </div>
+      </div>
+      <div class="card">
+        <label for="ref-link"><b>Your referral link</b></label>
+        <div class="refer-copy"><input id="ref-link" readonly value="${esc(d.link)}"><button class="btn" id="ref-copy" type="button">Copy</button></div>
+        <div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap">
+          ${navigator.share ? '<button class="btn secondary" id="ref-share" type="button">Share…</button>' : ''}
+          <a class="btn secondary" href="sms:?&body=${msg}">Text it</a>
+          <a class="btn secondary" href="mailto:?subject=${encodeURIComponent('Try Rbooked for reservations')}&body=${msg}">Email it</a>
+        </div>
+      </div>
+      <div class="stats" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+        <div class="stat"><b>${d.referred.length}</b><span>Restaurants referred</span></div>
+        <div class="stat"><b>${d.free_months}</b><span>Free months earned${d.free_months >= d.max_months ? ' (max)' : ''}</span></div>
+      </div>
+      <div class="card"><h2>Your referrals</h2>
+        ${d.referred.length ? `<table class="data">${d.referred.map((x) => `<tr><td><b>${esc(x.name)}</b><div class="small muted">${esc([x.city, x.state].filter(Boolean).join(', '))} · joined ${esc(TB.date(x.joined))}</div></td><td><span class="tag ${st[x.status][1]}">${st[x.status][0]}</span></td></tr>`).join('')}</table>`
+          : '<p class="muted" style="margin:0">No referrals yet. Send your link to a restaurant owner you know!</p>'}
+        <p class="small muted" style="margin:12px 0 0">You can earn up to ${d.max_months} free months. Months are added to your free time right away.</p>
+      </div>`;
+    document.getElementById('ref-copy').onclick = async () => { try { await navigator.clipboard.writeText(d.link); TB.toast('Link copied'); } catch { document.getElementById('ref-link').select(); TB.toast('Press and hold to copy'); } };
+    const sh = document.getElementById('ref-share');
+    if (sh) sh.onclick = () => navigator.share({ title: 'Try Rbooked', text: decodeURIComponent(msg) }).catch(() => {});
+  }
+
   async function viewBilling() {
     const b = await api('/api/admin/billing');
     S.me.billing = b; renderBanner();
