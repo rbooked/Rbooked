@@ -59,7 +59,12 @@
       .formatToParts(new Date()).map((x) => [x.type, x.value]));
     wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday); mins = +p.hour * 60 + +p.minute;
   } catch { /* fall back to the browser's time */ }
-  const open = hours ? TBMatch.openAt(hours, wd, mins) : null;
+  let open = hours ? TBMatch.openAt(hours, wd, mins) : null;
+  // Special hours or a closed day override the usual hours for that date only.
+  const special = state.special || [];
+  const todaySp = special.find((s) => s.date === state.today);
+  const hm = (t) => { const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
+  if (todaySp) open = todaySp.open_time ? mins >= hm(todaySp.open_time) && mins <= hm(todaySp.close_time) + 60 : false;
   const web = r.website_url && /^https?:\/\//i.test(r.website_url) ? r.website_url : '';
   document.getElementById('r-meta').innerHTML = `${esc(r.cuisine)} · ${TB.price(r.price_level)} · ${esc(r.city)}, ${esc(r.state)}
     ${open === null ? '' : `<span class="open-badge ${open ? 'yes' : 'no'}">${open ? 'Open now' : 'Closed now'}</span>`}${r.featured ? ' <span class="feat-badge">Featured</span>' : ''}`;
@@ -84,7 +89,8 @@
       <div><b>Address</b><br>${esc(r.address)}<br>${esc(r.city)}, ${esc(r.state)} ${esc(r.zip)}<br><a href="${map}" target="_blank" rel="noopener">Map & directions</a>
         <p style="margin:12px 0 0"><b>Phone</b><br><a href="tel:${esc(r.phone)}">${esc(String(r.phone || '').replace(/^\+?1?(\d{3})(\d{3})(\d{4})$/, '($1) $2-$3'))}</a></p>
         ${web ? `<p style="margin:12px 0 0"><b>Website</b><br><a href="${esc(web)}" target="_blank" rel="noopener nofollow">${esc(webLabel)}</a></p>` : ''}</div>
-      ${hours ? `<div><b>Hours</b><table class="hours">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<tr class="${d === wd ? 'today' : ''}"><td>${DAYS[d]}</td><td>${hours[d].closed ? 'Closed' : `${TB.time(hours[d].open)} – ${TB.time(hours[d].close)}`}</td></tr>`).join('')}</table></div>` : ''}
+      ${hours || special.length ? `<div>${hours ? `<b>Hours</b><table class="hours">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<tr class="${d === wd ? 'today' : ''}"><td>${DAYS[d]}</td><td>${hours[d].closed ? 'Closed' : `${TB.time(hours[d].open)} – ${TB.time(hours[d].close)}`}</td></tr>`).join('')}</table>` : ''}
+        ${special.length ? `<p style="margin:12px 0 4px"><b>Special hours</b></p><table class="hours">${special.map((s) => `<tr class="${s.date === state.today ? 'today' : ''}"><td>${esc(TB.date(s.date, { weekday: 'short', month: 'short' }))}${s.reason ? `<div class="muted small">${esc(s.reason)}</div>` : ''}</td><td>${s.open_time ? `${TB.time(s.open_time)} – ${TB.time(s.close_time)}` : 'Closed'}</td></tr>`).join('')}</table>` : ''}</div>` : ''}
     </div>
     <p class="muted small" style="margin-top:14px">${esc(r.cancellation_policy || '')}</p>`;
 

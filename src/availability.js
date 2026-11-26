@@ -5,14 +5,28 @@ const { turnFor } = require('../public/js/matcher');
 
 const ACTIVE = "('confirmed','seated')";
 
+/** A special day: closed (no times) or special hours that replace the usual services for that date only. */
+function specialDay(restaurantId, date) {
+  return one('SELECT * FROM closures WHERE restaurant_id = ? AND date = ? ORDER BY id DESC LIMIT 1', restaurantId, date) || null;
+}
+
 function shiftsForDate(restaurantId, date) {
+  const all_ = all('SELECT * FROM shifts WHERE restaurant_id = ? AND active = 1 ORDER BY start_time', restaurantId);
+  const sp = specialDay(restaurantId, date);
+  if (sp && sp.open_time && sp.close_time) {
+    // Special hours: one service for the day, using the slot spacing and turn time of the usual services.
+    const wd = String(weekday(date));
+    const base = all_.find((s) => s.days.split(',').map((x) => x.trim()).includes(wd)) || all_[0];
+    if (!base) return [];
+    return [{ ...base, name: sp.reason || 'Special hours', start_time: sp.open_time, end_time: sp.close_time }];
+  }
   const wd = String(weekday(date));
-  return all('SELECT * FROM shifts WHERE restaurant_id = ? AND active = 1 ORDER BY start_time', restaurantId)
-    .filter((s) => s.days.split(',').map((x) => x.trim()).includes(wd));
+  return all_.filter((s) => s.days.split(',').map((x) => x.trim()).includes(wd));
 }
 
 function isClosed(restaurantId, date) {
-  return !!one('SELECT id FROM closures WHERE restaurant_id = ? AND date = ?', restaurantId, date);
+  const sp = specialDay(restaurantId, date);
+  return !!sp && !(sp.open_time && sp.close_time);
 }
 
 const memberIds = (combo) => String(combo.table_ids || '').split(',').map(Number).filter(Boolean);
@@ -133,4 +147,4 @@ function anyFreeSeating(restaurantId, party, date, time, duration) {
     isSeatingFree(restaurantId, o, date, time, duration)) || null;
 }
 
-module.exports = { getAvailability, findSlot, isTableFree, isSeatingFree, anyFreeSeating, shiftsForDate, comboMap, occupiedTables };
+module.exports = { specialDay, getAvailability, findSlot, isTableFree, isSeatingFree, anyFreeSeating, shiftsForDate, comboMap, occupiedTables };

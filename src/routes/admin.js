@@ -352,7 +352,12 @@ router.delete('/shifts/:id', wrap(async (req, res) => {
 }));
 router.post('/closures', wrap(async (req, res) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(req.body.date || '')) throw new BookingError('Pick a date.');
-  const info = run('INSERT INTO closures (restaurant_id, date, reason) VALUES (?,?,?)', req.restaurant.id, req.body.date, String(req.body.reason || ''));
+  const hm = (v) => (/^\d{2}:\d{2}$/.test(String(v || '')) ? String(v) : '');
+  const open = req.body.closed ? '' : hm(req.body.open_time); const close = req.body.closed ? '' : hm(req.body.close_time);
+  if (!open !== !close) throw new BookingError('Set both the first and last seating times, or mark the day as closed.'); // no times = closed all day
+  if (open && close <= open) throw new BookingError('Last seating must be after first seating.');
+  run('DELETE FROM closures WHERE restaurant_id = ? AND date = ?', req.restaurant.id, req.body.date); // one entry per date
+  const info = run('INSERT INTO closures (restaurant_id, date, reason, open_time, close_time) VALUES (?,?,?,?,?)', req.restaurant.id, req.body.date, String(req.body.reason || '').slice(0, 80), open, close);
   res.status(201).json(one('SELECT * FROM closures WHERE id = ?', info.lastInsertRowid));
 }));
 router.delete('/closures/:id', wrap(async (req, res) => {

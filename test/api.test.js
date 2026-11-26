@@ -377,6 +377,26 @@ test('staff key can reset a restaurant and keep its logins', async () => {
   } finally { delete process.env.STAFF_API_KEY; }
 });
 
+test('special hours replace the usual services on one date only', async () => {
+  const slug = (await call('GET', '/api/admin/restaurant')).data.restaurant.slug;
+  const day = addDays(nowInZone('America/New_York').date, 5); const next = addDays(day, 7);
+  const times = async (d) => (await call('GET', `/api/public/restaurants/${slug}/availability?date=${d}&party=2`)).data.slots.map((x) => x.time);
+  const before = await times(day);
+  assert.ok(before.length > 2);
+  assert.strictEqual((await call('POST', '/api/admin/closures', { date: day, open_time: '18:00', close_time: '17:00' })).status, 400);
+  const sp = await call('POST', '/api/admin/closures', { date: day, reason: 'Holiday', open_time: '17:00', close_time: '18:00' });
+  assert.strictEqual(sp.status, 201, JSON.stringify(sp.data));
+  const after = await times(day);
+  assert.ok(after.length && after[0] === '17:00' && after[after.length - 1] === '18:00', after.join(','));
+  assert.deepStrictEqual(await times(next), before, 'other days keep the usual hours');
+  const pub = await call('GET', `/api/public/restaurants/${slug}`);
+  assert.ok(pub.data.special.some((x) => x.date === day && x.open_time === '17:00'));
+  await call('POST', '/api/admin/closures', { date: day, closed: true });
+  const av = (await call('GET', `/api/public/restaurants/${slug}/availability?date=${day}&party=2`)).data;
+  assert.ok(av.closed && !av.slots.length);
+  await call('DELETE', `/api/admin/closures/${(await call('GET', '/api/admin/shifts')).data.closures.find((c) => c.date === day).id}`);
+});
+
 test('gallery and likes: diners heart restaurants, dishes and food photos', async () => {
   await call('PUT', '/api/admin/restaurant', { name: 'Heart Cafe', cuisine: 'Cafe', description: 'Cozy cafe with pastries.' });
   const dish = (await call('POST', '/api/admin/menu', { name: 'Croissant', price: '4', section: 'Bakery' })).data;

@@ -1347,12 +1347,19 @@
   // ---------------- Services / shifts ----------------
   async function viewServices() {
     const { shifts, closures } = await api('/api/admin/shifts');
+    S.today0 = nowLocal().date;
     view.innerHTML = `<div class="two-col"><div>
         <div class="row" style="margin-bottom:12px"><h2 style="margin:0">Services</h2><span class="spacer"></span><button class="btn" id="add-shift">+ Add service</button></div>
         <div id="shift-list"></div></div>
-      <div><div class="card" id="turns" style="margin-bottom:16px"></div><div class="card"><h2>Closed dates & holidays</h2><p class="muted small">No online bookings are taken on these dates.</p>
-        <form id="c-form" class="row"><input type="date" name="date" required style="width:auto"><input name="reason" placeholder="Reason (optional)" style="flex:1;min-width:140px"><button class="btn secondary" type="submit">Add</button></form>
-        <table class="data" style="margin-top:12px">${closures.map((c) => `<tr><td>${TB.date(c.date, { year: 'numeric' })}</td><td>${esc(c.reason)}</td><td style="text-align:right"><button class="btn ghost sm" data-del="${c.id}">Remove</button></td></tr>`).join('') || '<tr><td class="muted">No closed dates.</td></tr>'}</table>
+      <div><div class="card" id="turns" style="margin-bottom:16px"></div><div class="card"><h2>Special hours & holidays</h2><p class="muted small">Different hours, or closed, on specific dates only. Your usual services stay the same on every other day.</p>
+        <form id="c-form" class="sp-form">
+          <div class="grid-2"><div class="field"><label for="sp-date">Date</label><input id="sp-date" type="date" name="date" required></div>
+          <div class="field"><label for="sp-why">Name <span class="muted small">(optional)</span></label><input id="sp-why" name="reason" placeholder="e.g. Christmas Eve"></div></div>
+          <div class="seg sp-kind" role="radiogroup"><label><input type="radio" name="kind" value="hours" checked> Special hours</label><label><input type="radio" name="kind" value="closed"> Closed all day</label></div>
+          <div class="grid-2 sp-times"><div class="field"><label for="sp-open">First seating</label><input id="sp-open" type="time" name="open_time" value="17:00"></div>
+          <div class="field"><label for="sp-close">Last seating</label><input id="sp-close" type="time" name="close_time" value="20:00"></div></div>
+          <button class="btn" type="submit">Add special day</button></form>
+        <table class="data" style="margin-top:12px">${closures.filter((c) => c.date >= S.today0).map((c) => `<tr><td><b>${TB.date(c.date, { weekday: 'short', year: 'numeric' })}</b>${c.reason ? `<div class="small muted">${esc(c.reason)}</div>` : ''}</td><td>${c.open_time ? `${TB.time(c.open_time)} – ${TB.time(c.close_time)}` : '<span class="tag warn">Closed</span>'}</td><td style="text-align:right"><button class="btn ghost sm" data-del="${c.id}">Remove</button></td></tr>`).join('') || '<tr><td class="muted">No special days coming up.</td></tr>'}</table>
       </div></div></div>`;
     turnsEditor();
     const list = document.getElementById('shift-list');
@@ -1392,9 +1399,16 @@
       list.insertAdjacentHTML('afterbegin', card({ name: 'Dinner', active: 1, days: '0,1,2,3,4,5,6', start_time: '17:00', end_time: '21:30', slot_interval: 15, turn_minutes: 90, max_covers_per_slot: 0 }));
       bind();
     };
-    document.getElementById('c-form').onsubmit = async (e) => {
+    const cf = document.getElementById('c-form');
+    const kind = () => cf.querySelector('input[name=kind]:checked').value;
+    cf.querySelectorAll('input[name=kind]').forEach((r) => { r.onchange = () => { cf.querySelector('.sp-times').hidden = kind() === 'closed'; }; });
+    cf.onsubmit = async (e) => {
       e.preventDefault();
-      await api('/api/admin/closures', { body: TB.formData(e.target) }).catch(fail); viewServices().catch(fail);
+      const d = TB.formData(cf);
+      try {
+        await api('/api/admin/closures', { body: { date: d.date, reason: d.reason, closed: kind() === 'closed', open_time: d.open_time, close_time: d.close_time } });
+        TB.toast(kind() === 'closed' ? 'Closed day added' : 'Special hours added'); viewServices().catch(fail);
+      } catch (err) { fail(err); }
     };
     view.querySelectorAll('[data-del]').forEach((b) => { b.onclick = async () => { await api(`/api/admin/closures/${b.dataset.del}`, { method: 'DELETE' }).catch(fail); viewServices().catch(fail); }; });
   }

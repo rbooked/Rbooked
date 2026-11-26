@@ -16,6 +16,7 @@
     state.today = info.today;
     state.menu = info.menu || [];
     state.gallery = info.gallery || [];
+    state.special = info.special || [];
     if (!state.date || state.date < info.today) state.date = info.today;
     if (r.accent_color) root.style.setProperty('--brand', r.accent_color);
     const maxDate = TB.addDays(info.today, r.booking_window_days);

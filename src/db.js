@@ -104,7 +104,9 @@ CREATE TABLE IF NOT EXISTS closures (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   restaurant_id INTEGER NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
   date TEXT NOT NULL,
-  reason TEXT DEFAULT ''
+  reason TEXT DEFAULT '',
+  open_time TEXT DEFAULT '',  -- special hours for just this date (first seating); empty = closed all day
+  close_time TEXT DEFAULT ''  -- last seating
 );
 
 CREATE TABLE IF NOT EXISTS reservations (
@@ -253,6 +255,10 @@ function migrate(d) {
   try {
     const mcols = new Set(d.all('PRAGMA table_info(menu_items)').map((c) => c.name));
     if (mcols.size && !mcols.has('options')) d.exec("ALTER TABLE menu_items ADD COLUMN options TEXT DEFAULT ''");
+  } catch { /* table is new */ }
+  try {
+    const ccols = new Set(d.all('PRAGMA table_info(closures)').map((c) => c.name));
+    if (ccols.size && !ccols.has('open_time')) { d.exec("ALTER TABLE closures ADD COLUMN open_time TEXT DEFAULT ''"); d.exec("ALTER TABLE closures ADD COLUMN close_time TEXT DEFAULT ''"); }
   } catch { /* table is new */ }
 }
 

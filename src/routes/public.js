@@ -164,7 +164,9 @@ router.get('/restaurants/:slug', wrap(async (req, res) => {
   const photoLikes = counts('photo', gallery.map((g) => g.id));
   gallery.forEach((g) => Object.assign(g, photoLikes[g.id] || { likes: 0, liked: false }));
   const rl = counts('restaurant', [r.id])[r.id] || { likes: 0, liked: false };
-  res.json({ restaurant: { ...publicRestaurant(r), likes: rl.likes, liked: rl.liked }, shifts, menu, gallery, today: nowInZone(r.timezone).date });
+  const today = nowInZone(r.timezone).date;
+  const special = all("SELECT date, reason, open_time, close_time FROM closures WHERE restaurant_id = ? AND date >= ? ORDER BY date LIMIT 8", r.id, today);
+  res.json({ restaurant: { ...publicRestaurant(r), likes: rl.likes, liked: rl.liked }, shifts, menu, gallery, special, today });
 }));
 
 // ---------- Likes ("hearts") from diners. No account needed: an anonymous id in a cookie. ----------
