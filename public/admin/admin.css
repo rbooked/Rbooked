@@ -362,3 +362,50 @@ tr.is-late > td:first-child { box-shadow: inset 4px 0 0 #f59e0b; }
 .rf-acts .res-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .m-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; margin: 0 0 14px; border-radius: 12px; background: var(--surface-2); }
 .m-status .res-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+
+/* ---- Reservations header: one clean bar that adapts to phone, iPad and laptop ---- */
+.rv-bar { display: grid; grid-template-columns: auto auto minmax(180px, 1fr) auto; gap: 10px; align-items: center; margin-bottom: 12px; }
+.rv-date { display: flex; gap: 6px; align-items: center; }
+.rv-date input[type=date] { width: 150px; }
+.rv-seg { justify-self: start; }
+.rv-seg button { padding: 9px 14px; font-size: 14px; }
+.rv-search { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.rv-search input { flex: 1; min-width: 0; }
+.rv-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.rv-actions .btn { white-space: nowrap; }
+.rv-strip { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.rv-chips { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; flex: 1; min-width: 0; padding: 2px; }
+.rv-chips::-webkit-scrollbar { display: none; }
+.rv-chip { flex: none; display: inline-flex; align-items: baseline; gap: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 8px 14px; font: 600 14px var(--font); cursor: pointer; min-height: 40px; }
+.rv-chip b { font-family: var(--serif); font-size: 17px; }
+.rv-chip:hover { border-color: var(--ink); }
+.rv-chip.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.rv-chip.late { border-color: #f59e0b; background: #fffbeb; color: #92400e; }
+.rv-chip.late.on { background: #b45309; color: #fff; border-color: #b45309; }
+.rv-sum { flex: none; color: var(--muted); font-size: 13px; white-space: nowrap; }
+.rf-hint { margin: 2px 0 10px; }
+/* iPad and small laptops: two rows */
+@media (max-width: 1180px) {
+  .rv-bar { grid-template-columns: minmax(0, 1fr) auto; }
+  .rv-seg { justify-self: end; }
+  .rv-search { grid-column: 1; }
+}
+/* Phones */
+@media (max-width: 640px) {
+  .rv-bar { grid-template-columns: 1fr; gap: 8px; }
+  .rv-date input[type=date] { flex: 1; width: auto; }
+  .rv-seg { display: grid; grid-template-columns: repeat(3, 1fr); justify-self: stretch; }
+  .rv-seg button { padding: 10px 6px; }
+  .rv-search { grid-column: auto; }
+  .rv-actions { display: grid; grid-template-columns: 1fr 1.4fr; }
+  .rv-strip { flex-direction: column; align-items: stretch; gap: 6px; }
+  .rv-sum { padding-left: 4px; }
+}
+.seg button { white-space: nowrap; }
+@media (max-width: 640px) {
+  .rf-bar { display: grid; grid-template-columns: 1fr auto; gap: 6px 8px; }
+  .rf-bar .spacer { display: none; }
+  .rf-bar .rf-info { grid-column: 1 / -1; grid-row: 2; }
+  .rf-bar #rf-combine { grid-column: 2; grid-row: 1; }
+}
+.rf-item.is-late { border-left-color: #f59e0b; }

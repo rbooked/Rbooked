@@ -588,19 +588,21 @@
   let refreshTimer = null;
   async function viewReservations() {
     view.innerHTML = `
-      <div class="toolbar">
-        <button class="btn secondary sm" id="d-prev" aria-label="Previous day">‹</button>
-        <input type="date" id="d-date" value="${S.date}">
-        <button class="btn secondary sm" id="d-next" aria-label="Next day">›</button>
-        <button class="btn secondary sm" id="d-today">Today</button>
-        <div class="seg" role="tablist"><button data-mode="list">List</button><button data-mode="floor">Floor plan</button><button data-mode="timeline">Timeline</button></div>
-        <input type="search" id="d-q" placeholder="Search name, phone, code">
-        <span class="live" id="live"><i></i>Live</span>
-        <span class="spacer"></span>
-        <button class="btn secondary" id="walkin">+ Walk-in</button>
-        <button class="btn" id="newres">+ New reservation</button>
+      <div class="rv-bar">
+        <div class="rv-date">
+          <button class="btn secondary sm" id="d-prev" aria-label="Previous day">‹</button>
+          <input type="date" id="d-date" value="${S.date}" aria-label="Date">
+          <button class="btn secondary sm" id="d-next" aria-label="Next day">›</button>
+          <button class="btn secondary sm" id="d-today">Today</button>
+        </div>
+        <div class="seg rv-seg" role="tablist"><button data-mode="list">List</button><button data-mode="floor">Floor plan</button><button data-mode="timeline">Timeline</button></div>
+        <div class="rv-search"><input type="search" id="d-q" placeholder="Search name, phone or code" aria-label="Search reservations"><span class="live" id="live" title="Updates on its own"><i></i>Live</span></div>
+        <div class="rv-actions">
+          <button class="btn secondary" id="walkin">+ Walk-in</button>
+          <button class="btn" id="newres">+ New reservation</button>
+        </div>
       </div>
-      <div class="stats" id="stats"></div>
+      <div class="rv-strip" id="stats"></div>
       <div id="upnext"></div>
       <div id="res-body"></div>`;
     const setDate = (d) => { S.date = d; document.getElementById('d-date').value = d; load(); };
@@ -635,17 +637,19 @@
     ]);
     if (!document.getElementById('res-body')) return;
     S.floor = floor;
-    const prev = S.lastStats;
     S.lastStats = stats;
-    const tiles = [
-      ['Reservations', data.reservations.filter((x) => x.status !== 'cancelled').length, 'bookings'],
-      ['Covers', stats.covers || 0, 'covers'], ...(() => { const late = data.reservations.filter((x) => lateBy(x) > 0).length; stats.late = late;
-        return [...(late ? [['Late', late, 'late']] : []), ['Upcoming', Math.max(0, (stats.upcoming || 0) - late), 'upcoming']]; })(), ['Seated', stats.seated || 0, 'seated'],
-      ['Finished', stats.completed || 0, 'completed'], ['No-shows', stats.no_shows || 0, 'no_shows'], ['Cancelled', stats.cancelled || 0, 'cancelled'],
-      ['Seats', stats.seats, 'seats'],
-    ];
-    document.getElementById('stats').innerHTML = tiles.map(([k, v, key]) =>
-      `<div class="stat${quiet && prev && prev[key] !== stats[key] ? ' bump' : ''}${key === 'late' ? ' stat-late' : ''}"><b>${v}</b><span>${k}</span></div>`).join('');
+    // One tidy row: tap a count to show just those reservations (works in List and Floor plan).
+    const R = data.reservations;
+    const counts = { all: R.length };
+    for (const g of RES_GROUPS) counts[g.id] = R.filter(g.has).length;
+    const f = S.resFilter || 'all';
+    const chip = (id, label, cls = '') => `<button type="button" class="rv-chip ${cls} ${f === id ? 'on' : ''}" data-rf="${id}" aria-pressed="${f === id}"><b>${counts[id] || 0}</b> ${label}</button>`;
+    const covers = R.filter((x) => !['cancelled', 'no_show'].includes(x.status)).reduce((a, x) => a + x.party_size, 0);
+    document.getElementById('stats').innerHTML = `<div class="rv-chips" role="group" aria-label="Show reservations">
+      ${chip('all', 'All')}${counts.late ? chip('late', 'Late', 'late') : ''}${chip('upcoming', 'Upcoming')}${chip('seated', 'Seated')}${chip('finished', 'Finished')}${counts.off ? chip('off', 'Cancelled / no-show', 'off') : ''}</div>
+      <span class="rv-sum">${covers} covers · ${stats.seats} seats</span>`;
+    document.querySelectorAll('#stats [data-rf]').forEach((b) => { b.onclick = () => { S.resFilter = b.dataset.rf; load(true).catch(fail); }; });
+    if (f !== 'all' && !counts[f]) S.resFilter = 'all';
     const live = document.getElementById('live');
     if (live) live.title = `Updated ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
     renderUpNext(data.reservations);
@@ -659,7 +663,7 @@
     const box = document.getElementById('upnext');
     const now = nowLocal();
     if (S.date !== now.date) { box.innerHTML = ''; return; }
-    const soon = rows.filter((x) => x.status === 'confirmed' && toMin(x.time) <= now.minutes + 120 && toMin(x.time) >= now.minutes - 60)
+    const soon = rows.filter((x) => x.status === 'confirmed' && !lateBy(x) && toMin(x.time) <= now.minutes + 120)
       .sort((a, b) => a.time.localeCompare(b.time)).slice(0, 6);
     if (!soon.length) { box.innerHTML = ''; return; }
     box.innerHTML = `<div class="upnext"><span class="upnext-title">Arriving next</span>${soon.map((x) => {
@@ -712,7 +716,8 @@
       .map((g) => ({ ...g, rows: rows.filter(g.has).sort((a, b) => a.time.localeCompare(b.time) || a.id - b.id) }))
       .filter((g) => g.rows.length);
   }
-  function resFilterBar(rows, onChange) {
+  function resFilterBar() { return { html: '', bind: () => {} }; }
+  function resFilterBarOld(rows, onChange) {
     const f = S.resFilter || 'all';
     const html = `<div class="chips res-filter" role="group" aria-label="Show reservations">${[{ id: 'all', label: 'All', n: rows.length }, ...RES_GROUPS.map((g) => ({ ...g, n: rows.filter(g.has).length }))]
       .map((g) => `<button type="button" class="chip ${f === g.id ? 'on' : ''}" data-rf="${g.id}" aria-pressed="${f === g.id}">${esc(g.label)} <span class="cnt">${g.n}</span></button>`).join('')}</div>`;
@@ -891,7 +896,7 @@
     const covers = live.filter((x) => x.status !== 'completed' && toMin(x.time) <= t0 && toMin(x.time) + x.duration_minutes > t0).reduce((a, x) => a + x.party_size, 0);
     body.innerHTML = `<div class="rf-bar">
         <div class="seg" id="rf-areas">${areas.map((a) => `<button data-a="${a.id}" class="${a.id === S.rfArea ? 'on' : ''}">${esc(a.name)}</button>`).join('')}</div>
-        <span class="muted small"><b>${free}</b> free tables · <b>${covers}</b> guests in house</span>
+        <span class="muted small rf-info"><b>${free}</b> free tables · <b>${covers}</b> guests in house</span>
         <span class="spacer"></span>
         <button class="btn ${S.rfCombine ? '' : 'secondary'} sm" id="rf-combine">⛓ ${S.rfCombine ? 'Done combining' : 'Combine tables'}</button>
       </div>
@@ -920,8 +925,8 @@
         const fb = resFilterBar(rows, () => renderResFloor(body, rows, floor));
         const seatLabel = (x) => (x.combo_id ? (combos.get(x.combo_id) || {}).name : (floor.tables.find((z) => z.id === x.table_id) || {}).label) || '';
         p.innerHTML = `<div class="row"><h2 style="margin:0">All reservations</h2><span class="spacer"></span><span class="muted small">${today.length} · ${today.filter(movable).reduce((a, x) => a + x.party_size, 0)} guests</span></div>
-          <p class="muted small" style="margin:4px 0 10px">Tap a name to seat, mark late or no-show, or cancel. Then tap a table to move it, or press and drag it onto a table.</p>
-          ${fb.html}<div class="rf-list">${resSections(today).map((g) => `<div class="rf-sec">${esc(g.label)} <span>${g.rows.length}</span></div>${g.rows.map((x) => `<button type="button" class="rf-item ${x.status} ${S.rfMove === x.id ? 'moving' : ''} ${movable(x) ? '' : 'done'}" data-x="${x.id}" aria-pressed="${S.rfMove === x.id}">
+          <p class="muted small rf-hint">Tap a name for options, then tap a table to move it.</p>
+          ${fb.html}<div class="rf-list">${resSections(today).map((g) => `<div class="rf-sec">${esc(g.label)} <span>${g.rows.length}</span></div>${g.rows.map((x) => `<button type="button" class="rf-item ${x.status}${lateBy(x) ? ' is-late' : ''} ${S.rfMove === x.id ? 'moving' : ''} ${movable(x) ? '' : 'done'}" data-x="${x.id}" aria-pressed="${S.rfMove === x.id}">
             <span class="rf-at">${TB.time(x.time)}</span>
             <span class="rf-item-main"><b>${esc(x.guest_name)}</b><span class="small muted">${x.party_size} ${x.party_size === 1 ? 'guest' : 'guests'}${lateBy(x) ? ' · <b class="late-txt">Late</b>' : x.status === 'confirmed' ? '' : ` · ${STATUS_LABEL[x.status]}`}</span></span>
             <span class="rf-tbl ${seatLabel(x) ? '' : 'none'}">${seatLabel(x) ? esc(seatLabel(x)) : 'No table'}</span></button>${S.rfPick === x.id ? `<div class="rf-acts">${lateBy(x) ? lateTag(x) : ''}${movable(x) ? '<div class="small muted">Tap a table to move them, or:</div>' : ''}<div class="res-actions">${statusButtons(x, 'data-a', `data-x="${x.id}"`)}</div></div>` : ''}`).join('')}`).join('') || '<p class="muted small">No reservations here.</p>'}</div>
