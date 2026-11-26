@@ -360,3 +360,5 @@ tr.is-late > td:first-child { box-shadow: inset 4px 0 0 #f59e0b; }
 .stat.stat-late { background: #fffbeb; border-color: #f59e0b; } .stat.stat-late b { color: #b45309; }
 .rf-acts { margin: -2px 0 8px; padding: 10px 12px; border: 2px solid var(--brand, #c2410c); border-top: 0; border-radius: 0 0 12px 12px; background: var(--surface); display: grid; gap: 6px; }
 .rf-acts .res-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.m-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; margin: 0 0 14px; border-radius: 12px; background: var(--surface-2); }
+.m-status .res-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }

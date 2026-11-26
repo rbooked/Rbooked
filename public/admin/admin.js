@@ -1104,7 +1104,9 @@
     const isNew = !x;
     const v = x || { date: S.date, time: '19:00', party_size: 2, guest_name: '', guest_email: '', guest_phone: '', notes: '', internal_notes: '', occasion: '', duration_minutes: 0, ...(prefill || {}) };
     if (!v.duration_minutes) v.duration_minutes = TBMatch.turnFor(S.me.restaurant.turn_times, Number(v.party_size), 90);
+    const sb = isNew ? '' : statusButtons(v, 'data-ms').replace(/<button[^>]*data-ms="edit"[^>]*>[^<]*<\/button>/, '');
     TB.modal(`<h2>${isNew ? 'New reservation' : `Edit reservation #${esc(v.code)}`}</h2>
+      ${isNew ? '' : `<div class="m-status"><span class="muted small">Status</span> <span class="badge ${lateBy(v) ? 'late' : v.status}">${lateBy(v) ? 'Late' : STATUS_LABEL[v.status]}</span>${sb ? `<div class="res-actions">${sb}</div>` : ''}</div>`}
       <form id="m-form">
         <div class="grid-3">
           <div class="field"><label for="m-date">Date</label><input id="m-date" type="date" name="date" value="${v.date}" required></div>
@@ -1129,6 +1131,7 @@
         <div class="row" style="margin-top:16px"><button class="btn" type="submit">${isNew ? 'Book' : 'Save'}</button><button class="btn secondary" type="button" data-close>Close</button></div>
       </form>`,
     (m, close) => {
+      m.querySelectorAll('[data-ms]').forEach((b) => { b.onclick = (e) => { e.preventDefault(); close(); resAction(b.dataset.ms, v); }; });
       const f = m.querySelector('#m-form');
       // Address book lookup
       guestBook().then((guests) => {
