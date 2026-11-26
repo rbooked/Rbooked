@@ -51,6 +51,14 @@
   <div id="pick-result"></div>
   <div id="results"></div>
   <div id="empty" class="card hidden"></div>
+  <section class="section spin hidden" id="spin-wrap" aria-labelledby="spin-h">
+    <div class="spin-head">
+      <div><h2 class="serif" id="spin-h">Can't decide? Spin it.</h2><p class="muted">We'll land you on a spot worth trying tonight.</p></div>
+      <button class="btn spin-btn" id="spin-go" type="button"><span aria-hidden="true">🎰</span> Spin</button>
+    </div>
+    <div class="reel" id="reel"><div class="reel-track" id="reel-track"></div><span class="reel-mark" aria-hidden="true"></span></div>
+    <div class="spin-out" id="spin-out" aria-live="polite"></div>
+  </section>
   <section class="section hidden" id="map-wrap">
     <div class="row" style="align-items:baseline"><h2 class="serif" style="font-size:26px;margin:0">On the map</h2><span class="muted small" id="map-where"></span></div>
     <div class="map-card"><div class="rb-map" id="home-map" role="region" aria-label="Map of restaurants"></div></div>
@@ -260,8 +268,88 @@
       TBMap.draw(document.getElementById('home-map'), data.pins, { center: data.center, link: (p) => bookLink({ slug: p.slug, date: f.date.value }, f.party.value) });
     } catch { document.getElementById('map-wrap').classList.add('hidden'); }
   }
+  // "Spin it": a reel of restaurants (and their dishes) that whizzes past and stops on one to book.
+  const spin = { pool: [], busy: false, idx: 0 };
+  const CARD_W = 220; const GAP = 12;
+  const reelCard = (it) => `<div class="reel-card" style="${it.img ? `background-image:url('${esc(it.img)}')` : `background:linear-gradient(135deg, ${esc(it.accent || '#c2410c')}, #2b1a10)`}">
+    ${it.img ? '' : `<span class="reel-ini">${esc(TB.initials(it.name))}</span>`}
+    <div class="reel-tx"><b>${esc(it.title)}</b><span>${esc(it.sub)}</span></div></div>`;
+  async function loadSpin() {
+    try {
+      const zip = f.zip.value.trim();
+      const [m, t] = await Promise.all([api('/api/public/map' + (/^\d{5}$/.test(zip) ? `?zip=${zip}` : '')), api('/api/public/trending').catch(() => [])]);
+      const pool = m.pins.map((p) => ({ slug: p.slug, name: p.name, tag: p.tag, img: p.image_url, title: p.name, sub: [p.cuisine, p.city].filter(Boolean).join(' · '), city: p.city, cuisine: p.cuisine }));
+      // Few restaurants so far: add their food photos so the reel still has plenty to spin through.
+      for (const g of t) {
+        const r = pool.find((x) => x.slug === g.restaurant.slug);
+        if (r) pool.push({ ...r, img: g.url, title: g.dish || g.caption || r.name, sub: r.name });
+      }
+      spin.pool = pool;
+      document.getElementById('spin-wrap').classList.toggle('hidden', !pool.length);
+      if (!pool.length) return;
+      fillReel(0);
+    } catch { document.getElementById('spin-wrap').classList.add('hidden'); }
+  }
+  function fillReel(offset) {
+    const track = document.getElementById('reel-track'); const p = spin.pool;
+    const n = Math.max(48, p.length * 4);
+    spin.items = Array.from({ length: n }, (_, i) => p[(i + offset) % p.length]);
+    track.style.transition = 'none'; track.style.transform = 'translateX(0)';
+    track.innerHTML = spin.items.map(reelCard).join('');
+    centerOn(2, false);
+  }
+  function centerOn(i, animate, ms = 3200) {
+    const reel = document.getElementById('reel'); const track = document.getElementById('reel-track');
+    const x = i * (CARD_W + GAP) + CARD_W / 2 - reel.clientWidth / 2;
+    track.style.transition = animate ? `transform ${ms}ms cubic-bezier(.12,.75,.12,1)` : 'none';
+    track.style.transform = `translateX(${-x}px)`;
+  }
+  function doSpin() {
+    if (spin.busy || !spin.pool.length) return;
+    spin.busy = true;
+    const btn = document.getElementById('spin-go'); btn.disabled = true;
+    const out = document.getElementById('spin-out'); out.classList.remove('show');
+    fillReel(Math.floor(Math.random() * spin.pool.length));
+    const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const target = spin.items.length - 6 - Math.floor(Math.random() * Math.min(6, spin.pool.length));
+    document.getElementById('reel').offsetWidth; // apply the reset before animating
+    requestAnimationFrame(() => centerOn(target, true, reduce ? 300 : 3200));
+    setTimeout(() => {
+      const cards = document.querySelectorAll('#reel-track .reel-card');
+      cards[target] && cards[target].classList.add('won');
+      showWinner(spin.items[target]);
+      spin.busy = false; btn.disabled = false; btn.innerHTML = '<span aria-hidden="true">🎰</span> Spin again';
+    }, reduce ? 350 : 3300);
+  }
+  async function showWinner(it) {
+    const out = document.getElementById('spin-out'); const party = f.party.value; const date = f.date.value;
+    const link = (t) => bookLink({ slug: it.slug, date }, party, t);
+    out.innerHTML = `<div class="spin-win"><div><div class="muted small">You landed on</div><h3 class="serif">${esc(it.name)}</h3>
+      <div class="r-meta">${esc([it.cuisine, it.city].filter(Boolean).join(' · '))} <a class="r-card-tag" href="/tag/${esc(it.tag.slice(1))}">${esc(it.tag)}</a></div>
+      <div class="slots" id="spin-slots"><span class="muted small">Checking tables…</span></div></div>
+      <a class="btn" href="${link()}">Book a table</a></div>`;
+    out.classList.add('show');
+    try {
+      const av = await api(`/api/public/restaurants/${encodeURIComponent(it.slug)}/availability?date=${date}&party=${party}`);
+      const times = (av.slots || []).filter((x) => x.available).map((x) => x.time);
+      const want = f.time.value; const toM = (t) => +t.slice(0, 2) * 60 + +t.slice(3, 5);
+      const near = times.sort((a, b) => Math.abs(toM(a) - toM(want)) - Math.abs(toM(b) - toM(want))).slice(0, 4).sort();
+      document.getElementById('spin-slots').innerHTML = near.length ? near.map((t) => `<a class="slot sm" href="${link(t)}">${TB.time(t)}</a>`).join('')
+        : `<span class="muted small">No tables left ${esc(TB.date(date))}. <a href="${link()}">See other days</a></span>`;
+    } catch { document.getElementById('spin-slots').innerHTML = ''; }
+  }
+  document.getElementById('spin-go').onclick = doSpin;
+  window.addEventListener('resize', () => { if (!spin.busy && spin.items) centerOn(2, false); });
+  // Spin once on its own the first time the reel comes into view.
+  loadSpin().then(() => {
+    const el = document.getElementById('reel');
+    if (!spin.pool.length || !('IntersectionObserver' in window)) return;
+    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { io.disconnect(); setTimeout(doSpin, 400); } }, { threshold: 0.6 });
+    io.observe(el);
+  });
+
   loadFeatured(); loadTrending(); loadMap();
-  f.zip.addEventListener('change', () => { loadFeatured(); loadTrending(); loadMap(); });
+  f.zip.addEventListener('change', () => { loadFeatured(); loadTrending(); loadMap(); loadSpin(); });
   if (f.zip.value && params.get('zip')) (mode === 'pick' ? pick(false) : search(false));
 })();
   // Find a restaurant by its hashtag.
