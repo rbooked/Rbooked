@@ -29,7 +29,7 @@
     const r = S.me.restaurant;
     document.getElementById('rest-name').textContent = r.name;
     document.getElementById('user-name').textContent = S.me.user.name;
-    document.getElementById('public-link').href = `/restaurant?slug=${r.slug}`;
+    document.getElementById('public-link').href = TB.rlink(r.slug);
     if (r.accent_color) document.documentElement.style.setProperty('--brand', r.accent_color);
     S.date = nowLocal().date;
     renderBanner();
@@ -133,7 +133,7 @@
         <ol class="steps">${steps.map(([label, ok, href, anchor]) => `<li class="${ok ? 'ok' : ''}"><a href="${href}" ${anchor ? `data-jump="${anchor}"` : ''}>${ok ? '✓' : '○'} ${esc(label)}</a></li>`).join('')}</ol>
       </div>
       <form id="p-form">
-      <div class="card" id="p-photos"><div class="row"><h2 style="margin:0">Photos</h2><span class="spacer"></span><a class="btn ghost sm" href="${S.me.demoBase ? `restaurant.html?slug=${r.slug}` : `/restaurant?slug=${r.slug}`}">View my guest page ↗</a></div>
+      <div class="card" id="p-photos"><div class="row"><h2 style="margin:0">Photos</h2><span class="spacer"></span><a class="btn ghost sm" href="${TB.rlink(r.slug)}">View my guest page ↗</a></div>
         <p class="muted small">Your main photo is the big picture at the top of your page and in search results. Wide photos work best (at least 1600 × 900). Your logo shows on your page and booking widget.</p>
         <div class="p-hero" id="p-hero" style="${TB.thumbStyle(r)}">
           <div class="p-logo" id="p-logo" style="${r.logo_url ? `background-image:url('${esc(r.logo_url)}')` : `background:${esc(r.accent_color)}`}">${r.logo_url ? '' : esc(TB.initials(r.name))}</div>
@@ -257,7 +257,7 @@
     view.innerHTML = `
       <div class="toolbar"><button class="btn" id="mi-add">+ Add dish</button><button class="btn secondary" id="mi-import">⬆ Import menu</button>
         <div class="chips">${['', ...TBMatch.MENU_TAGS.map((t) => t.id)].map((id) => { const t = id ? TBMatch.menuTag(id) : null; return `<button class="chip ${S.menuFilter === id ? 'on' : ''}" data-f="${id}">${t ? `${t.icon} ${esc(t.label)} <span class="muted">${counts[id] || 0}</span>` : `All <span class="muted">${items.length}</span>`}</button>`; }).join('')}</div>
-        <span class="spacer"></span><a class="btn ghost sm" href="${S.me.demoBase ? `restaurant.html?slug=${r.slug}` : `/restaurant?slug=${r.slug}`}#menu">Preview as a guest ↗</a></div>
+        <span class="spacer"></span><a class="btn ghost sm" href="${TB.rlink(r.slug)}#menu">Preview as a guest ↗</a></div>
       ${items.length ? '' : `<div class="card empty-menu"><h2>Add your menu</h2><p>Guests can browse it on your page and filter by vegetarian, vegan, gluten-free and more. Restaurants with 3 or more vegan (or vegetarian, gluten-free, halal) dishes also show up when guests search for those.</p>
         <div class="row"><button class="btn" id="mi-import2">⬆ Import my menu</button><button class="btn secondary" id="mi-first">+ Add dishes one by one</button><button class="btn ghost" id="mi-sample">Start from a sample ${esc(r.cuisine || '')} menu</button></div></div>`}
       ${sections.map((sec) => { const list = items.filter((m) => m.section === sec && shown(m)); if (!list.length) return ''; return `<div class="card menu-sec"><div class="row"><h2 style="margin:0">${esc(sec)}</h2><span class="muted small">${list.length} item${list.length > 1 ? 's' : ''}</span><span class="spacer"></span>
@@ -321,7 +321,7 @@
         <div class="field" style="margin:8px 0 6px"><label>Dish in the photo</label><select data-dish><option value="">None</option>${menu.map((m) => `<option value="${m.id}"${m.id === p.menu_item_id ? ' selected' : ''}>${esc(m.name)}</option>`).join('')}</select></div>
         <div class="field" style="margin:0 0 8px"><label>Caption</label><input data-cap value="${esc(p.caption)}" maxlength="200" placeholder="e.g. Fresh out of the oven"></div>
         <button class="btn ghost sm" data-del>Remove</button></div>`).join('')}</div>` : `<div class="card" style="margin-top:16px"><p class="muted" style="margin:0">No photos yet. Restaurants with food photos get more bookings: add a few of your best dishes.</p></div>`}
-      <p class="small" style="margin-top:12px"><a href="/restaurant?slug=${encodeURIComponent(r.slug)}" target="_blank" rel="noopener">See your page as a guest ↗</a></p>`;
+      <p class="small" style="margin-top:12px"><a href="${TB.rlink(r.slug)}" target="_blank" rel="noopener">See your page as a guest ↗</a></p>`;
     const status = (t) => { document.getElementById('g-status').textContent = t; };
     const upload = async (files) => {
       const list = [...files].filter((f) => f.type.startsWith('image/')).slice(0, 20);
@@ -1595,7 +1595,7 @@
     const inline = `<div data-rbooked="${r.slug}"></div>\n<script src="${base}/widget.js" async></script>`;
     const button = `<script src="${base}/widget.js" data-restaurant="${r.slug}" data-mode="button" data-color="${r.accent_color}" data-label="Reserve a table" async></script>`;
     const iframe = `<iframe src="${base}/embed.html?r=${r.slug}" title="Reserve a table" style="width:100%;max-width:480px;height:640px;border:0"></iframe>`;
-    const link = `${base}/restaurant?slug=${r.slug}`;
+    const link = S.me.demoBase ? `${base}/restaurant.html?slug=${r.slug}` : `${base}/r/${r.slug}`;
     const block = (title, desc, code) => `<div class="card" style="margin-bottom:14px"><h2>${title}</h2><p class="muted small">${desc}</p><pre class="code">${esc(code)}</pre><button class="btn secondary sm" data-copy="${esc(code)}">Copy</button></div>`;
     view.innerHTML = `<div class="two-col"><div>
       ${block('Option 1: Inline booking widget', 'Paste where you want the booking form to appear (e.g. your Reservations page). Works with WordPress, Squarespace, Wix and plain HTML (use an “Embed / Custom HTML” block).', inline)}

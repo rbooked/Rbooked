@@ -418,6 +418,19 @@ test('services can follow opening hours, and closed days point to the next open 
   await call('PUT', '/api/admin/restaurant', { hours: '' });
 });
 
+test('search engines: restaurant pages, sitemap and robots', async () => {
+  const slug = (await call('GET', '/api/admin/restaurant')).data.restaurant.slug;
+  const page = await fetch(`${base}/r/${slug}`); const html = await page.text();
+  assert.strictEqual(page.status, 200);
+  assert.ok(/<title>[^<]+· Book a table in /.test(html), 'title has the restaurant');
+  assert.ok(html.includes('<link rel="canonical"') && html.includes('"@type":"Restaurant"'));
+  assert.strictEqual((html.match(/name="description"/g) || []).length, 1);
+  assert.strictEqual((await fetch(`${base}/r/no-such-place`)).status, 404);
+  const sm = await (await fetch(`${base}/sitemap.xml`)).text();
+  assert.ok(sm.includes(`/r/${slug}</loc>`) && sm.includes('<urlset'));
+  assert.ok((await (await fetch(`${base}/robots.txt`)).text()).includes('Sitemap:'));
+});
+
 test('gallery and likes: diners heart restaurants, dishes and food photos', async () => {
   await call('PUT', '/api/admin/restaurant', { name: 'Heart Cafe', cuisine: 'Cafe', description: 'Cozy cafe with pastries.' });
   const dish = (await call('POST', '/api/admin/menu', { name: 'Croissant', price: '4', section: 'Bakery' })).data;

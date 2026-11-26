@@ -2,6 +2,10 @@
 (function () {
   const TB = {};
   TB.base = window.RBOOKED_BASE || '';
+  /** Link to a restaurant's page: /r/<slug> (search-engine friendly), or the demo's file page. */
+  TB.rlink = (slug, query = '') => (window.RBOOKED_DEMO
+    ? `restaurant.html?slug=${encodeURIComponent(slug)}${query ? `&${query}` : ''}`
+    : `/r/${encodeURIComponent(slug)}${query ? `?${query}` : ''}`);
 
   TB.api = async function (path, opts = {}) {
     const res = await fetch(TB.base + path, {

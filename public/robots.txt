@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+Disallow: /staff
+Disallow: /login
+Disallow: /reservation
+Disallow: /embed
+Disallow: /restaurant
+
+Sitemap: https://rbooked.com/sitemap.xml

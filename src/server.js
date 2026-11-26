@@ -85,6 +85,7 @@ if (!config.isProduction) {
 app.get('/healthz', (req, res) => res.json({ ok: true }));
 
 // On Cloudflare the same folder is served as static assets before requests reach the app.
+app.use(require('./seo'));
 app.use(express.static(path.join(typeof __dirname === 'string' ? __dirname : '.', '..', 'public'), { extensions: ['html'] }));
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));

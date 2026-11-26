@@ -7,6 +7,11 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%229%22 fill=%22%23c2410c%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2218%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Georgia%22%3ER%3C/text%3E%3C/svg%3E">
 <title>Rbooked · Book a table near you</title>
 <meta name="description" content="Find restaurants near your ZIP code and book a table instantly, or let Rbooked pick one for you.">
+<link rel="canonical" href="https://rbooked.com/">
+<meta property="og:type" content="website"><meta property="og:site_name" content="Rbooked"><meta property="og:url" content="https://rbooked.com/">
+<meta property="og:title" content="Rbooked · Book a table near you"><meta property="og:description" content="Find restaurants near your ZIP code and book a table instantly.">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Rbooked","url":"https://rbooked.com/"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Rbooked","url":"https://rbooked.com/","email":"rbookedsupport@gmail.com"}</script>
 </head>
 <body class="home">
 <header class="site-header"><div class="container">
@@ -106,7 +111,7 @@
   const list = document.getElementById('results');
   const empty = document.getElementById('empty');
   const pickBox = document.getElementById('pick-result');
-  const bookLink = (r, party, t) => `/restaurant?slug=${encodeURIComponent(r.slug)}&date=${r.date}&party=${party}${t ? `&time=${t}` : ''}`;
+  const bookLink = (r, party, t) => TB.rlink(r.slug, `date=${r.date}&party=${party}${t ? `&time=${t}` : ''}`);
   const tagChips = (r, highlight = [], limit = 99) => TBMatch.parseTags(r.tags).slice(0, limit).map((t) => `<span class="tagchip${highlight.includes(t) ? ' hit' : ''}">${esc(TBMatch.label(t))}</span>`).join('');
 
   function readForm() {
@@ -229,7 +234,7 @@
       if (!rows.length && where) { rows = await api('/api/public/trending'); where = ''; }
       document.getElementById('trend-where').textContent = where;
       const box = document.getElementById('trend');
-      box.innerHTML = rows.map((g) => `<a class="trend" href="/restaurant?slug=${encodeURIComponent(g.restaurant.slug)}"><div class="ph"><img src="${esc(g.url)}" alt="${esc(g.dish || g.caption || g.restaurant.name)}" loading="lazy">${TB.heart('photo', g.id, g.likes, g.liked, 'on-photo')}</div>
+      box.innerHTML = rows.map((g) => `<a class="trend" href="${TB.rlink(g.restaurant.slug)}"><div class="ph"><img src="${esc(g.url)}" alt="${esc(g.dish || g.caption || g.restaurant.name)}" loading="lazy">${TB.heart('photo', g.id, g.likes, g.liked, 'on-photo')}</div>
         <div class="tx"><b>${esc(g.dish || g.caption || g.restaurant.name)}</b><span>${esc(g.restaurant.name)}${g.restaurant.city ? ` · ${esc(g.restaurant.city)}` : ''}</span></div></a>`).join('');
       TB.bindHearts(box);
       document.getElementById('trend-wrap').classList.toggle('hidden', !rows.length);

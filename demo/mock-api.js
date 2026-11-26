@@ -1,6 +1,7 @@
 /* Rbooked live demo: runs the whole backend inside the browser.
    It answers the same /api/... calls the real server does, keeps data in this
    browser's storage, and records every email in a demo inbox. */
+window.RBOOKED_DEMO = true;
 (function () {
   const KEY = 'rbooked_demo_v5';
   const mem = {};

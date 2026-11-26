@@ -154,7 +154,7 @@ const templates = {
           ? `We're sorry, ${esc(r.name)} had to cancel your reservation. Please call us at ${esc(r.phone)} if you have questions.`
           : 'Your reservation has been cancelled. We hope to see you another time.'}</p>
         ${detailsBlock(r, res)}
-        <p>${button(`${config.baseUrl}/restaurant.html?slug=${r.slug}`, 'Book again', r.accent_color)}</p>`),
+        <p>${button(`${config.baseUrl}/r/${r.slug}`, 'Book again', r.accent_color)}</p>`),
     };
   },
   no_show(r, res) {
@@ -164,7 +164,7 @@ const templates = {
         <p>Your reservation below was marked as a no-show. If this is a mistake, please call us at ${esc(r.phone)}.</p>
         ${detailsBlock(r, res)}
         <p>Next time, please cancel ahead so another guest can enjoy the table.</p>
-        <p>${button(`${config.baseUrl}/restaurant.html?slug=${r.slug}`, 'Book a new table', r.accent_color)}</p>`),
+        <p>${button(`${config.baseUrl}/r/${r.slug}`, 'Book a new table', r.accent_color)}</p>`),
     };
   },
   // ---------- Restaurant notifications ----------

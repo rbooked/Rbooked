@@ -46,7 +46,7 @@
       </table>
       ${v.canChange ? `<div class="row"><button class="btn" id="change">Change date, time or party</button><button class="btn secondary" id="cancel">Cancel reservation</button></div>
         <p class="muted small" style="margin-top:12px">${esc(r.cancellation_policy || '')}</p>`
-      : v.status === 'cancelled' ? `<a class="btn" href="/restaurant?slug=${encodeURIComponent(r.slug)}">Book again</a>` : ''}`;
+      : v.status === 'cancelled' ? `<a class="btn" href="${TB.rlink(r.slug)}">Book again</a>` : ''}`;
     if (!v.canChange) return;
     document.getElementById('cancel').onclick = () => TB.modal(`
       <h2>Cancel this reservation?</h2><p>${TB.date(v.date)} at ${TB.time(v.time)} for ${v.party_size}. This can't be undone.</p>

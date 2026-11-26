@@ -6,6 +6,7 @@
 <link rel="stylesheet" href="/css/app.css">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%229%22 fill=%22%23c2410c%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2218%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Georgia%22%3ER%3C/text%3E%3C/svg%3E">
 <title>Book a table · Rbooked</title>
+<meta name="description" content="Book a table online with Rbooked.">
 </head>
 <body>
 <header class="site-header"><div class="container">
@@ -35,7 +36,7 @@
 <script>
 (async function () {
   const { esc } = TB;
-  const slug = TB.qs('slug');
+  const slug = TB.qs('slug') || decodeURIComponent((/^\/r\/([^/?#]+)/.exec(location.pathname) || [])[1] || '');
   const state = await TB.mountBooking(document.getElementById('booking'), {
     slug, date: TB.qs('date'), party: TB.qs('party'), time: TB.qs('time'), source: 'online',
   });
