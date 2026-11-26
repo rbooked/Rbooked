@@ -51,6 +51,10 @@
   <div id="pick-result"></div>
   <div id="results"></div>
   <div id="empty" class="card hidden"></div>
+  <section class="section hidden" id="map-wrap">
+    <div class="row" style="align-items:baseline"><h2 class="serif" style="font-size:26px;margin:0">On the map</h2><span class="muted small" id="map-where"></span></div>
+    <div class="map-card"><div class="rb-map" id="home-map" role="region" aria-label="Map of restaurants"></div></div>
+  </section>
   <section class="section hidden" id="featured-wrap">
     <div class="row" style="align-items:baseline"><h2 class="serif" style="font-size:26px;margin:0">Featured restaurants</h2><span class="muted small" id="featured-where"></span></div>
     <div class="featured" id="featured"><p class="muted">Loading…</p></div>
@@ -68,6 +72,7 @@
 </main>
 <footer class="footer"><div class="container row"><span>© Rbooked</span><span class="spacer"></span><a href="/for-restaurants">For restaurants</a><a href="/login">Restaurant login</a></div></footer>
 <script src="/js/common.js"></script>
+<script src="/js/rbmap.js"></script>
 <script src="/js/matcher.js"></script>
 <script src="/js/places.js"></script>
 <script>
@@ -244,8 +249,19 @@
     } catch { document.getElementById('trend-wrap').classList.add('hidden'); }
   }
 
-  loadFeatured(); loadTrending();
-  f.zip.addEventListener('change', () => { loadFeatured(); loadTrending(); });
+  async function loadMap() {
+    const zip = f.zip.value.trim();
+    try {
+      const data = await api('/api/public/map' + (/^\d{5}$/.test(zip) ? `?zip=${zip}` : ''));
+      const wrap = document.getElementById('map-wrap');
+      wrap.classList.toggle('hidden', !data.pins.length);
+      if (!data.pins.length) return;
+      document.getElementById('map-where').textContent = `· ${data.pins.length} restaurant${data.pins.length === 1 ? '' : 's'} on Rbooked`;
+      TBMap.draw(document.getElementById('home-map'), data.pins, { center: data.center, link: (p) => bookLink({ slug: p.slug, date: f.date.value }, f.party.value) });
+    } catch { document.getElementById('map-wrap').classList.add('hidden'); }
+  }
+  loadFeatured(); loadTrending(); loadMap();
+  f.zip.addEventListener('change', () => { loadFeatured(); loadTrending(); loadMap(); });
   if (f.zip.value && params.get('zip')) (mode === 'pick' ? pick(false) : search(false));
 })();
   // Find a restaurant by its hashtag.

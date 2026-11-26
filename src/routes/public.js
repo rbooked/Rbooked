@@ -4,7 +4,7 @@ const { one, all, run } = require('../db');
 const { getAvailability, findSlot } = require('../availability');
 const { createReservation, cancelReservation, BookingError } = require('../reservations');
 const { isBookable } = require('../billing');
-const { lookupZip, milesBetween } = require('../geo');
+const { lookupZip, milesBetween, ensureGeo, addrLine } = require('../geo');
 const { nowInZone, toMin, zonedToUtc } = require('../time');
 const email = require('../email');
 
@@ -129,6 +129,22 @@ router.get('/featured', wrap(async (req, res) => {
   }));
 }));
 
+// Map pins for the home page: every bookable restaurant with a location (nearest first when a ZIP is given).
+// A few restaurants whose street address hasn't been looked up yet get looked up on the way.
+router.get('/map', wrap(async (req, res) => {
+  const zip = String(req.query.zip || '').trim();
+  const rows = all('SELECT * FROM restaurants ORDER BY id DESC').filter(isBookable);
+  await Promise.all(rows.filter((r) => r.address && r.geo_addr !== addrLine(r)).slice(0, 4).map((r) => ensureGeo(r)));
+  let list = rows.filter((r) => r.lat != null && r.lng != null);
+  const origin = /^\d{5}$/.test(zip) ? await lookupZip(zip) : null;
+  if (origin) list = list.map((r) => ({ r, d: milesBetween(origin, r) })).sort((a, b) => a.d - b.d).map((x) => x.r);
+  res.setHeader('Cache-Control', 'public, max-age=120');
+  res.json({ center: origin ? { lat: origin.lat, lng: origin.lng } : null, pins: list.slice(0, 200).map((r) => ({
+    slug: r.slug, name: r.name, cuisine: r.cuisine || '', city: r.city, state: r.state, lat: r.lat, lng: r.lng,
+    price_level: r.price_level || 0, image_url: r.image_url || '', tag: matcher.hashtag(r.name),
+  })) });
+}));
+
 // "Pick for me": choose restaurants from a few quick choices + time + live availability.
 router.get('/pick', wrap(async (req, res) => {
   const zip = String(req.query.zip || '').trim();
@@ -147,7 +163,7 @@ router.get('/pick', wrap(async (req, res) => {
 }));
 
 router.get('/restaurants/:slug', wrap(async (req, res) => {
-  const r = getBookableRestaurant(req.params.slug);
+  const r = await ensureGeo(getBookableRestaurant(req.params.slug));
   const shifts = all('SELECT name, days, start_time, end_time FROM shifts WHERE restaurant_id = ? AND active = 1 ORDER BY start_time', r.id);
   const menu = all(`SELECT id, section, name, description, price_cents, tags, options FROM menu_items
     WHERE restaurant_id = ? AND available = 1 ORDER BY sort_order, id`, r.id);

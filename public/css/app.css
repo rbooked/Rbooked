@@ -395,3 +395,20 @@ table.data tr:hover td { background: #fcfaf7; }
 .tag-find input { flex: 1; min-width: 0; border: 0; outline: none; font: inherit; font-size: 16px; background: transparent; padding: 8px 4px; }
 .tag-find .btn { border-radius: 999px; }
 .tag-miss { color: var(--bad); font-size: 14px; margin: 0 0 8px; }
+
+/* Restaurant maps */
+.map-card { margin-top: 14px; border-radius: 18px; overflow: hidden; border: 1px solid var(--line, #e8e1d7); background: #eef1f3; }
+.rb-map { height: 320px; width: 100%; z-index: 0; }
+.rb-map.small { height: 200px; }
+.rb-map-off { display: grid; place-items: center; }
+.rb-pin-wrap { background: none; border: 0; }
+.rb-pin { position: relative; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: var(--brand, #c2410c); border: 2px solid #fff; box-shadow: 0 4px 10px rgba(31,27,22,.3); }
+.rb-pin span { transform: rotate(45deg); color: #fff; font: 700 14px var(--font, system-ui); }
+.rb-pop { display: grid; gap: 4px; font-family: var(--font, system-ui); }
+.rb-pop img { width: 100%; height: 90px; object-fit: cover; border-radius: 10px; margin-bottom: 4px; }
+.rb-pop b { font-size: 15px; }
+.rb-pop-tag { color: var(--brand, #c2410c); font-weight: 700; font-size: 13px; }
+.rb-pop .btn { margin-top: 6px; justify-self: start; color: #fff; }
+.leaflet-container a.btn { color: #fff; }
+.map-foot { display: flex; gap: 10px; align-items: center; padding: 10px 14px; background: var(--surface); font-size: 14px; }
+@media (max-width: 480px) { .rb-map { height: 260px; } }

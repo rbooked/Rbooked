@@ -7,7 +7,7 @@ const { createReservation, cancelReservation, markNoShow, BookingError } = requi
 const billing = require('../billing');
 const email = require('../email');
 const config = require('../config');
-const { lookupZip } = require('../geo');
+const { lookupZip, ensureGeo } = require('../geo');
 const places = require('../../public/js/places');
 const { nowInZone, zonedToUtc } = require('../time');
 const { wrap } = require('./public');
@@ -106,6 +106,7 @@ router.put('/restaurant', wrap(async (req, res) => {
   }
   const keys = Object.keys(f);
   if (keys.length) run(`UPDATE restaurants SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, ...keys.map((k) => f[k]), req.restaurant.id);
+  if (['address', 'city', 'state', 'zip'].some((k) => k in f)) await ensureGeo(one('SELECT * FROM restaurants WHERE id = ?', req.restaurant.id));
   res.json({ ok: true });
 }));
 

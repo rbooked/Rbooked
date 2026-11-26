@@ -382,6 +382,13 @@ window.RBOOKED_DEMO = true;
     const list = [...pool.filter((x) => x.r.featured), ...pool.filter((x) => !x.r.featured).sort((a, b) => b.r.id - a.r.id)].slice(0, 6);
     return list.slice(0, 12).map(({ r, miles: mi }) => { const date = dateFor(q.date, r); return { ...pub(r), miles: mi, date, slots: closest(openTimes(r, date, party), want, 3) }; });
   });
+  on('GET', '/api/public/map', (q) => {
+    const zip = String(q.zip || '').trim();
+    const rows = /^\d{5}$/.test(zip) ? nearby(zip, 5000).list.map((x) => x.r) : db.restaurants.filter((r) => isBookable(r));
+    const o = /^\d{5}$/.test(zip) ? nearby(zip, 5000).origin : null;
+    return { center: o && o.lat != null ? { lat: o.lat, lng: o.lng } : null, pins: rows.filter((r) => r.lat != null && r.lng != null).map((r) => ({
+      slug: r.slug, name: r.name, cuisine: r.cuisine || '', city: r.city, state: r.state, lat: r.lat, lng: r.lng, price_level: r.price_level || 0, image_url: r.image_url || '', tag: window.TBMatch.hashtag(r.name) })) };
+  });
   on('GET', '/api/public/pick', (q) => {
     const zip = String(q.zip || '').trim();
     if (!/^\d{5}$/.test(zip)) throw new E('Please enter a 5-digit ZIP code.');

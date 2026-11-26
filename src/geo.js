@@ -37,4 +37,35 @@ function milesBetween(a, b) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-module.exports = { lookupZip, milesBetween };
+/**
+ * Put a restaurant's pin on its street address (not just the middle of its ZIP code), using the free
+ * US Census geocoder (no key, no account). geo_addr remembers which address was looked up, so each
+ * address is only looked up once; if the lookup fails the ZIP-code location stays in place.
+ */
+const addrLine = (r) => [r.address, r.city, `${r.state || ''} ${r.zip || ''}`.trim()].map((x) => String(x || '').trim()).filter(Boolean).join(', ');
+async function geocodeAddress(line, ms = 5000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const url = `https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?benchmark=Public_AR_Current&format=json&address=${encodeURIComponent(line)}`;
+    const res = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'Rbooked/1.0' } });
+    if (!res.ok) return undefined; // try again another time
+    const data = await res.json();
+    const m = data && data.result && data.result.addressMatches && data.result.addressMatches[0];
+    if (!m || !m.coordinates) return null; // the address isn't known: don't keep asking
+    const lat = Number(m.coordinates.y); const lng = Number(m.coordinates.x);
+    return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+  } catch { return undefined; } finally { clearTimeout(timer); }
+}
+async function ensureGeo(r) {
+  const line = addrLine(r);
+  if (!r || !r.address || !line || r.geo_addr === line) return r;
+  const g = await geocodeAddress(line);
+  if (g === undefined) return r;
+  if (g) { r.lat = g.lat; r.lng = g.lng; run('UPDATE restaurants SET lat = ?, lng = ?, geo_addr = ? WHERE id = ?', g.lat, g.lng, line, r.id); }
+  else run('UPDATE restaurants SET geo_addr = ? WHERE id = ?', line, r.id);
+  r.geo_addr = line;
+  return r;
+}
+
+module.exports = { lookupZip, milesBetween, geocodeAddress, ensureGeo, addrLine };

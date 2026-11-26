@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS restaurants (
   logo_url TEXT DEFAULT '',
   hours TEXT DEFAULT '',                 -- JSON, 7 days from Sunday: [{closed, open, close}]
   featured INTEGER DEFAULT 0,            -- set by the platform, shown in "Featured" sections
+  geo_addr TEXT DEFAULT '',              -- the address the map pin was looked up from
   -- billing
   trial_ends_at TEXT NOT NULL,
   subscription_status TEXT NOT NULL DEFAULT 'trialing', -- trialing | active | past_due | canceled | expired
@@ -252,6 +253,7 @@ function migrate(d) {
   if (!cols.has('turn_times')) d.exec("ALTER TABLE restaurants ADD COLUMN turn_times TEXT DEFAULT '2:90,4:120,6:180,99:210'");
   for (const [c, def] of [['website_url', "''"], ['logo_url', "''"], ['hours', "''"]]) if (!cols.has(c)) d.exec(`ALTER TABLE restaurants ADD COLUMN ${c} TEXT DEFAULT ${def}`);
   if (!cols.has('featured')) d.exec('ALTER TABLE restaurants ADD COLUMN featured INTEGER DEFAULT 0');
+  if (!cols.has('geo_addr')) d.exec("ALTER TABLE restaurants ADD COLUMN geo_addr TEXT DEFAULT ''");
   try {
     const mcols = new Set(d.all('PRAGMA table_info(menu_items)').map((c) => c.name));
     if (mcols.size && !mcols.has('options')) d.exec("ALTER TABLE menu_items ADD COLUMN options TEXT DEFAULT ''");

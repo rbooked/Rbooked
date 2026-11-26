@@ -11,6 +11,7 @@ files = {
   'admin/index.html': 'admin.html', 'admin/admin.js': 'admin/admin.js', 'admin/admin.css': 'admin/admin.css',
   'css/app.css': 'css/app.css', 'js/common.js': 'js/common.js', 'js/booking.js': 'js/booking.js', 'js/matcher.js': 'js/matcher.js',
   'js/samples.js': 'js/samples.js', 'js/places.js': 'js/places.js', 'js/menu-import.js': 'js/menu-import.js', 'js/pricing.js': 'js/pricing.js',
+  'js/rbmap.js': 'js/rbmap.js',
 }
 REPL = [
   ('href="/css/', 'href="css/'), ('src="/js/', 'src="js/'),
@@ -36,4 +37,5 @@ for src, dst in files.items():
         s = re.sub(r'</?(html|head|body)\b[^>]*>\s*', '', s, flags=re.I)
     open(os.path.join(OUT, dst), 'w', encoding='utf-8').write(s)
 shutil.copy(os.path.join(ROOT, 'demo', 'mock-api.js'), os.path.join(OUT, 'mock-api.js'))
+shutil.copytree(os.path.join(SRC, 'vendor'), os.path.join(OUT, 'vendor'))
 print('built', OUT)

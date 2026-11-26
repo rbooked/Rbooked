@@ -437,6 +437,29 @@ test('search engines: restaurant pages, sitemap and robots', async () => {
   assert.ok(html.includes(hashtag(name)), 'hashtag in the page description');
 });
 
+test('map: pins sit on the street address, looked up once', async () => {
+  const realFetch = globalThis.fetch; let lookups = 0;
+  globalThis.fetch = (url, o) => {
+    if (String(url).includes('geocoding.geo.census.gov')) {
+      lookups++;
+      return Promise.resolve(new Response(JSON.stringify({ result: { addressMatches: [{ coordinates: { x: -73.9851, y: 40.7589 } }] } }), { status: 200 }));
+    }
+    return realFetch(url, o);
+  };
+  try {
+    await call('PUT', '/api/admin/restaurant', { address: '1 Map Street' });
+    const me = (await call('GET', '/api/admin/restaurant')).data.restaurant;
+    const data = await (await fetch(`${base}/api/public/map`)).json();
+    const pin = data.pins.find((p) => p.slug === me.slug);
+    assert.ok(pin, 'restaurant has a pin');
+    assert.strictEqual(pin.lat, 40.7589); assert.strictEqual(pin.lng, -73.9851);
+    assert.ok(pin.tag.startsWith('#'));
+    const n = lookups;
+    await fetch(`${base}/api/public/map`); await fetch(`${base}/api/public/restaurants/${me.slug}`);
+    assert.strictEqual(lookups, n, 'same address is not looked up again');
+  } finally { globalThis.fetch = realFetch; }
+});
+
 test('gallery and likes: diners heart restaurants, dishes and food photos', async () => {
   await call('PUT', '/api/admin/restaurant', { name: 'Heart Cafe', cuisine: 'Cafe', description: 'Cozy cafe with pastries.' });
   const dish = (await call('POST', '/api/admin/menu', { name: 'Croissant', price: '4', section: 'Bakery' })).data;

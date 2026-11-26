@@ -31,6 +31,7 @@
 </main>
 <footer class="footer"><div class="container row"><span>© Rbooked</span><span class="spacer"></span><a href="/for-restaurants">List your restaurant</a><a href="/login">Restaurant login</a></div></footer>
 <script src="/js/common.js"></script>
+<script src="/js/rbmap.js"></script>
 <script src="/js/matcher.js"></script>
 <script src="/js/booking.js"></script>
 <script>
@@ -92,7 +93,7 @@
     new IntersectionObserver(([en]) => { mb.style.display = en.isIntersecting ? 'none' : ''; }, { threshold: 0.15 }).observe(document.getElementById('booking'));
   }
 
-  const map = `https://www.openstreetmap.org/search?query=${encodeURIComponent(`${r.address}, ${r.city}, ${r.state} ${r.zip}`)}`;
+  const map = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${r.address}, ${r.city}, ${r.state} ${r.zip}`)}`;
   const webLabel = web.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '');
   document.getElementById('about').innerHTML = `
     <div class="tagchips" style="margin:0 0 10px">${TBMatch.parseTags(r.tags).map((t) => `<span class="tagchip">${esc(TBMatch.label(t))}</span>`).join('')}</div>
@@ -104,7 +105,10 @@
       ${hours || special.length ? `<div>${hours ? `<b>Hours</b><table class="hours">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<tr class="${d === wd ? 'today' : ''}"><td>${DAYS[d]}</td><td>${hours[d].closed ? 'Closed' : `${TB.time(hours[d].open)} – ${TB.time(hours[d].close)}`}</td></tr>`).join('')}</table>` : ''}
         ${special.length ? `<p style="margin:12px 0 4px"><b>Special hours</b></p><table class="hours">${special.map((s) => `<tr class="${s.date === state.today ? 'today' : ''}"><td>${esc(TB.date(s.date, { weekday: 'short', month: 'short' }))}${s.reason ? `<div class="muted small">${esc(s.reason)}</div>` : ''}</td><td>${s.open_time ? `${TB.time(s.open_time)} – ${TB.time(s.close_time)}` : 'Closed'}</td></tr>`).join('')}</table>` : ''}</div>` : ''}
     </div>
+    ${r.lat != null && r.lng != null ? `<div class="map-card"><div class="rb-map small" id="r-map" role="img" aria-label="Map showing ${esc(r.name)}"></div>
+      <div class="map-foot"><span class="muted">${esc(r.address)}, ${esc(r.city)}</span><span class="spacer"></span><a href="${map}" target="_blank" rel="noopener">Directions</a></div></div>` : ''}
     <p class="muted small" style="margin-top:14px">${esc(r.cancellation_policy || '')}</p>`;
+  if (r.lat != null && r.lng != null) TBMap.draw(document.getElementById('r-map'), [{ lat: r.lat, lng: r.lng, name: r.name }], { single: true });
 
   // Menu with dietary filters. Pick several to combine them (for example vegan + gluten-free).
   const menu = state.menu;
