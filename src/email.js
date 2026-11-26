@@ -118,8 +118,8 @@ async function sendNow({ to, subject, html, kind, reservationId = null, attachme
 const templates = {
   confirmation(r, res) {
     return {
-      subject: `Confirmed: ${r.name}, ${prettyDate(res.date)} at ${prettyTime(res.time)}`,
-      html: layout(r, 'Your table is booked', `
+      subject: `You Rbooked! ${r.name}, ${prettyDate(res.date)} at ${prettyTime(res.time)}`,
+      html: layout(r, 'You Rbooked!', `
         <p>Hi ${esc(res.guest_name.split(' ')[0])}, we look forward to seeing you.</p>
         ${detailsBlock(r, res)}
         <p style="font-size:14px;color:#7a6f63">${esc(r.cancellation_policy)}</p>

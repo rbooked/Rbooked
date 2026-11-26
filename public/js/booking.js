@@ -108,7 +108,7 @@
       const manage = `${TB.base || location.origin}/reservation.html?t=${out.token}`;
       root.innerHTML = `<div class="confirm-box">
         <div class="tick">✓</div>
-        <h2 class="serif">You're booked!</h2>
+        <h2 class="serif">You Rbooked!</h2>
         <p>${esc(r.name)}<br><b>${TB.date(out.date, { weekday: 'long', month: 'long' })} at ${TB.time(out.time)}</b> · ${out.party_size} ${out.party_size === 1 ? 'guest' : 'guests'}</p>
         <p>Confirmation code<br><span class="code">${esc(out.code)}</span></p>
         <p class="muted small">We sent the details to ${esc(body.email)}.</p>

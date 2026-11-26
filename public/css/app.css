@@ -439,3 +439,5 @@ table.data tr:hover td { background: #fcfaf7; }
 .spin-win h3 { margin: 2px 0 4px; font-size: 24px; }
 .spin-win .slots { margin-top: 8px; }
 @media (max-width: 560px) { .spin { border-radius: 18px; margin-left: -4px; margin-right: -4px; } .spin-head { padding: 0 16px; } .spin-out { margin: 4px 16px 0; } .spin-btn { width: 100%; justify-content: center; } }
+.hero .slogan { display: inline-block; margin: 0 0 12px; padding: 7px 16px; border-radius: 999px; background: var(--ink, #1f1b16); border: 0; color: #fff; box-shadow: 0 6px 16px rgba(31,27,22,.18); font: 700 15px var(--font); letter-spacing: .02em; transform: rotate(-2deg); }
+.hero p.slogan { color: #fff; font-size: 15px; }
