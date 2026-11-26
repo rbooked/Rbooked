@@ -677,12 +677,36 @@
     return `<div class="guest-tags">${tags.join('')}</div>`;
   }
 
+  // Reservation sections, in this order: Seated, Upcoming, Finished, then Cancelled / no-show last.
+  const RES_GROUPS = [
+    { id: 'seated', label: 'Seated', has: (x) => x.status === 'seated' },
+    { id: 'upcoming', label: 'Upcoming', has: (x) => x.status === 'confirmed' },
+    { id: 'finished', label: 'Finished', has: (x) => x.status === 'completed' },
+    { id: 'off', label: 'Cancelled / no-show', has: (x) => ['cancelled', 'no_show'].includes(x.status) },
+  ];
+  /** Sections to show for the current filter, each sorted by time. */
+  function resSections(rows) {
+    const f = S.resFilter || 'all';
+    return RES_GROUPS.filter((g) => f === 'all' || g.id === f)
+      .map((g) => ({ ...g, rows: rows.filter(g.has).sort((a, b) => a.time.localeCompare(b.time) || a.id - b.id) }))
+      .filter((g) => g.rows.length);
+  }
+  function resFilterBar(rows, onChange) {
+    const f = S.resFilter || 'all';
+    const html = `<div class="chips res-filter" role="group" aria-label="Show reservations">${[{ id: 'all', label: 'All', n: rows.length }, ...RES_GROUPS.map((g) => ({ ...g, n: rows.filter(g.has).length }))]
+      .map((g) => `<button type="button" class="chip ${f === g.id ? 'on' : ''}" data-rf="${g.id}" aria-pressed="${f === g.id}">${esc(g.label)} <span class="cnt">${g.n}</span></button>`).join('')}</div>`;
+    const bind = (root) => root.querySelectorAll('[data-rf]').forEach((b) => { b.onclick = () => { S.resFilter = b.dataset.rf; onChange(); }; });
+    return { html, bind };
+  }
+
   function renderList(body, rows) {
     if (!rows.length) { body.innerHTML = `<div class="card"><p class="muted" style="margin:0">No reservations for ${TB.date(S.date, { weekday: 'long', month: 'long' })}. Use “+ New reservation” to add one.</p></div>`; return; }
     const now = nowLocal();
-    body.innerHTML = `<div class="card" style="padding:0"><div class="table-wrap"><table class="data res-list">
+    const fb = resFilterBar(rows, () => renderList(body, rows));
+    const secs = resSections(rows);
+    body.innerHTML = `${fb.html}<div class="card" style="padding:0"><div class="table-wrap"><table class="data res-list">
       <thead><tr><th>Time</th><th>Guest</th><th>Party</th><th>Table</th><th>Status</th><th>Actions</th></tr></thead>
-      <tbody>${rows.map((x) => {
+      ${secs.map((g) => `<tbody><tr class="res-sec"><th colspan="6">${esc(g.label)} <span class="muted">${g.rows.length} · ${g.rows.reduce((a, x) => a + x.party_size, 0)} guests</span></th></tr>${g.rows.map((x) => {
         const late = x.status === 'confirmed' && x.date === now.date && toMin(x.time) + 15 < now.minutes;
         const dim = ['cancelled', 'no_show', 'completed'].includes(x.status);
         return `<tr class="${dim ? 'dim' : ''}" data-id="${x.id}">
@@ -697,7 +721,8 @@
             ${statusButtons(x, 'data-act')}
             ${x.guest_email !== 'walkin@guest.local' ? '<button class="btn ghost sm" data-act="resend" title="Resend email" aria-label="Resend email">✉️</button>' : ''}
           </div></td></tr>`;
-      }).join('')}</tbody></table></div></div>`;
+      }).join('')}</tbody>`).join('') || '<tbody><tr><td colspan="6" class="muted">Nothing in this section.</td></tr></tbody>'}</table></div></div>`;
+    fb.bind(body);
     body.querySelectorAll('tr[data-id]').forEach((tr) => {
       const x = rows.find((r) => r.id === Number(tr.dataset.id));
       tr.querySelectorAll('[data-act]').forEach((el) => {
@@ -865,16 +890,18 @@
       const p = document.getElementById('rf-panel');
       const t = floor.tables.find((z) => z.id === S.rfTable);
       if (!t) {
-        const today = rows.slice().sort((a, b) => a.time.localeCompare(b.time) || a.id - b.id);
+        const today = rows;
         const movable = (x) => ['confirmed', 'seated'].includes(x.status);
+        const fb = resFilterBar(rows, () => renderResFloor(body, rows, floor));
         const seatLabel = (x) => (x.combo_id ? (combos.get(x.combo_id) || {}).name : (floor.tables.find((z) => z.id === x.table_id) || {}).label) || '';
         p.innerHTML = `<div class="row"><h2 style="margin:0">All reservations</h2><span class="spacer"></span><span class="muted small">${today.length} · ${today.filter(movable).reduce((a, x) => a + x.party_size, 0)} guests</span></div>
           <p class="muted small" style="margin:4px 0 10px">Tap a name, then tap a table to move it. Or press and drag it onto a table.</p>
-          <div class="rf-list">${today.map((x) => `<button type="button" class="rf-item ${x.status} ${S.rfMove === x.id ? 'moving' : ''} ${movable(x) ? '' : 'done'}" data-x="${x.id}" aria-pressed="${S.rfMove === x.id}">
+          ${fb.html}<div class="rf-list">${resSections(today).map((g) => `<div class="rf-sec">${esc(g.label)} <span>${g.rows.length}</span></div>${g.rows.map((x) => `<button type="button" class="rf-item ${x.status} ${S.rfMove === x.id ? 'moving' : ''} ${movable(x) ? '' : 'done'}" data-x="${x.id}" aria-pressed="${S.rfMove === x.id}">
             <span class="rf-at">${TB.time(x.time)}</span>
             <span class="rf-item-main"><b>${esc(x.guest_name)}</b><span class="small muted">${x.party_size} ${x.party_size === 1 ? 'guest' : 'guests'}${x.status === 'confirmed' ? '' : ` · ${STATUS_LABEL[x.status]}`}</span></span>
-            <span class="rf-tbl ${seatLabel(x) ? '' : 'none'}">${seatLabel(x) ? esc(seatLabel(x)) : 'No table'}</span></button>`).join('') || '<p class="muted small">No reservations for this day yet.</p>'}</div>
+            <span class="rf-tbl ${seatLabel(x) ? '' : 'none'}">${seatLabel(x) ? esc(seatLabel(x)) : 'No table'}</span></button>`).join('')}`).join('') || '<p class="muted small">No reservations here.</p>'}</div>
           <div class="rf-len"><h3 class="rf-h">Reservation length</h3><p class="small muted" style="margin:0">${turnSummary()} <a href="#services">Change</a></p></div>`;
+        fb.bind(p);
         p.querySelectorAll('.rf-item').forEach((el) => {
           const x = rows.find((r) => r.id === Number(el.dataset.x));
           if (!movable(x)) { el.onclick = () => resAction('edit', x); return; }
