@@ -52,7 +52,7 @@ function resetRestaurant(rid) {
 }
 
 router.get('/restaurant', wrap(async (req, res) => {
-  res.json({ restaurant: pick(req.restaurant, ['id', 'slug', 'featured', ...SETTINGS]), user: { id: req.user.id, name: req.user.name, email: req.user.email }, billing: billing.billingSummary(req.restaurant), baseUrl: config.baseUrl });
+  res.json({ restaurant: pick(req.restaurant, ['id', 'slug', 'featured', 'verified', ...SETTINGS]), user: { id: req.user.id, name: req.user.name, email: req.user.email }, billing: billing.billingSummary(req.restaurant), baseUrl: config.baseUrl });
 }));
 
 router.put('/restaurant', wrap(async (req, res) => {

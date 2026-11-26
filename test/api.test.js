@@ -11,6 +11,7 @@ process.env.DATABASE_PATH = path.join(dir, 'test.db');
 process.env.SMTP_HOST = '';
 process.env.STRIPE_SECRET_KEY = '';
 process.env.BASE_URL = 'http://test.local';
+process.env.RATE_LIMIT_PER_MIN = '1000'; // the whole suite runs from one address
 
 const app = require('../src/server');
 const { one, run } = require('../src/db');
@@ -46,6 +47,17 @@ test('restaurant signup starts a 14-day trial with starter setup', async () => {
   assert.ok(me.data.billing.trialDaysLeft >= 13);
   const floor = await call('GET', '/api/admin/floor');
   assert.strictEqual(floor.data.tables.length, 6);
+  // Not live until the owner confirms their email.
+  assert.strictEqual(me.data.restaurant.verified, 0);
+  assert.strictEqual((await fetch(`${base}/r/${me.data.restaurant.slug}`)).status, 404);
+  const mail = one("SELECT html FROM email_log WHERE kind = 'welcome' AND to_addr = 'owner@test.local' ORDER BY id DESC");
+  const link = mail.html.match(/\/api\/auth\/verify\?t=([\w%-]+)/);
+  assert.ok(link, 'welcome email has a confirm link');
+  assert.strictEqual((await fetch(`${base}/api/auth/verify?t=bad`, { redirect: 'manual' })).headers.get('location'), '/login?verify=expired');
+  const v = await fetch(`${base}/api/auth/verify?t=${link[1]}`, { redirect: 'manual' });
+  assert.strictEqual(v.headers.get('location'), '/admin/?verified=1');
+  assert.strictEqual((await call('GET', '/api/admin/restaurant')).data.restaurant.verified, 1);
+  assert.strictEqual((await fetch(`${base}/r/${me.data.restaurant.slug}`)).status, 200);
   // Give it coordinates so ZIP search works offline in tests.
   run('UPDATE restaurants SET lat = 40.74, lng = -73.99');
   run("INSERT OR REPLACE INTO zip_cache VALUES ('10011', 40.7402, -73.9996, 'New York', 'NY')");
@@ -244,6 +256,37 @@ test('a second restaurant can only ever touch its own data', async () => {
   const me = await asB('GET', '/api/admin/restaurant');
   assert.ok(!('password_hash' in me.data.user) && !('platformAdmin' in me.data.user));
   await call('DELETE', `/api/admin/menu/${aDish.id}`); await call('POST', `/api/admin/reservations/${aRes.id}/cancel`, { notify: false });
+});
+
+test('forgot password: emailed one-time link sets a new password', async () => {
+  const quiet = await call('POST', '/api/auth/forgot', { email: 'no-such-owner@test.local' }, false);
+  assert.strictEqual(quiet.status, 200); // same answer whether or not the email has a login
+  assert.strictEqual((await call('POST', '/api/auth/forgot', { email: 'owner@test.local' }, false)).status, 200);
+  const mail = one("SELECT html FROM email_log WHERE kind = 'password_reset' AND to_addr = 'owner@test.local' ORDER BY id DESC");
+  const t = decodeURIComponent(mail.html.match(/reset-password\?t=([\w%-]+)/)[1]);
+  assert.strictEqual((await call('POST', '/api/auth/reset', { token: t, password: 'short' }, false)).status, 400);
+  const ok = await fetch(`${base}/api/auth/reset`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t, password: 'newpassword456' }) });
+  assert.strictEqual(ok.status, 200);
+  assert.strictEqual((await call('POST', '/api/auth/reset', { token: t, password: 'another12345' }, false)).status, 400, 'links work once');
+  assert.strictEqual((await call('POST', '/api/auth/login', { email: 'owner@test.local', password: 'password123' }, false)).status, 401);
+  assert.strictEqual((await call('POST', '/api/auth/login', { email: 'owner@test.local', password: 'newpassword456' })).status, 200);
+  // Old sessions were logged out; log back in with the new password above, then put the old one back for later tests.
+  run('UPDATE users SET password_hash = ? WHERE email = ?', require('../src/auth').hashPassword('password123'), 'owner@test.local');
+});
+
+test('daily backup is emailed once a day and errors email support', async () => {
+  const ops = require('../src/ops');
+  const data = ops.buildBackup();
+  assert.ok(data.tables.restaurants.length >= 1 && data.tables.reservations.length >= 1);
+  assert.ok(!('sessions' in data.tables) && !('auth_tokens' in data.tables));
+  assert.ok(!data.tables.users.some((u) => 'password' in u));
+  const at = new Date('2026-12-01T12:00:00Z'); // 7 AM in New York
+  assert.ok(await ops.dailyBackup(at));
+  assert.strictEqual(await ops.dailyBackup(new Date(at.getTime() + 2 * 3600000)), false, 'only once a day');
+  assert.ok(one("SELECT id FROM email_log WHERE kind = 'backup' AND to_addr = 'rbookedsupport@gmail.com'"));
+  assert.strictEqual(await ops.alertError('test', new Error('Boom test')), true);
+  assert.strictEqual(await ops.alertError('test', new Error('Boom test')), false, 'same problem only once an hour');
+  assert.ok(one("SELECT id FROM email_log WHERE kind = 'alert' AND subject LIKE '%Boom test%'"));
 });
 
 test('login: too many wrong passwords makes you wait', async () => {

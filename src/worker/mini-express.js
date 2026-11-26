@@ -31,7 +31,7 @@ function Router() {
 function dispatch(stack, req, res, done) {
   let i = 0;
   const next = (err) => {
-    if (err) { res.status(500).json({ error: 'Something went wrong.' }); console.error(err); return; }
+    if (err) { res.status(500).json({ error: 'Something went wrong.' }); console.error(err); try { require('../ops').alertError('website', err, req); } catch { /* */ } return; }
     if (res.finished) return;
     const layer = stack[i++];
     if (!layer) { done(); return; }

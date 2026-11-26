@@ -47,7 +47,7 @@ app.use(['/api/public', '/api/auth'], (req, res, next) => {
   const arr = (hits.get(key) || []).filter((t) => now - t < 60000);
   arr.push(now);
   hits.set(key, arr);
-  if (arr.length > 30) return res.status(429).json({ error: 'Too many requests, please slow down.' });
+  if (arr.length > (Number(process.env.RATE_LIMIT_PER_MIN) || 30)) return res.status(429).json({ error: 'Too many requests, please slow down.' });
   next();
 });
 

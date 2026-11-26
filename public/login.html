@@ -21,13 +21,15 @@
       <div id="l-err"></div>
       <button class="btn block lg" type="submit">Log in</button>
     </form>
+    <p class="small" style="margin:14px 0 0;text-align:center"><a href="/forgot">Forgot your password?</a></p>
     <p class="muted small" style="margin-top:16px">New to Rbooked? <a href="/for-restaurants#signup">Start a free 14-day trial</a>.</p>
     <p class="muted small hidden" id="demo-hint">Demo account: demo@rbooked.test / demo1234</p>
   </div>
 </main>
-<footer class="footer"><div class="container row"><span>© Rbooked</span><span class="spacer"></span><a href="/for-restaurants">List your restaurant</a><a href="/login">Restaurant login</a></div></footer>
+<footer class="footer"><div class="container row"><span>© Rbooked</span><span class="spacer"></span><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/for-restaurants">List your restaurant</a><a href="/login">Restaurant login</a></div></footer>
 <script src="/js/common.js"></script>
 <script>
+if (TB.qs('verify') === 'expired') document.getElementById('l-err').innerHTML = '<div class="alert" style="margin-bottom:12px">That confirm link has expired. Log in and tap “Send the link again”.</div>';
 TB.api('/api/auth/me').then((m) => { if (m.user) location.href = '/admin/'; if (m.demo) document.getElementById('demo-hint').classList.remove('hidden'); }).catch(() => {});
 document.getElementById('login').onsubmit = async (e) => {
   e.preventDefault();

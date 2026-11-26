@@ -71,7 +71,7 @@ router.get('/tag/:tag', (req, res) => {
 });
 
 router.get('/sitemap.xml', (req, res) => {
-  const pages = [{ loc: '/', freq: 'daily', pri: '1.0' }, { loc: '/for-restaurants', freq: 'weekly', pri: '0.6' }];
+  const pages = [{ loc: '/', freq: 'daily', pri: '1.0' }, { loc: '/for-restaurants', freq: 'weekly', pri: '0.6' }, { loc: '/terms', freq: 'yearly', pri: '0.2' }, { loc: '/privacy', freq: 'yearly', pri: '0.2' }];
   for (const r of all('SELECT * FROM restaurants ORDER BY id')) {
     if (isBookable(r)) pages.push({ loc: `/r/${encodeURIComponent(r.slug)}`, freq: 'daily', pri: '0.8', mod: String(r.created_at || '').slice(0, 10) });
   }

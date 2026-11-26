@@ -69,7 +69,9 @@ async function runAll() {
     run(`DELETE FROM sessions WHERE expires_at < ?`, new Date().toISOString());
   } catch (e) {
     console.error('[jobs]', e);
+    await require('./ops').alertError('scheduled jobs (reminders, no-shows)', e);
   }
+  try { await require('./ops').dailyBackup(); } catch (e) { console.error('[backup]', e); await require('./ops').alertError('daily backup', e); }
 }
 
 function start() {

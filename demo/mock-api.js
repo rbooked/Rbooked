@@ -462,6 +462,8 @@ window.RBOOKED_DEMO = true;
       html: emailHtml(null, 'Your 14-day free trial has started', `<p>Hi ${esc(u.name)}, thanks for joining Rbooked.</p><p>Your free trial runs until <b>${new Date(r.trial_ends_at).toDateString()}</b>. After that it's just <b>$49/month</b>, cancel anytime.</p>`) });
     return { ok: true, slug: r.slug };
   });
+  on('POST', '/api/auth/forgot', () => ({ ok: true }));
+  on('POST', '/api/auth/reset', () => { throw new E('Password reset links only work on the live site.'); });
   on('POST', '/api/auth/login', (q, b) => {
     const u = db.users.find((x) => x.email === String(b.email || '').trim().toLowerCase() && x.password === b.password);
     if (!u) throw new E('Wrong email or password.', 401);

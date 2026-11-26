@@ -8,6 +8,7 @@ os.makedirs(os.path.join(OUT, 'css')); os.makedirs(os.path.join(OUT, 'js')); os.
 files = {
   'index.html': 'index.html', 'restaurant.html': 'restaurant.html', 'reservation.html': 'reservation.html',
   'for-restaurants.html': 'for-restaurants.html', 'login.html': 'login.html', 'embed.html': 'embed.html',
+  'forgot.html': 'forgot.html', 'reset-password.html': 'reset-password.html', 'terms.html': 'terms.html', 'privacy.html': 'privacy.html',
   'admin/index.html': 'admin.html', 'admin/admin.js': 'admin/admin.js', 'admin/admin.css': 'admin/admin.css',
   'css/app.css': 'css/app.css', 'js/common.js': 'js/common.js', 'js/booking.js': 'js/booking.js', 'js/matcher.js': 'js/matcher.js',
   'js/samples.js': 'js/samples.js', 'js/places.js': 'js/places.js', 'js/menu-import.js': 'js/menu-import.js', 'js/pricing.js': 'js/pricing.js',
@@ -17,7 +18,7 @@ REPL = [
   ('href="/css/', 'href="css/'), ('src="/js/', 'src="js/'),
   ('href="/admin/admin.css"', 'href="admin/admin.css"'), ('src="/admin/admin.js"', 'src="admin/admin.js"'),
   ('href="/"', 'href="index.html"'), ('/for-restaurants#signup', 'for-restaurants.html#signup'),
-  ('href="/for-restaurants"', 'href="for-restaurants.html"'), ('href="/login"', 'href="login.html"'),
+  ('href="/for-restaurants"', 'href="for-restaurants.html"'), ('href="/terms"', 'href="terms.html"'), ('href="/privacy"', 'href="privacy.html"'), ('href="/forgot"', 'href="forgot.html"'), ('href="/login"', 'href="login.html"'),
   ("'/login'", "'login.html'"), ("'/admin/#welcome'", "'admin.html#welcome'"), ("'/admin/'", "'admin.html'"),
   ('href="/admin/"', 'href="admin.html"'), ('/restaurant?slug=', 'restaurant.html?slug='),
   ('${TB.base || location.origin}/reservation.html', 'reservation.html'),

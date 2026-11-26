@@ -47,7 +47,7 @@ const wrap = (fn) => async (req, res) => {
     await fn(req, res);
   } catch (e) {
     const status = e.status || 500;
-    if (status === 500) console.error(e);
+    if (status === 500) { console.error(e); require('../ops').alertError('website', e, req); }
     res.status(status).json({ error: status === 500 ? 'Something went wrong.' : e.message });
   }
 };

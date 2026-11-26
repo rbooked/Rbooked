@@ -33,6 +33,16 @@ router.post('/restaurants/:id/reset', wrap(async (req, res) => {
   res.json({ ok: true, reset: r.name, logins_kept: one('SELECT COUNT(*) AS n FROM users WHERE restaurant_id = ?', r.id).n });
 }));
 
+// Backups: download one now, or email one to support now.
+router.get('/backup', wrap(async (req, res) => {
+  const data = require('../ops').buildBackup();
+  res.setHeader('Content-Disposition', `attachment; filename="rbooked-backup-${new Date().toISOString().slice(0, 10)}.json"`);
+  res.type('application/json').send(JSON.stringify(data));
+}));
+router.post('/backup/email', wrap(async (req, res) => {
+  res.json({ status: await require('../ops').dailyBackup(new Date(), { force: true }) });
+}));
+
 // Show a restaurant first on the home page (or stop).
 router.put('/restaurants/:id/featured', wrap(async (req, res) => {
   const r = one('SELECT id, name FROM restaurants WHERE id = ?', Number(req.params.id));

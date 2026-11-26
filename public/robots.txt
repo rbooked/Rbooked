@@ -4,6 +4,8 @@ Disallow: /admin/
 Disallow: /api/
 Disallow: /staff
 Disallow: /login
+Disallow: /forgot
+Disallow: /reset-password
 Disallow: /reservation
 Disallow: /embed
 Disallow: /restaurant

@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS restaurants (
   hours TEXT DEFAULT '',                 -- JSON, 7 days from Sunday: [{closed, open, close}]
   featured INTEGER DEFAULT 0,            -- set by the platform, shown in "Featured" sections
   geo_addr TEXT DEFAULT '',              -- the address the map pin was looked up from
+  verified INTEGER DEFAULT 1,            -- 0 = owner hasn't confirmed their email yet: not shown or bookable
   -- billing
   trial_ends_at TEXT NOT NULL,
   subscription_status TEXT NOT NULL DEFAULT 'trialing', -- trialing | active | past_due | canceled | expired
@@ -54,6 +55,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'owner',
+  email_verified INTEGER DEFAULT 1,        -- new sign-ups start at 0 until they click the link in their email
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -230,6 +232,21 @@ CREATE TABLE IF NOT EXISTS email_log (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- One-time links: password reset and email confirmation. Only a hash of the link's secret is kept.
+CREATE TABLE IF NOT EXISTS auth_tokens (
+  token_hash TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,          -- reset | verify
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Small notes the system keeps for itself (last backup day, last alert times).
+CREATE TABLE IF NOT EXISTS ops_kv (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);
+
 CREATE TABLE IF NOT EXISTS zip_cache (
   zip TEXT PRIMARY KEY,
   lat REAL NOT NULL,
@@ -259,6 +276,8 @@ function migrate(d) {
   if (!cols.has('turn_times')) d.exec("ALTER TABLE restaurants ADD COLUMN turn_times TEXT DEFAULT '2:90,4:120,6:180,99:210'");
   for (const [c, def] of [['website_url', "''"], ['logo_url', "''"], ['hours', "''"]]) if (!cols.has(c)) d.exec(`ALTER TABLE restaurants ADD COLUMN ${c} TEXT DEFAULT ${def}`);
   if (!cols.has('featured')) d.exec('ALTER TABLE restaurants ADD COLUMN featured INTEGER DEFAULT 0');
+  if (!cols.has('verified')) d.exec('ALTER TABLE restaurants ADD COLUMN verified INTEGER DEFAULT 1');
+  try { const ucols = new Set(d.all('PRAGMA table_info(users)').map((c) => c.name)); if (ucols.size && !ucols.has('email_verified')) d.exec('ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 1'); } catch { /* */ }
   if (!cols.has('geo_addr')) d.exec("ALTER TABLE restaurants ADD COLUMN geo_addr TEXT DEFAULT ''");
   try {
     const mcols = new Set(d.all('PRAGMA table_info(menu_items)').map((c) => c.name));

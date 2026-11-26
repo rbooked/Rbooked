@@ -21,6 +21,7 @@ const billingOff = () => config.isProduction && !stripe();
 /** A restaurant shows up in search and accepts bookings while trialing or paid (or while billing is off). */
 function isBookable(r) {
   if (!r) return false;
+  if (r.verified === 0) return false; // owner hasn't confirmed their email yet
   if (billingOff()) return true;
   if (r.subscription_status === 'active' || r.subscription_status === 'past_due') return true;
   if (r.subscription_status === 'trialing') return new Date(r.trial_ends_at) > new Date();

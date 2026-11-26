@@ -10,6 +10,29 @@ const { BookingError } = require('../reservations');
 const { wrap } = require('./public');
 
 const router = express.Router();
+const crypto = require('crypto');
+
+// ---------- One-time email links (confirm email, reset password) ----------
+const sha = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
+function newLink(userId, kind, hours) {
+  const token = crypto.randomBytes(24).toString('base64url');
+  run('DELETE FROM auth_tokens WHERE user_id = ? AND kind = ?', userId, kind); // only the newest link works
+  run('INSERT INTO auth_tokens (token_hash, user_id, kind, expires_at) VALUES (?,?,?,?)', sha(token), userId, kind, new Date(Date.now() + hours * 3600000).toISOString());
+  return token;
+}
+function useLink(token, kind) {
+  const row = token && one('SELECT * FROM auth_tokens WHERE token_hash = ? AND kind = ?', sha(token), kind);
+  if (!row || row.expires_at < new Date().toISOString()) return null;
+  return row;
+}
+const recentLink = (userId, kind) => one(`SELECT created_at FROM auth_tokens WHERE user_id = ? AND kind = ? AND created_at > datetime('now', '-2 minutes')`, userId, kind);
+const verifyUrl = (t) => `${config.baseUrl}/api/auth/verify?t=${encodeURIComponent(t)}`;
+function markVerified(userId) {
+  const u = one('SELECT restaurant_id FROM users WHERE id = ?', userId);
+  run('UPDATE users SET email_verified = 1 WHERE id = ?', userId);
+  if (u) run('UPDATE restaurants SET verified = 1 WHERE id = ?', u.restaurant_id);
+  run("DELETE FROM auth_tokens WHERE user_id = ? AND kind = 'verify'", userId);
+}
 
 function slugify(name) {
   const base = String(name).toLowerCase().normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/[\s_-]+/g, '-').slice(0, 50) || 'restaurant';
@@ -56,13 +79,14 @@ router.post('/signup', wrap(async (req, res) => {
     String(b.address).trim(), String(b.city).trim(), String(b.state).trim().toUpperCase().slice(0, 2), String(b.zip).trim(),
     geo ? geo.lat : null, geo ? geo.lng : null, tz, String(b.description || ''), trialEnds);
     const rid = r.lastInsertRowid;
-    const u = run('INSERT INTO users (restaurant_id, name, email, password_hash, role) VALUES (?,?,?,?,?)',
+    run('UPDATE restaurants SET verified = 0 WHERE id = ?', rid); // goes live once the owner confirms their email
+    const u = run('INSERT INTO users (restaurant_id, name, email, password_hash, role, email_verified) VALUES (?,?,?,?,?,0)',
       rid, String(b.owner_name).trim(), em, auth.hashPassword(String(b.password)), 'owner');
     starterSetup(rid);
     return { restaurant: one('SELECT * FROM restaurants WHERE id = ?', rid), user: one('SELECT * FROM users WHERE id = ?', u.lastInsertRowid) };
   });
 
-  email.sendWelcome(restaurant, user).catch(() => {});
+  email.sendWelcome(restaurant, user, verifyUrl(newLink(user.id, 'verify', 24 * 7))).catch(() => {});
   auth.createSession(res, user.id);
   res.status(201).json({ ok: true, slug: restaurant.slug });
 }));
@@ -84,6 +108,46 @@ router.post('/login', wrap(async (req, res) => {
   }
   loginFails.delete(emKey);
   auth.createSession(res, user.id);
+  res.json({ ok: true });
+}));
+
+// Confirm email: the link in the welcome email lands here, then opens the dashboard.
+router.get('/verify', wrap(async (req, res) => {
+  const row = useLink(String(req.query.t || ''), 'verify');
+  if (!row) return res.redirect('/login?verify=expired');
+  markVerified(row.user_id);
+  res.redirect('/admin/?verified=1');
+}));
+router.post('/resend-verify', wrap(async (req, res) => {
+  const u = auth.loadUser(req);
+  if (!u) throw new BookingError('Please log in.', 401);
+  const user = one('SELECT * FROM users WHERE id = ?', u.id);
+  if (user.email_verified) return res.json({ ok: true, already: true });
+  if (recentLink(user.id, 'verify')) throw new BookingError('We just sent one. Please check your inbox and spam folder, or try again in 2 minutes.', 429);
+  await email.sendVerify(user, verifyUrl(newLink(user.id, 'verify', 24 * 7)));
+  res.json({ ok: true, to: user.email });
+}));
+
+// Forgot password: always answers the same way, so nobody can test which emails have accounts.
+router.post('/forgot', wrap(async (req, res) => {
+  const em = String(req.body.email || '').trim().toLowerCase();
+  const user = em && one('SELECT * FROM users WHERE email = ?', em);
+  if (user && !recentLink(user.id, 'reset')) {
+    const t = newLink(user.id, 'reset', 1);
+    await email.sendPasswordReset(user, `${config.baseUrl}/reset-password?t=${encodeURIComponent(t)}`);
+  }
+  res.json({ ok: true });
+}));
+router.post('/reset', wrap(async (req, res) => {
+  const row = useLink(String(req.body.token || ''), 'reset');
+  if (!row) throw new BookingError('This reset link has expired or was already used. Ask for a new one.', 400);
+  const pw = String(req.body.password || '');
+  if (pw.length < 8) throw new BookingError('Password must be at least 8 characters.');
+  run('UPDATE users SET password_hash = ? WHERE id = ?', auth.hashPassword(pw), row.user_id);
+  run('DELETE FROM sessions WHERE user_id = ?', row.user_id); // log out everywhere else
+  run("DELETE FROM auth_tokens WHERE user_id = ? AND kind = 'reset'", row.user_id);
+  markVerified(row.user_id); // they got the email, so it's theirs
+  auth.createSession(res, row.user_id);
   res.json({ ok: true });
 }));
 

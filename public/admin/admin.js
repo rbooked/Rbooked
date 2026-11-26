@@ -43,6 +43,18 @@
   function renderBanner() {
     const b = S.me.billing;
     const el = document.getElementById('banner');
+    if (new URLSearchParams(location.search).get('verified') === '1') {
+      history.replaceState(null, '', location.pathname + location.hash);
+      setTimeout(() => TB.toast('Email confirmed. Your restaurant is live!'), 300);
+    }
+    if (S.me.restaurant.verified === 0) {
+      el.innerHTML = `<div class="alert warn-box"><b>Confirm your email to go live.</b> We sent a link to <b>${esc(S.me.user.email)}</b>. Until then guests can't find or book your restaurant. <button class="btn secondary sm" id="re-verify" type="button">Send the link again</button></div>`;
+      document.getElementById('re-verify').onclick = async (e) => {
+        try { const r = await api('/api/auth/resend-verify', { body: {} }); TB.toast(r.already ? 'Already confirmed' : `Sent to ${r.to}. Check your spam folder too.`); if (r.already) location.reload(); } catch (err) { fail(err); }
+        e.target.disabled = true;
+      };
+      return;
+    }
     if (b.billingOff) { el.innerHTML = ''; return; }
     if (b.status === 'expired' || b.status === 'canceled') {
       el.innerHTML = `<div class="alert error"><b>Your restaurant is hidden from search and the widget is paused.</b> ${b.status === 'expired' ? 'Your free trial has ended.' : 'Your subscription was cancelled.'} <a href="#billing">Subscribe for $49/month</a> to start taking reservations again.</div>`;

@@ -37,4 +37,5 @@ module.exports = {
   plan: { priceCents: 4900, currency: 'usd', trialDays: 14, name: 'Rbooked for Restaurants' },
   jobIntervalSeconds: Number(e.JOB_INTERVAL_SECONDS || 300),
   isProduction: e.NODE_ENV === 'production',
+  supportEmail: (e.SUPPORT_EMAIL || 'rbookedsupport@gmail.com').trim(),
 };

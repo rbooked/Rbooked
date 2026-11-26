@@ -409,3 +409,4 @@ tr.is-late > td:first-child { box-shadow: inset 4px 0 0 #f59e0b; }
   .rf-bar #rf-combine { grid-column: 2; grid-row: 1; }
 }
 .rf-item.is-late { border-left-color: #f59e0b; }
+.alert.warn-box { background: #fff7ed; border: 1px solid #fdba74; color: #7c2d12; } .alert.warn-box .btn { margin-left: 8px; }

@@ -192,13 +192,15 @@ async function sendReservationEmail(kind, restaurant, res) {
   return send({ to, subject: t.subject, html: t.html, attachments: t.attachments, kind, reservationId: res.id });
 }
 
-async function sendWelcome(restaurant, user) {
+async function sendWelcome(restaurant, user, verifyUrl) {
   return send({
     to: user.email,
     kind: 'welcome',
-    subject: `Welcome to Rbooked, ${restaurant.name}!`,
+    subject: verifyUrl ? `Confirm your email to put ${restaurant.name} live on Rbooked` : `Welcome to Rbooked, ${restaurant.name}!`,
     html: layout(null, 'Your 14-day free trial has started', `
       <p>Hi ${esc(user.name)}, thanks for joining Rbooked.</p>
+      ${verifyUrl ? `<p><b>One quick step:</b> confirm this is your email so guests can find and book ${esc(restaurant.name)}.</p>
+      <p>${button(verifyUrl, 'Confirm my email')}</p><p style="font-size:13px;color:#7a6f63">The link works for 7 days.</p>` : ''}
       <p>Your free trial runs until <b>${esc(new Date(restaurant.trial_ends_at).toDateString())}</b>.
       After that it's just <b>$49/month</b>, cancel anytime.</p>
       <p>Next steps: add your tables, set your services, and paste the booking widget on your website.</p>
@@ -217,4 +219,23 @@ async function sendTrialEnding(restaurant, to, daysLeft) {
   });
 }
 
-module.exports = { flush, sendReservationEmail, sendWelcome, sendTrialEnding, send, esc };
+async function sendVerify(user, verifyUrl) {
+  return send({
+    to: user.email, kind: 'verify',
+    subject: 'Confirm your email for Rbooked',
+    html: layout(null, 'Confirm your email', `<p>Hi ${esc(user.name)}, tap the button to confirm this is your email. Your restaurant goes live on Rbooked right after.</p>
+      <p>${button(verifyUrl, 'Confirm my email')}</p><p style="font-size:13px;color:#7a6f63">The link works for 7 days. If you didn't sign up for Rbooked, you can ignore this email.</p>`),
+  });
+}
+
+async function sendPasswordReset(user, resetUrl) {
+  return send({
+    to: user.email, kind: 'password_reset',
+    subject: 'Reset your Rbooked password',
+    html: layout(null, 'Reset your password', `<p>Hi ${esc(user.name)}, someone (hopefully you) asked to reset the password for your Rbooked login.</p>
+      <p>${button(resetUrl, 'Choose a new password')}</p>
+      <p style="font-size:13px;color:#7a6f63">The link works for 1 hour and only once. If you didn't ask for this, ignore this email and your password stays the same.</p>`),
+  });
+}
+
+module.exports = { flush, sendReservationEmail, sendWelcome, sendTrialEnding, sendVerify, sendPasswordReset, send, esc, layout };
