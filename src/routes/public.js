@@ -1,7 +1,7 @@
 'use strict';
 const express = require('express');
 const { one, all, run } = require('../db');
-const { getAvailability, findSlot, onlinePaused } = require('../availability');
+const { getAvailability, findSlot, onlinePaused, shiftsForDate } = require('../availability');
 const { createReservation, cancelReservation, BookingError } = require('../reservations');
 const { isBookable, isListed, isWalkIn } = require('../billing');
 const { lookupZip, milesBetween } = require('../geo');
@@ -263,7 +263,7 @@ router.get('/restaurants/:slug', wrap(async (req, res) => {
   const rl = counts('restaurant', [r.id])[r.id] || { likes: 0, liked: false };
   const today = nowInZone(r.timezone).date;
   const special = all("SELECT date, reason, open_time, close_time FROM closures WHERE restaurant_id = ? AND date >= ? ORDER BY date LIMIT 8", r.id, today);
-  res.json({ restaurant: { ...publicRestaurant(r), likes: rl.likes, liked: rl.liked }, shifts, menu, gallery, special, today, reviews: require('../reviews').forRestaurant(r.id), exposure, paused: !exposure && onlinePaused(r) });
+  res.json({ restaurant: { ...publicRestaurant(r), likes: rl.likes, liked: rl.liked }, shifts, menu, gallery, special, today, reviews: require('../reviews').forRestaurant(r.id), exposure, paused: !exposure && onlinePaused(r), waitlist: waitlistOpen(r) });
 }));
 
 // ---------- Likes ("hearts") from diners. No account needed: an anonymous id in a cookie. ----------
@@ -332,6 +332,53 @@ router.post('/restaurants/:slug/reservations', wrap(async (req, res) => {
   const source = req.body.source === 'widget' ? 'widget' : 'online';
   const created = createReservation(r, req.body, { source });
   res.status(201).json({ code: created.code, token: created.manage_token, date: created.date, time: created.time, party_size: created.party_size });
+}));
+
+// ---------- Online waitlist: diners join today's line from the restaurant page ----------
+function waitlistOpen(r) {
+  if (!r || r.listing === 'exposure') return false; // free listings have nobody at the host stand
+  if (!isBookable({ ...r, walk_in_only: 0 })) return false; // claimed, verified, trial or subscription OK
+  const today = nowInZone(r.timezone).date;
+  if (one("SELECT 1 FROM closures WHERE restaurant_id = ? AND date = ? AND (open_time IS NULL OR open_time = '')", r.id, today)) return false;
+  return shiftsForDate(r.id, today).length > 0 || !!r.hours;
+}
+const waitView = (x) => {
+  const ahead = one(`SELECT COUNT(*) AS n FROM reservations WHERE restaurant_id = ? AND date = ? AND source = 'waitlist' AND status = 'confirmed' AND id < ?`, x.restaurant_id, x.date, x.id).n;
+  return { token: x.manage_token, name: x.guest_name, party_size: x.party_size, status: x.status, position: ahead + 1, date: x.date };
+};
+router.post('/restaurants/:slug/waitlist', wrap(async (req, res) => {
+  const r = one('SELECT * FROM restaurants WHERE slug = ?', String(req.params.slug));
+  if (!waitlistOpen(r)) throw new BookingError("This restaurant isn't taking waitlist sign-ups right now.", 403);
+  if (req.body.website) throw new BookingError('Invalid submission.'); // honeypot
+  const party = Number(req.body.party_size);
+  if (!(party >= 1 && party <= 20)) throw new BookingError('Please pick a party size.');
+  const digits = String(req.body.phone || '').replace(/\D/g, '');
+  if (digits.length < 7) throw new BookingError('Please enter your phone number so they can reach you.');
+  const now = nowInZone(r.timezone);
+  const mine = all(`SELECT * FROM reservations WHERE restaurant_id = ? AND date = ? AND source = 'waitlist' AND status = 'confirmed'`, r.id, now.date)
+    .find((x) => x.guest_phone.replace(/\D/g, '') === digits);
+  if (mine) return res.json(waitView(mine)); // already in line
+  if (one(`SELECT COUNT(*) AS n FROM reservations WHERE restaurant_id = ? AND date = ? AND source = 'waitlist' AND status = 'confirmed'`, r.id, now.date).n >= 60) {
+    throw new BookingError('The waitlist is full right now. Please call the restaurant.', 409);
+  }
+  const em = String(req.body.email || '').trim();
+  const created = createReservation(r, {
+    name: req.body.name, phone: req.body.phone, email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em) ? em : 'waitlist@guest.local',
+    party_size: party, date: now.date, time: `${String(Math.floor(now.minutes / 60)).padStart(2, '0')}:${String(now.minutes % 60).padStart(2, '0')}`,
+    internal_notes: 'Joined the waitlist online', send_email: false,
+  }, { source: 'waitlist', admin: true });
+  res.status(201).json(waitView(created));
+}));
+router.get('/waitlist/:token', wrap(async (req, res) => {
+  const x = one(`SELECT * FROM reservations WHERE manage_token = ? AND source = 'waitlist'`, String(req.params.token || ''));
+  if (!x) throw new BookingError('Not found.', 404);
+  res.json(waitView(x));
+}));
+router.post('/waitlist/:token/leave', wrap(async (req, res) => {
+  const x = one(`SELECT * FROM reservations WHERE manage_token = ? AND source = 'waitlist'`, String(req.params.token || ''));
+  if (!x) throw new BookingError('Not found.', 404);
+  if (x.status === 'confirmed') run(`UPDATE reservations SET status='cancelled', cancelled_at=datetime('now'), cancelled_by='guest', updated_at=datetime('now') WHERE id = ?`, x.id);
+  res.json({ ok: true });
 }));
 
 // ---------- Guest manage-reservation endpoints (by secret token) ----------

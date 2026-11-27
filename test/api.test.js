@@ -882,3 +882,17 @@ test('waitlist: parties wait without a table, never auto no-show, and seating re
   assert.strictEqual(s.status, 200);
   assert.ok(one('SELECT seated_at FROM reservations WHERE id = ?', w.data.id).seated_at);
 });
+
+test('diners can join the waitlist online; it shows up for staff and they can leave', async () => {
+  const j = await call('POST', '/api/public/restaurants/test-bistro/waitlist', { name: 'Online Wait', phone: '555 777 1212', party_size: 2 }, false);
+  assert.strictEqual(j.status, 201, JSON.stringify(j.data));
+  assert.ok(j.data.position >= 1);
+  const again = await call('POST', '/api/public/restaurants/test-bistro/waitlist', { name: 'Online Wait', phone: '5557771212', party_size: 2 }, false);
+  assert.strictEqual(again.data.token, j.data.token); // no duplicates
+  const row = one('SELECT * FROM reservations WHERE manage_token = ?', j.data.token);
+  assert.strictEqual(row.source, 'waitlist'); assert.strictEqual(row.status, 'confirmed'); assert.strictEqual(row.table_id, null);
+  assert.strictEqual((await call('POST', '/api/public/restaurants/test-bistro/waitlist', { name: 'X', phone: '12', party_size: 2 }, false)).status, 400);
+  assert.strictEqual((await call('GET', '/api/public/restaurants/test-bistro', null, false)).data.waitlist, true);
+  await call('POST', `/api/public/waitlist/${j.data.token}/leave`, {}, false);
+  assert.strictEqual(one('SELECT status FROM reservations WHERE manage_token = ?', j.data.token).status, 'cancelled');
+});

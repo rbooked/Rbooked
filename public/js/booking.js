@@ -17,6 +17,44 @@
     state.menu = info.menu || [];
     state.gallery = info.gallery || [];
     state.reviews = info.reviews || null;
+
+    // ---- Online waitlist (today only): join the line, see your place, leave ----
+    const WKEY = `rb_wait_${r.slug}`;
+    const getTok = () => { try { return localStorage.getItem(WKEY); } catch { return null; } };
+    const setTok = (t) => { try { if (t) localStorage.setItem(WKEY, t); else localStorage.removeItem(WKEY); } catch { /* private mode */ } };
+    const waitBtn = (label) => (info.waitlist ? `<button type="button" class="btn block wl-join" style="margin-top:10px">🕒 ${label}</button>` : '');
+    function waitStatus(box, w) {
+      const done = w.status !== 'confirmed';
+      if (done) setTok(null);
+      box.innerHTML = `<div class="wl-card"><div class="wl-big">${done ? (w.status === 'seated' ? '🎉' : '👋') : `#${w.position}`}</div>
+        <h3 class="serif" style="margin:4px 0">${done ? (w.status === 'seated' ? "You're seated. Enjoy!" : "You're off the waitlist") : "You're on the waitlist!"}</h3>
+        ${done ? '' : `<p class="muted" style="margin:0 0 10px">${w.position === 1 ? "You're next in line." : `${w.position - 1} ${w.position === 2 ? 'party' : 'parties'} ahead of you.`} Party of ${w.party_size}. Please stay close. ${esc(r.name)} will call you when your table is ready.</p>
+        <button type="button" class="btn secondary block" id="wl-refresh">Refresh my spot</button><button type="button" class="btn ghost block" id="wl-leave">Leave the waitlist</button>`}</div>`;
+      const rf = box.querySelector('#wl-refresh'); if (rf) rf.onclick = () => showWait(box);
+      const lv = box.querySelector('#wl-leave');
+      if (lv) lv.onclick = async () => { lv.disabled = true; try { await api(`/api/public/waitlist/${encodeURIComponent(w.token)}/leave`, { method: 'POST', body: {} }); } catch { /* */ } setTok(null); waitStatus(box, { ...w, status: 'cancelled' }); };
+    }
+    async function showWait(box) {
+      const t = getTok(); if (!t) return false;
+      try { const w = await api(`/api/public/waitlist/${encodeURIComponent(t)}`); if (w.date !== info.today) { setTok(null); return false; } waitStatus(box, w); return true; } catch { setTok(null); return false; }
+    }
+    function waitForm(box) {
+      box.innerHTML = `<form class="wl-form"><h3 class="serif" style="margin:0 0 4px">Join today's waitlist</h3>
+        <p class="muted small" style="margin:0 0 10px">Get in line for a table at ${esc(r.name)}. They'll call you when it's ready.</p>
+        <label class="field"><span>Party size</span><select name="party_size">${TB.partyOptions(state.party, 20)}</select></label>
+        <label class="field"><span>Name</span><input name="name" autocomplete="name" required></label>
+        <label class="field"><span>Mobile number</span><input name="phone" type="tel" autocomplete="tel" inputmode="tel" required></label>
+        <input name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
+        <div class="wl-msg"></div><button class="btn block" type="submit">Join the waitlist</button></form>`;
+      box.querySelector('form').onsubmit = async (e) => {
+        e.preventDefault(); const d = Object.fromEntries(new FormData(e.target)); const b = e.target.querySelector('button[type=submit]');
+        b.disabled = true; b.textContent = 'Joining…';
+        try { const w = await api(`/api/public/restaurants/${encodeURIComponent(r.slug)}/waitlist`, { method: 'POST', body: { ...d, party_size: Number(d.party_size) } }); setTok(w.token); waitStatus(box, w); }
+        catch (err) { box.querySelector('.wl-msg').innerHTML = `<div class="alert error">${esc(err.message)}</div>`; b.disabled = false; b.textContent = 'Join the waitlist'; }
+      };
+    }
+    const bindWait = (el) => { const b = el.querySelector('.wl-join'); if (b) b.onclick = () => waitForm(b.closest('.wl-slot') || root); };
+    if (info.waitlist && getTok() && await showWait(root)) return state; // already in line today
     state.special = info.special || [];
     if (!state.date || state.date < info.today) state.date = info.today;
     if (r.accent_color) root.style.setProperty('--brand', r.accent_color);
@@ -29,15 +67,18 @@
       root.classList.add('walkin-card');
       root.innerHTML = `<div class="walkin-big" aria-hidden="true">🚶</div><h2 class="serif">Walk-ins welcome</h2>
         <p class="muted">${esc(r.name)} doesn't take online reservations. Just show up, or call ahead to check the wait.</p>
-        <div style="display:grid;gap:8px;margin-top:12px">${tel}<a class="btn block" href="${dir}" target="_blank" rel="noopener">Get directions</a></div>
+        <div class="wl-slot">${waitBtn('Join the waitlist')}</div>
+        <div style="display:grid;gap:8px;margin-top:12px">${tel}<a class="btn ${info.waitlist ? 'secondary ' : ''}block" href="${dir}" target="_blank" rel="noopener">Get directions</a></div>
         <p class="small muted" style="margin:16px 0 0">Is this your restaurant? <a href="/for-restaurants?claim=${encodeURIComponent(r.slug)}#signup">Take reservations on Rbooked</a></p>`;
+      bindWait(root);
       return state;
     }
 
     if (info.paused) { // the restaurant paused online bookings for now
       const tel = r.phone ? `<a class="btn secondary block" href="tel:${esc(r.phone)}">📞 Call ${esc(r.name)}</a>` : '';
       root.innerHTML = `${opts.compact ? '' : '<h2 class="serif">Make a reservation</h2>'}<p><b>Looks like the restaurant is busy right now.</b></p>
-        <p class="muted">You can try walking in, or check back later when spots open up.</p>${tel}`;
+        <p class="muted">You can try walking in, or check back later when spots open up.</p><div class="wl-slot">${waitBtn('Join the waitlist')}</div>${tel}`;
+      bindWait(root);
       return state;
     }
 
@@ -70,12 +111,14 @@
         const byShift = {};
         av.slots.forEach((s) => { (byShift[s.shiftName] = byShift[s.shiftName] || []).push(s); });
         const anyOpen = av.slots.some((s) => s.available);
-        box.innerHTML = (anyOpen ? '' : '<div class="alert">Fully booked for this party size. Try another date or time.</div>')
+        const full = !anyOpen && state.date === info.today && info.waitlist;
+        box.innerHTML = (anyOpen ? '' : `<div class="alert">Fully booked for this party size. Try another date or time.${full ? '' : ''}</div>${full ? `<div class="wl-slot">${waitBtn("Join today's waitlist")}</div>` : ''}`)
           + Object.entries(byShift).map(([name, slots]) => `
           <div class="shift-label">${esc(name)}</div>
           <div class="slots">${slots.map((s) => s.available
             ? `<button class="slot" data-time="${s.time}">${TB.time(s.time)}</button>`
             : `<span class="slot off" aria-disabled="true">${TB.time(s.time)}</span>`).join('')}</div>`).join('');
+        bindWait(box);
         box.querySelectorAll('button.slot').forEach((b) => { b.onclick = () => { state.time = b.dataset.time; renderForm(); }; });
         if (state.time && opts.time) { // deep link from search results
           const btn = box.querySelector(`button.slot[data-time="${state.time}"]`);

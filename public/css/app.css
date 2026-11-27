@@ -537,3 +537,9 @@ table.data tr:hover td { background: #fcfaf7; }
 .m-clip { max-height: 640px; overflow: hidden; position: relative; }
 .m-clip::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 90px; background: linear-gradient(rgba(255,255,255,0), #fff); }
 .fr-form p { color: var(--muted); }
+/* Online waitlist */
+.wl-card { text-align: center; padding: 6px 2px; }
+.wl-big { font: 800 44px/1.1 var(--serif, Georgia); color: var(--brand); }
+.wl-card .btn { margin-top: 8px; }
+.wl-form .field { margin-bottom: 10px; }
+.wl-form input, .wl-form select { font-size: 16px; }
