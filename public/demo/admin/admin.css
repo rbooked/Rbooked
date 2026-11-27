@@ -642,3 +642,5 @@ body.on-res #banner .alert:not(.error) { display: none; } /* trial reminder live
 .rl-waitlist .hs-head { background: #7c2d12; }
 .rl.st-wait { border-left-color: #c2410c; }
 .rl.st-late { border-left-color: #dc2626; }
+@media (min-width: 700px) and (max-width: 900px) { .floor-wrap.rf-wrap { grid-template-columns: 340px minmax(0, 1fr); } }
+@media (max-width: 900px) { .hs-go { min-width: 56px; padding: 0 10px; } .hs-tbl { padding: 6px; } }
