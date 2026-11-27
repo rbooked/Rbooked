@@ -76,6 +76,7 @@ async function runAll() {
     const todo = all('SELECT * FROM restaurants WHERE address != \'\'').filter((r) => r.geo_addr !== addrLine(r)).slice(0, 5);
     for (const r of todo) await ensureGeo(r);
   } catch (e) { console.error('[geo]', e); }
+  try { await require('./reviews').askForReviews(); } catch (e) { console.error('[reviews]', e); }
   try { await require('./ops').dailyBackup(); } catch (e) { console.error('[backup]', e); await require('./ops').alertError('daily backup', e); }
 }
 

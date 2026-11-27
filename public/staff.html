@@ -37,6 +37,7 @@
     <div class="row" style="gap:8px"><button class="btn secondary" id="bk-dl" type="button">Download backup</button><button class="btn secondary" id="bk-mail" type="button">Email a backup now</button></div>
     <div class="st-out" id="bk-out" role="status"></div></div>
   <div class="card"><h2>Diners' recommendations</h2><p class="muted small">Restaurants diners want on Rbooked, most-asked first. Reach out and invite them.</p><div id="sugg" class="muted small">Enter the key and press Show restaurants.</div></div>
+  <div class="card"><h2>Guest reviews</h2><p class="muted small">Newest first. Hide a review that is abusive or fake; restaurants can't delete reviews themselves.</p><div id="revs" class="muted small">Enter the key and press Show restaurants.</div></div>
   <div class="card"><h2>Restaurants</h2><div id="list" class="muted small">Enter the key and press Show restaurants.</div></div>
 </main>
 <script src="/js/common.js"></script>
@@ -76,6 +77,15 @@
           ${x.notes ? `<div class="small">“${esc(x.notes)}”</div>` : ''}${x.emails ? `<div class="small muted">Tell when they join: ${esc(x.emails)}</div>` : ''}</div>
           <select data-sg="${x.id}" aria-label="Status">${['new', 'contacted', 'joined', 'skip'].map((o) => `<option ${o === x.status ? 'selected' : ''}>${o}</option>`).join('')}</select></div>`).join('') || 'No recommendations yet.';
         box.querySelectorAll('[data-sg]').forEach((sel) => { sel.onchange = () => call('PUT', `/api/staff/suggestions/${sel.dataset.sg}`, { status: sel.value }).catch((e) => { msg.textContent = e.message; }); });
+      }).catch(() => {});
+      call('GET', '/api/staff/reviews').then((rv) => {
+        const box = document.getElementById('revs');
+        box.innerHTML = rv.map((x) => `<div class="st-row"><div><b>${'★'.repeat(x.stars)}${'☆'.repeat(5 - x.stars)}</b> <b>${esc(x.guest_label)}</b> <span class="small muted">at <a href="/r/${encodeURIComponent(x.slug)}" target="_blank" rel="noopener">${esc(x.restaurant)}</a> · ${esc(String(x.created_at).slice(0, 10))}</span>
+          ${x.body ? `<div class="small">“${esc(x.body)}”</div>` : ''}${x.image_id ? `<div class="small"><a href="/img/${x.image_id}" target="_blank" rel="noopener">See photo</a></div>` : ''}${x.reply ? `<div class="small muted">Reply: ${esc(x.reply)}</div>` : ''}</div>
+          <button class="btn ${x.hidden ? 'secondary' : 'danger'} sm" data-rvh="${x.id}" data-on="${x.hidden ? 1 : 0}">${x.hidden ? 'Show again' : 'Hide'}</button></div>`).join('') || 'No reviews yet.';
+        box.querySelectorAll('[data-rvh]').forEach((b) => { b.onclick = async () => {
+          try { const hide = b.dataset.on !== '1'; await call('PUT', `/api/staff/reviews/${b.dataset.rvh}`, { hidden: hide }); b.dataset.on = hide ? '1' : '0'; b.textContent = hide ? 'Show again' : 'Hide'; b.className = `btn ${hide ? 'secondary' : 'danger'} sm`; } catch (e) { msg.textContent = e.message; }
+        }; });
       }).catch(() => {});
       document.getElementById('list').innerHTML = rows.map((r) => `<div class="st-row"><div><b>${esc(r.name)}</b> <span class="muted small">${esc([r.city, r.state].filter(Boolean).join(', '))} · ${r.dishes} dishes</span><div class="small">Login: ${esc(r.logins || '')}${r.verified === 0 ? ' · <b>email not confirmed</b>' : ''}</div><div class="small muted">Referred ${r.referred} · ${r.free_months || 0} free month${r.free_months === 1 ? '' : 's'} earned${r.referred_by_name ? ` · invited by ${esc(r.referred_by_name)}` : ''}</div></div>
         <div class="row" style="gap:6px"><button class="btn secondary sm" data-feat="${r.id}" data-on="${r.featured ? 1 : 0}">${r.featured ? '★ Featured' : '☆ Feature'}</button>

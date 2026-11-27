@@ -24,6 +24,7 @@
       <div class="card" id="about"></div>
       <div class="card" id="gallery" style="margin-top:16px" hidden></div>
       <div class="card" id="menu" style="margin-top:16px" hidden></div>
+      <div class="card" id="reviews" style="margin-top:16px" hidden></div>
     </div>
     <div><div class="card sticky-book" id="booking"></div></div>
   </div>
@@ -69,7 +70,7 @@
   if (todaySp) open = todaySp.open_time ? mins >= hm(todaySp.open_time) && mins <= hm(todaySp.close_time) + 60 : false;
   const web = r.website_url && /^https?:\/\//i.test(r.website_url) ? r.website_url : '';
   document.getElementById('r-meta').innerHTML = `${esc(r.cuisine)} · ${TB.price(r.price_level)} · ${esc(r.city)}, ${esc(r.state)}
-    ${open === null ? '' : `<span class="open-badge ${open ? 'yes' : 'no'}">${open ? 'Open now' : 'Closed now'}</span>`}${r.featured ? ' <span class="feat-badge">Featured</span>' : ''}`;
+    ${state.reviews && state.reviews.count ? `<a class="rv-mini" href="#reviews">★ ${state.reviews.avg} <span>(${state.reviews.count})</span></a>` : ''}${open === null ? '' : `<span class="open-badge ${open ? 'yes' : 'no'}">${open ? 'Open now' : 'Closed now'}</span>`}${r.featured ? ' <span class="feat-badge">Featured</span>' : ''}`;
   const tag = TBMatch.hashtag(r.name);
   document.getElementById('r-meta').insertAdjacentHTML('beforeend', tag ? `<div class="r-tagline"><button type="button" class="r-hashtag" id="r-tag" title="Copy hashtag">${esc(tag)}</button><span>Tag your photos ${esc(tag)} and share the love</span></div>` : '');
   document.getElementById('r-actions').innerHTML = `${web ? `<a class="btn light" href="${esc(web)}" target="_blank" rel="noopener nofollow">🌐 Website</a>` : ''}
@@ -178,6 +179,29 @@
         void close;
       };
     });
+  }
+
+  // Verified reviews: only guests who booked on Rbooked and dined can post them.
+  const rvBox = document.getElementById('reviews'); const rv = state.reviews;
+  if (rv && rv.count) {
+    rvBox.hidden = false;
+    const starRow = (n) => `<span class="stars" aria-label="${n} of 5 stars">${'★'.repeat(n)}<i>${'★'.repeat(5 - n)}</i></span>`;
+    const first = (s) => String(s || '').trim().charAt(0).toUpperCase() || 'R';
+    const card = (x) => `<article class="rvw">
+      <div class="rvw-top"><span class="rvw-av">${esc(first(x.name))}</span><div><b>${esc(x.name)}</b> <span class="rb-guest">✓ Rbooked guest</span>
+        <div class="muted small">${starRow(x.stars)} · ${x.date ? esc(TB.date(x.date, { weekday: undefined, year: 'numeric' })) : ''}${x.party ? ` · party of ${x.party}` : ''}</div></div></div>
+      ${x.body ? `<p class="rvw-body">${esc(x.body)}</p>` : ''}
+      ${x.photo ? `<img class="rvw-photo" src="${esc(x.photo)}" alt="Photo from ${esc(x.name)}" loading="lazy">` : ''}
+      ${x.reply ? `<div class="rvw-reply"><b>Reply from ${esc(r.name)}</b><p>${esc(x.reply)}</p></div>` : ''}</article>`;
+    const SHOW = 4;
+    rvBox.innerHTML = `<div class="row"><h2 class="serif" style="margin:0">Reviews</h2><span class="muted small">from guests who Rbooked and dined here</span></div>
+      <div class="rv-sum"><div class="rv-avg"><b>${rv.avg}</b>${starRow(Math.round(rv.avg))}<span class="muted small">${rv.count} review${rv.count > 1 ? 's' : ''}</span></div>
+        <div class="rv-dist">${[5, 4, 3, 2, 1].map((k) => `<div><span>${k}★</span><i><b style="width:${Math.round(((rv.dist[k] || 0) / rv.count) * 100)}%"></b></i></div>`).join('')}</div></div>
+      <div class="rvw-list">${rv.list.slice(0, SHOW).map(card).join('')}</div>
+      ${rv.list.length > SHOW ? `<button type="button" class="btn secondary block" id="rv-more">Show all ${rv.list.length} reviews</button>` : ''}`;
+    const more = rvBox.querySelector('#rv-more');
+    if (more) more.onclick = () => { rvBox.querySelector('.rvw-list').innerHTML = rv.list.map(card).join(''); more.remove(); };
+    rvBox.querySelectorAll('.rvw-photo').forEach((im) => { im.onclick = () => TB.modal(`<figure class="gal-big"><img src="${esc(im.src)}" alt=""></figure><button class="btn secondary block" data-close>Close</button>`); });
   }
 
   const toMenu = document.getElementById('to-menu');

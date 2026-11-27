@@ -403,7 +403,40 @@ window.RBOOKED_DEMO = true;
     const r = bookable(p.slug);
     const menu = db.menu.filter((m) => m.restaurant_id === r.id && m.available).sort((a, c) => a.sort_order - c.sort_order || a.id - c.id)
       .map(({ id, section, name, description, price_cents, tags, options }) => ({ id, section, name, description, price_cents, tags, options: options || '' }));
-    return { restaurant: pub(r), shifts: db.shifts.filter((s) => s.restaurant_id === r.id && s.active), menu, today: nowInZone(r.timezone).date };
+    return { restaurant: pub(r), shifts: db.shifts.filter((s) => s.restaurant_id === r.id && s.active), menu, today: nowInZone(r.timezone).date, reviews: demoReviews(r.id, true) };
+  });
+  // Sample verified reviews so the demo shows how they look.
+  const REVIEWS = {};
+  const demoReviews = (rid, publicOnly) => {
+    if (!REVIEWS[rid]) {
+      REVIEWS[rid] = [
+        { id: rid * 10 + 1, name: 'Maria L.', stars: 5, body: 'The jollof and suya were amazing, and our server remembered it was my mom\'s birthday. We will be back!', photo: null, date: '2026-11-24', party: 4, reply: 'Thank you Maria! Happy birthday to your mom, see you soon.', reply_date: '2026-11-25', verified: true, hidden: false, visit_date: '2026-11-23' },
+        { id: rid * 10 + 2, name: 'Devon K.', stars: 4, body: 'Cozy spot, great vibe. A little wait for our table but worth it.', photo: null, date: '2026-11-21', party: 2, reply: null, reply_date: null, verified: true, hidden: false, visit_date: '2026-11-21' },
+        { id: rid * 10 + 3, name: 'Priya S.', stars: 5, body: 'Booked in seconds, food came out fast. Get the plantains!', photo: null, date: '2026-11-18', party: 3, reply: null, reply_date: null, verified: true, hidden: false, visit_date: '2026-11-17' },
+      ];
+    }
+    const list = REVIEWS[rid].filter((x) => !publicOnly || !x.hidden);
+    const dist = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 }; list.forEach((x) => { dist[x.stars]++; });
+    const avg = list.length ? Math.round((list.reduce((t, x) => t + x.stars, 0) / list.length) * 10) / 10 : null;
+    return { count: list.length, avg, dist, list };
+  };
+  on('GET', '/api/admin/reviews', () => { const { r } = me(); return demoReviews(r.id, false); });
+  on('PUT', '/api/admin/reviews/:id/reply', (q, b, p) => {
+    const { r } = me(); const x = demoReviews(r.id, false).list.find((v) => v.id === Number(p.id));
+    if (!x) throw new E('Review not found.', 404);
+    x.reply = String(b.reply || '').trim() || null; x.reply_date = x.reply ? new Date().toISOString().slice(0, 10) : null;
+    return { ok: true, reply: x.reply };
+  });
+  let demoMine = null;
+  on('GET', '/api/public/review/:token', () => {
+    const r = db.restaurants[0];
+    return { restaurant: { name: r.name, slug: r.slug, logo_url: r.logo_url || '', city: r.city }, date: nowInZone(r.timezone).date, party_size: 2, name: 'You G.', canReview: true, review: demoMine, why: null };
+  });
+  on('POST', '/api/public/review/:token', (q, b) => {
+    const r = db.restaurants[0];
+    if (!(b.stars >= 1 && b.stars <= 5)) throw new E('Pick 1 to 5 stars.');
+    demoMine = { stars: b.stars, body: b.body || '', photo: b.photo === undefined ? (demoMine && demoMine.photo) : b.photo, reply: null, editable: true };
+    return { restaurant: { name: r.name, slug: r.slug, city: r.city }, date: nowInZone(r.timezone).date, party_size: 2, name: 'You G.', canReview: true, review: demoMine, why: null };
   });
   on('GET', '/api/public/restaurants/:slug/availability', (q, b, p) => {
     const r = bookable(p.slug); const av = getAvailability(r, q.date || nowInZone(r.timezone).date, Number(q.party) || 2);

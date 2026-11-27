@@ -37,6 +37,8 @@ function jsonLd(r, url) {
   const h = parseHours(r.hours);
   if (h) ld.openingHoursSpecification = h.map((d, i) => (d.closed ? null : { '@type': 'OpeningHoursSpecification', dayOfWeek: DAYS[i], opens: d.open, closes: d.close })).filter(Boolean);
   if (one('SELECT id FROM menu_items WHERE restaurant_id = ? AND available = 1 LIMIT 1', r.id)) ld.hasMenu = `${url}#menu`;
+  const rv = one('SELECT COUNT(*) AS n, AVG(stars) AS avg FROM reviews WHERE restaurant_id = ? AND hidden = 0', r.id);
+  if (rv && rv.n) ld.aggregateRating = { '@type': 'AggregateRating', ratingValue: Math.round(rv.avg * 10) / 10, reviewCount: rv.n, bestRating: 5, worstRating: 1 };
   return JSON.stringify(ld).replace(/</g, '\\u003c');
 }
 

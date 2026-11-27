@@ -680,3 +680,56 @@ test('diners can recommend a restaurant to join (support gets it, no duplicates)
   assert.strictEqual(s.website, 'https://tacotown.com');
   assert.ok(one("SELECT id FROM email_log WHERE kind = 'suggestion' AND to_addr = 'rbookedsupport@gmail.com'"));
 });
+
+test('verified reviews: only seated Rbooked guests, once, restaurant replies, support hides', async () => {
+  const r = one('SELECT * FROM restaurants ORDER BY id LIMIT 1');
+  const mk = async (name, emailAddr) => {
+    const p = await call('POST', '/api/admin/reservations', { source: 'phone', date: addDays(tomorrow, 3), time: '19:00', party_size: 2, name, email: emailAddr, phone: '5550002222' });
+    assert.strictEqual(p.status, 201, JSON.stringify(p.data));
+    return one('SELECT * FROM reservations WHERE id = ?', p.data.id);
+  };
+  const a = await mk('Maria Lopez', 'maria@example.com');
+  const post = (t, b) => fetch(`${base}/api/public/review/${t}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
+  // Not visited yet: no review.
+  assert.strictEqual((await post(a.manage_token, { stars: 5 })).status, 403);
+  // The visit ended 3 hours ago.
+  const past = new Date(Date.now() - (a.duration_minutes * 60000) - 3 * 3600000).toISOString();
+  run("UPDATE reservations SET status = 'completed', starts_at_utc = ? WHERE id = ?", past, a.id);
+  // The "How was it?" email goes out once.
+  assert.strictEqual(await require('../src/reviews').askForReviews(), 1);
+  assert.strictEqual(await require('../src/reviews').askForReviews(), 0);
+  assert.strictEqual(one("SELECT COUNT(*) AS n FROM email_log WHERE kind = 'review_ask' AND reservation_id = ?", a.id).n, 1);
+  assert.strictEqual((await post(a.manage_token, { stars: 9 })).status, 400);
+  const tiny = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  const ok = await post(a.manage_token, { stars: 5, body: 'Best jollof in town!', photo: tiny });
+  assert.strictEqual(ok.status, 201);
+  // Posting again edits the same review (one per reservation).
+  assert.strictEqual((await post(a.manage_token, { stars: 4, body: 'Still great' })).status, 200);
+  assert.strictEqual(one('SELECT COUNT(*) AS n FROM reviews WHERE reservation_id = ?', a.id).n, 1);
+  const detail = await (await fetch(`${base}/api/public/restaurants/${r.slug}`)).json();
+  assert.strictEqual(detail.reviews.count, 1);
+  const shown = detail.reviews.list[0];
+  assert.strictEqual(shown.name, 'Maria L.'); assert.strictEqual(shown.stars, 4); assert.ok(shown.photo); assert.ok(shown.verified);
+  assert.ok(!JSON.stringify(detail.reviews).includes('maria@example.com'));
+  // Walk-ins can't review.
+  const w = await call('POST', '/api/admin/reservations', { source: 'walk_in', party_size: 2 });
+  const wr = one('SELECT * FROM reservations WHERE id = ?', w.data.id);
+  run("UPDATE reservations SET status = 'completed' WHERE id = ?", wr.id);
+  assert.strictEqual((await post(wr.manage_token, { stars: 1 })).status, 403);
+  // The restaurant can reply, but there is no way to delete.
+  const mine = await call('GET', '/api/admin/reviews');
+  const id = mine.data.list[0].id;
+  assert.strictEqual((await call('PUT', `/api/admin/reviews/${id}/reply`, { reply: 'Thank you Maria!' })).status, 200);
+  assert.strictEqual((await call('DELETE', `/api/admin/reviews/${id}`)).status, 404);
+  assert.strictEqual(one('SELECT reply FROM reviews WHERE id = ?', id).reply, 'Thank you Maria!');
+  // Another restaurant can't reply to it.
+  run("INSERT INTO reviews (restaurant_id, reservation_id, stars) VALUES (?, ?, 3)", r.id + 999, 999999);
+  const other = one('SELECT id FROM reviews WHERE reservation_id = 999999').id;
+  assert.strictEqual((await call('PUT', `/api/admin/reviews/${other}/reply`, { reply: 'x' })).status, 404);
+  run('DELETE FROM reviews WHERE id = ?', other);
+  // Support hides it: gone from the public page.
+  run('UPDATE reviews SET hidden = 1 WHERE id = ?', id);
+  const after2 = await (await fetch(`${base}/api/public/restaurants/${r.slug}`)).json();
+  assert.strictEqual(after2.reviews.count, 0);
+  run('UPDATE reviews SET hidden = 0 WHERE id = ?', id);
+});

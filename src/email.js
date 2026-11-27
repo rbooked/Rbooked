@@ -238,6 +238,18 @@ async function sendReferralEarned(restaurant, to, newName) {
   });
 }
 
+async function sendReviewAsk(restaurant, res, reviewUrl) {
+  const stars = [1, 2, 3, 4, 5].map((n) => `<a href="${esc(reviewUrl)}&amp;s=${n}" style="font-size:34px;text-decoration:none;color:#f5a623;padding:0 3px">★</a>`).join('');
+  return send({
+    to: res.guest_email, kind: 'review_ask', reservationId: res.id,
+    subject: `How was ${restaurant.name}? ⭐`,
+    html: layout(restaurant, 'How was it?', `<p>Hi ${esc(String(res.guest_name || '').split(' ')[0] || 'there')}, thanks for dining at <b>${esc(restaurant.name)}</b>. You Rbooked it, now tell everyone how it went!</p>
+      <p style="text-align:center;margin:18px 0">${stars}</p>
+      <p style="text-align:center">${button(reviewUrl, 'Leave a review')}</p>
+      <p style="font-size:13px;color:#7a6f63">Only guests who booked on Rbooked can review, so your review gets a ✓ Rbooked guest badge. Add a photo of your favorite dish if you like. The link works for 30 days.</p>`),
+  });
+}
+
 async function sendPasswordReset(user, resetUrl) {
   return send({
     to: user.email, kind: 'password_reset',
@@ -248,4 +260,4 @@ async function sendPasswordReset(user, resetUrl) {
   });
 }
 
-module.exports = { flush, sendReservationEmail, sendWelcome, sendTrialEnding, sendVerify, sendPasswordReset, sendReferralEarned, send, esc, layout };
+module.exports = { flush, sendReservationEmail, sendWelcome, sendTrialEnding, sendVerify, sendPasswordReset, sendReferralEarned, sendReviewAsk, send, esc, layout };

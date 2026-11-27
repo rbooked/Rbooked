@@ -68,7 +68,7 @@
   const VIEWS = {
     reservations: ['Reservations', viewReservations], floor: ['Floor plan & tables', viewFloor], services: ['Services & hours', viewServices],
     guests: ['Address book', viewGuests], widget: ['Website widget', viewWidget], settings: ['Settings', viewSettings],
-    billing: ['Billing', viewBilling], refer: ['Refer a restaurant', viewRefer], emails: ['Email log', viewEmails], welcome: ['Welcome', viewWelcome],
+    billing: ['Billing', viewBilling], reviews: ['Reviews', viewReviews], refer: ['Refer a restaurant', viewRefer], emails: ['Email log', viewEmails], welcome: ['Welcome', viewWelcome],
     profile: ['Restaurant profile', viewProfile], 'menu-items': ['Menu', viewMenu], gallery: ['Gallery', viewGallery], 'menu-import': ['Import your menu', viewMenuHandoff],
   };
   function route() {
@@ -1698,6 +1698,39 @@
   }
 
   // ---------------- Billing ----------------
+  async function viewReviews() {
+    const d = await api('/api/admin/reviews');
+    const starRow = (n) => `<span class="stars">${'★'.repeat(n)}<i>${'★'.repeat(5 - n)}</i></span>`;
+    const head = d.count ? `<div class="card"><div class="rv-sum"><div class="rv-avg"><b>${d.avg}</b>${starRow(Math.round(d.avg))}<span class="muted small">${d.count} review${d.count > 1 ? 's' : ''}</span></div>
+        <div class="rv-dist">${[5, 4, 3, 2, 1].map((k) => `<div><span>${k}★</span><i><b style="width:${Math.round(((d.dist[k] || 0) / d.count) * 100)}%"></b></i></div>`).join('')}</div></div>
+        <p class="small muted" style="margin:8px 0 0">Only guests who booked on Rbooked and were seated can review, about 2 hours after their table is finished. You can reply to any review. Reviews can't be removed; if one is abusive, email <a href="mailto:rbookedsupport@gmail.com">rbookedsupport@gmail.com</a>.</p></div>` : '';
+    const item = (x) => `<div class="card rvw-admin" data-id="${x.id}">
+        <div class="rvw-top"><span class="rvw-av">${esc((x.name || 'R').charAt(0).toUpperCase())}</span><div style="flex:1;min-width:0"><b>${esc(x.name)}</b> <span class="rb-guest">✓ Rbooked guest</span>${x.hidden ? ' <span class="tag warn">Hidden by support</span>' : ''}
+          <div class="muted small">${starRow(x.stars)} · posted ${esc(TB.date(x.date))}${x.visit_date ? ` · visited ${esc(TB.date(x.visit_date))}` : ''}${x.party ? ` · party of ${x.party}` : ''}</div></div></div>
+        ${x.body ? `<p class="rvw-body">${esc(x.body)}</p>` : ''}
+        ${x.photo ? `<img class="rvw-photo" src="${esc(x.photo)}" alt="" loading="lazy">` : ''}
+        <form class="rvw-reply-form" style="margin-top:12px">
+          <label class="small"><b>Your reply</b> <span class="muted">(shown under the review)</span></label>
+          <textarea name="reply" maxlength="600" rows="2" placeholder="Thanks for coming in! …">${esc(x.reply || '')}</textarea>
+          <div class="row" style="gap:8px;margin-top:6px"><button class="btn sm" type="submit">${x.reply ? 'Update reply' : 'Post reply'}</button><span class="small muted" data-msg></span></div>
+        </form></div>`;
+    view.innerHTML = d.list.length ? `${head}${d.list.map(item).join('')}`
+      : `<div class="card" style="text-align:center"><div style="font-size:40px">⭐</div><h2 style="margin:6px 0">No reviews yet</h2>
+          <p class="muted" style="margin:0 auto;max-width:460px">After guests who booked on Rbooked finish their meal, they get a friendly "How was it?" email. Their reviews show up here and on your Rbooked page with a ✓ Rbooked guest badge, and you can reply to each one.</p></div>`;
+    view.querySelectorAll('.rvw-reply-form').forEach((f) => {
+      f.onsubmit = async (e) => {
+        e.preventDefault();
+        const id = f.closest('[data-id]').dataset.id; const btn = f.querySelector('button'); const m = f.querySelector('[data-msg]');
+        btn.disabled = true;
+        try {
+          const r = await api(`/api/admin/reviews/${id}/reply`, { method: 'PUT', body: { reply: f.reply.value } });
+          btn.textContent = r.reply ? 'Update reply' : 'Post reply'; m.textContent = r.reply ? 'Reply posted' : 'Reply removed';
+        } catch (err) { m.textContent = err.message; }
+        btn.disabled = false;
+      };
+    });
+  }
+
   async function viewRefer() {
     const d = await api('/api/admin/referrals');
     const msg = encodeURIComponent(`I take reservations with Rbooked and love it. Sign up with my link and you get an extra free month: ${d.link}`);

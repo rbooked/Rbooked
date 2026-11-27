@@ -214,7 +214,7 @@ router.get('/restaurants/:slug', wrap(async (req, res) => {
   const rl = counts('restaurant', [r.id])[r.id] || { likes: 0, liked: false };
   const today = nowInZone(r.timezone).date;
   const special = all("SELECT date, reason, open_time, close_time FROM closures WHERE restaurant_id = ? AND date >= ? ORDER BY date LIMIT 8", r.id, today);
-  res.json({ restaurant: { ...publicRestaurant(r), likes: rl.likes, liked: rl.liked }, shifts, menu, gallery, special, today });
+  res.json({ restaurant: { ...publicRestaurant(r), likes: rl.likes, liked: rl.liked }, shifts, menu, gallery, special, today, reviews: require('../reviews').forRestaurant(r.id) });
 }));
 
 // ---------- Likes ("hearts") from diners. No account needed: an anonymous id in a cookie. ----------
@@ -298,6 +298,51 @@ const guestView = (res, r) => ({
   restaurant: publicRestaurant(r),
   canChange: res.status === 'confirmed' && new Date(res.starts_at_utc) > new Date(),
 });
+
+// ---------- Verified reviews (link from the "How was it?" email) ----------
+const reviews = require('../reviews');
+function reviewState(rv, r) {
+  const mine = one('SELECT * FROM reviews WHERE reservation_id = ?', rv.id);
+  const editable = mine ? Date.now() - new Date(`${mine.created_at.replace(' ', 'T')}Z`).getTime() < reviews.EDIT_DAYS * 86400000 : false;
+  return {
+    restaurant: { name: r.name, slug: r.slug, logo_url: r.logo_url || '', city: r.city || '' },
+    date: rv.date, party_size: rv.party_size, name: reviews.shortName(rv.guest_name),
+    canReview: reviews.canReview(rv) && (!mine || editable),
+    review: mine ? { stars: mine.stars, body: mine.body, photo: mine.image_id ? `/img/${mine.image_id}` : null, reply: mine.reply || null, editable } : null,
+    why: rv.status !== 'completed' ? 'not_visited' : (!reviews.canReview(rv) ? 'expired' : null),
+  };
+}
+router.get('/review/:token', wrap(async (req, res) => {
+  const { res: rv, r } = byToken(req.params.token);
+  res.json(reviewState(rv, r));
+}));
+router.post('/review/:token', wrap(async (req, res) => {
+  const { res: rv, r } = byToken(req.params.token);
+  if (!reviews.canReview(rv)) throw new BookingError(rv.status === 'completed' ? 'This review link has expired.' : 'You can review once your visit is finished.', 403);
+  const stars = Math.round(Number(req.body.stars));
+  if (!(stars >= 1 && stars <= 5)) throw new BookingError('Pick 1 to 5 stars.');
+  const body = String(req.body.body || '').replace(/\s+\n/g, '\n').trim().slice(0, 600);
+  const mine = one('SELECT * FROM reviews WHERE reservation_id = ?', rv.id);
+  if (mine && Date.now() - new Date(`${mine.created_at.replace(' ', 'T')}Z`).getTime() >= reviews.EDIT_DAYS * 86400000) throw new BookingError('Reviews can be changed for 7 days after posting.', 403);
+  let imageId = mine ? mine.image_id : null;
+  if (req.body.photo === null && mine) imageId = null; // guest removed their photo
+  if (typeof req.body.photo === 'string' && req.body.photo.startsWith('data:')) {
+    const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(req.body.photo);
+    if (!m) throw new BookingError('Add a JPG, PNG or WebP photo.');
+    const buf = Buffer.from(m[2], 'base64');
+    if (buf.length > 2 * 1024 * 1024) throw new BookingError('That photo is too large (2 MB max).');
+    imageId = run('INSERT INTO images (restaurant_id, kind, mime, data) VALUES (?,?,?,?)', r.id, 'review', m[1], buf).lastInsertRowid;
+  }
+  if (mine && mine.image_id && mine.image_id !== imageId) run("DELETE FROM images WHERE id = ? AND kind = 'review'", mine.image_id);
+  if (mine) {
+    run("UPDATE reviews SET stars = ?, body = ?, image_id = ?, updated_at = datetime('now') WHERE id = ?", stars, body, imageId, mine.id);
+  } else {
+    run('INSERT INTO reviews (restaurant_id, reservation_id, guest_label, stars, body, image_id) VALUES (?,?,?,?,?,?)',
+      r.id, rv.id, reviews.shortName(rv.guest_name), stars, body, imageId);
+    run("UPDATE reservations SET review_asked_at = COALESCE(review_asked_at, datetime('now')) WHERE id = ?", rv.id);
+  }
+  res.status(mine ? 200 : 201).json(reviewState(rv, r));
+}));
 
 router.get('/reservations/:token', wrap(async (req, res) => {
   const { res: rv, r } = byToken(req.params.token);

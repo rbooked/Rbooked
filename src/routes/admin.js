@@ -460,6 +460,22 @@ router.get('/emails/:id', wrap(async (req, res) => {
 }));
 
 // ---------- Referrals ----------
+// ---------- Guest reviews: restaurants can read and reply, never delete (support can hide abusive ones) ----------
+router.get('/reviews', wrap(async (req, res) => {
+  const rid = req.restaurant.id;
+  const rows = all(`SELECT v.*, r.party_size, r.date AS visit_date FROM reviews v LEFT JOIN reservations r ON r.id = v.reservation_id
+    WHERE v.restaurant_id = ? ORDER BY v.id DESC LIMIT 200`, rid);
+  const s = require('../reviews').forRestaurant(rid, 0);
+  res.json({ count: s.count, avg: s.avg, dist: s.dist, list: rows.map((x) => ({ ...require('../reviews').publicReview(x), hidden: !!x.hidden, visit_date: x.visit_date })) });
+}));
+router.put('/reviews/:id/reply', wrap(async (req, res) => {
+  const v = one('SELECT id FROM reviews WHERE id = ? AND restaurant_id = ?', Number(req.params.id), req.restaurant.id);
+  if (!v) return res.status(404).json({ error: 'Review not found.' });
+  const reply = String(req.body.reply || '').trim().slice(0, 600);
+  run("UPDATE reviews SET reply = ?, reply_at = CASE WHEN ? = '' THEN NULL ELSE datetime('now') END WHERE id = ?", reply, reply, v.id);
+  res.json({ ok: true, reply: reply || null });
+}));
+
 router.get('/referrals', wrap(async (req, res) => {
   const r = req.restaurant;
   const rows = all('SELECT name, city, state, created_at, verified, referral_credited FROM restaurants WHERE referred_by = ? ORDER BY id DESC', r.id);

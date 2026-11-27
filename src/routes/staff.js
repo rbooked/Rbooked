@@ -57,6 +57,17 @@ router.put('/suggestions/:id', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// Guest reviews: support can hide abusive ones (restaurants can't delete).
+router.get('/reviews', wrap(async (req, res) => {
+  res.json(all(`SELECT v.id, v.stars, v.body, v.guest_label, v.hidden, v.created_at, v.image_id, v.reply, t.name AS restaurant, t.slug
+    FROM reviews v JOIN restaurants t ON t.id = v.restaurant_id ORDER BY v.id DESC LIMIT 200`));
+}));
+router.put('/reviews/:id', wrap(async (req, res) => {
+  const r = run('UPDATE reviews SET hidden = ? WHERE id = ?', req.body.hidden ? 1 : 0, Number(req.params.id));
+  if (!r.changes) return res.status(404).json({ error: 'Not found' });
+  res.json({ ok: true });
+}));
+
 // Show a restaurant first on the home page (or stop).
 router.put('/restaurants/:id/featured', wrap(async (req, res) => {
   const r = one('SELECT id, name FROM restaurants WHERE id = ?', Number(req.params.id));

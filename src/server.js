@@ -17,6 +17,7 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), billi
 
 // Photo and logo uploads arrive as base64 JSON (resized in the browser first).
 app.use('/api/admin/images', express.json({ limit: '6mb' }));
+app.use('/api/public/review', express.json({ limit: '3mb' })); // optional photo with a guest review
 app.use('/api/admin/menu/import', express.json({ limit: '1mb' }));
 app.use('/api/admin/menu/read', express.json({ limit: '1mb' }));
 app.use(express.json({ limit: '200kb' }));

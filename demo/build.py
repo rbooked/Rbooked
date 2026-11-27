@@ -8,7 +8,7 @@ os.makedirs(os.path.join(OUT, 'css')); os.makedirs(os.path.join(OUT, 'js')); os.
 files = {
   'index.html': 'index.html', 'restaurant.html': 'restaurant.html', 'reservation.html': 'reservation.html',
   'for-restaurants.html': 'for-restaurants.html', 'login.html': 'login.html', 'embed.html': 'embed.html',
-  'forgot.html': 'forgot.html', 'reset-password.html': 'reset-password.html', 'terms.html': 'terms.html', 'privacy.html': 'privacy.html',
+  'forgot.html': 'forgot.html', 'reset-password.html': 'reset-password.html', 'terms.html': 'terms.html', 'review.html': 'review.html', 'privacy.html': 'privacy.html',
   'admin/index.html': 'admin.html', 'admin/admin.js': 'admin/admin.js', 'admin/admin.css': 'admin/admin.css',
   'css/app.css': 'css/app.css', 'js/common.js': 'js/common.js', 'js/booking.js': 'js/booking.js', 'js/matcher.js': 'js/matcher.js',
   'js/samples.js': 'js/samples.js', 'js/places.js': 'js/places.js', 'js/menu-import.js': 'js/menu-import.js', 'js/pricing.js': 'js/pricing.js',

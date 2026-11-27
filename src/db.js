@@ -257,6 +257,23 @@ CREATE TABLE IF NOT EXISTS suggestions (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Verified reviews: one per completed Rbooked reservation. Restaurants can reply, only support can hide.
+CREATE TABLE IF NOT EXISTS reviews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  restaurant_id INTEGER NOT NULL,
+  reservation_id INTEGER NOT NULL UNIQUE,
+  guest_label TEXT NOT NULL DEFAULT 'Rbooked guest',
+  stars INTEGER NOT NULL,
+  body TEXT DEFAULT '',
+  image_id INTEGER,
+  reply TEXT DEFAULT '',
+  reply_at TEXT,
+  hidden INTEGER DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_reviews_restaurant ON reviews(restaurant_id, hidden);
+
 -- Small notes the system keeps for itself (last backup day, last alert times).
 CREATE TABLE IF NOT EXISTS ops_kv (
   key TEXT PRIMARY KEY,
@@ -289,6 +306,7 @@ function migrate(d) {
     // Late guests now show as "Late" for 30 minutes, then turn into no-shows (person's request, 2026-11-26).
     d.exec('UPDATE restaurants SET auto_no_show = 1, no_show_grace_minutes = 30');
   }
+  if (!rcols.has('review_asked_at')) d.exec('ALTER TABLE reservations ADD COLUMN review_asked_at TEXT');
   if (!cols.has('turn_times')) d.exec("ALTER TABLE restaurants ADD COLUMN turn_times TEXT DEFAULT '2:90,4:120,6:180,99:210'");
   for (const [c, def] of [['website_url', "''"], ['logo_url', "''"], ['hours', "''"]]) if (!cols.has(c)) d.exec(`ALTER TABLE restaurants ADD COLUMN ${c} TEXT DEFAULT ${def}`);
   if (!cols.has('featured')) d.exec('ALTER TABLE restaurants ADD COLUMN featured INTEGER DEFAULT 0');
