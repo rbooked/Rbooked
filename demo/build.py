@@ -45,7 +45,11 @@ for src, dst in files.items():
         s = re.sub(r'<!doctype html>\s*', '', s, flags=re.I)
         s = re.sub(r'</?(html|head|body)\b[^>]*>\s*', '', s, flags=re.I)
     open(os.path.join(OUT, dst), 'w', encoding='utf-8').write(s)
-shutil.copy(os.path.join(ROOT, 'demo', 'mock-api.js'), os.path.join(OUT, 'mock-api.js'))
+mock = open(os.path.join(ROOT, 'demo', 'mock-api.js'), encoding='utf-8').read()
+if not SITE:  # standalone copy: bring the sample photos along
+    shutil.copytree(os.path.join(SRC, 'img', 'demo'), os.path.join(OUT, 'img', 'demo'))
+    mock = mock.replace("const DEMO_IMG = '/img/demo/';", "const DEMO_IMG = 'img/demo/';")
+open(os.path.join(OUT, 'mock-api.js'), 'w', encoding='utf-8').write(mock)
 if SITE:  # on rbooked.com the other tools load from /vendor; only the map needs a copy next to the demo
     shutil.copytree(os.path.join(SRC, 'vendor', 'leaflet'), os.path.join(OUT, 'vendor', 'leaflet'))
 else:

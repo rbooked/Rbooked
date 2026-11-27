@@ -570,3 +570,4 @@ table.data tr:hover td { background: #fcfaf7; }
 .sc-foot .btn.secondary { background: rgba(255,255,255,.12); color: #fff; border-color: rgba(255,255,255,.35); }
 @media (max-width: 640px) { .sc-arrows { display: none; } .sc-foot .btn { flex: 1; justify-content: center; } .showcase { padding-top: 28px; } }
 .sc-track { scroll-padding-inline: max(16px, calc((100vw - 1160px) / 2 + 16px)); }
+.sc-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; } .sc-img { background: #3b1d0d; overflow: visible; } .sc-badge, .sc-logo { z-index: 1; }

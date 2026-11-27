@@ -22,6 +22,7 @@
   // Inside the demo itself, links stay in the demo folder.
   const inDemo = /\/demo(\/|$)/.test(location.pathname) || location.protocol === 'file:';
   const D = inDemo ? '' : '/demo/';
+  const IMG = inDemo && location.protocol === 'file:' ? 'img/demo/' : '/img/demo/';
   const slug = (n) => n.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
   const TIMES = [['6:00', '6:45', '8:30'], ['5:30', '7:15', '9:00'], ['7:00', '7:30', '9:15'], ['6:15', '8:00', '8:45']];
   box.innerHTML = `<div class="sc-head"><div><span class="sc-kicker">See it in action</span>
@@ -31,7 +32,7 @@
     <div class="sc-track" tabindex="0" aria-label="Sample restaurants">${SAMPLES.map(([name, cuisine, city, price, color, line], i) => {
     const r = { name, cuisine, accent_color: color };
     return `<a class="sc-card" href="${D}restaurant.html?slug=${slug(name)}" style="--c:${color}">
-        <span class="sc-img" style="background-image:url(&quot;${window.TBSamples.coverArt(r)}&quot;)"><span class="sc-badge">Sample</span>
+        <span class="sc-img"><img class="sc-photo" src="${IMG}${slug(name)}.jpg" alt="" loading="${i < 3 ? 'eager' : 'lazy'}" decoding="async"><span class="sc-badge">Sample</span>
           <img class="sc-logo" src="${window.TBSamples.logoArt(r)}" alt=""></span>
         <span class="sc-body"><b class="sc-name">${esc(name)}</b><span class="sc-meta">${esc(cuisine)} · ${'$'.repeat(price)} · ${esc(city)}</span>
           <span class="sc-line">${esc(line)}</span>

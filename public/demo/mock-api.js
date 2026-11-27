@@ -3,7 +3,7 @@
    browser's storage, and records every email in a demo inbox. */
 window.RBOOKED_DEMO = true;
 (function () {
-  const KEY = 'rbooked_demo_v5';
+  const KEY = 'rbooked_demo_v6';
   const mem = {};
   const store = {
     get() { try { return JSON.parse(sessionStorage.getItem(KEY)); } catch { return mem.db || null; } },
@@ -43,6 +43,7 @@ window.RBOOKED_DEMO = true;
     90012: [34.0614, -118.2385, 'Los Angeles', 'CA'], 90028: [34.0997, -118.3264, 'Los Angeles', 'CA'], 33130: [25.7673, -80.2047, 'Miami', 'FL'], 33139: [25.7826, -80.1341, 'Miami Beach', 'FL'],
     30303: [33.7525, -84.3888, 'Atlanta', 'GA'], 98101: [47.6114, -122.3305, 'Seattle', 'WA'], '02108': [42.3576, -71.0636, 'Boston', 'MA'], 20001: [38.9123, -77.0177, 'Washington', 'DC'],
   };
+  const DEMO_IMG = '/img/demo/'; // the standalone build rewrites this to a folder next to the demo
   const RESTAURANTS = [
     ['Ember & Rye', 'New American', 3, '10011', '212 W 18th St', 'America/New_York', 'Wood-fired seasonal plates and a deep rye whiskey list.', '#b45309'],
     ['Little Saffron', 'Indian', 2, '10001', '341 W 29th St', 'America/New_York', 'Regional Indian cooking with a tandoor at its heart.', '#c2410c'],
@@ -83,8 +84,8 @@ window.RBOOKED_DEMO = true;
       };
       db.restaurants.push(r);
       starterFloor(db, r, true, id);
-      // Profile: placeholder cover art and logo, hours from the services, website, and a sample menu.
-      Object.assign(r, { image_url: window.TBSamples.coverArt(r), logo_url: window.TBSamples.logoArt(r), website_url: `https://example.com/${slug}`,
+      // Profile: a real food photo (free Unsplash photos, saved with the site), logo, hours from the services, website, and a sample menu.
+      Object.assign(r, { image_url: `${DEMO_IMG}${slug}.jpg`, logo_url: window.TBSamples.logoArt(r), website_url: `https://example.com/${slug}`,
         hours: JSON.stringify(window.TBSamples.hoursFromShifts(db.shifts.filter((s) => s.restaurant_id === r.id))) });
       window.TBSamples.menuFor(cuisine).forEach((m) => db.menu.push({ id: id(), restaurant_id: r.id, ...m, created_at: nowSql() }));
       if (idx === 0) { const u = { id: id(), restaurant_id: r.id, name: 'Demo Owner', email: 'demo@rbooked.test', password: 'demo1234' }; db.users.push(u); db.session = u.id; }
