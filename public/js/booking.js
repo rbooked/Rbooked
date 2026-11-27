@@ -36,8 +36,8 @@
 
     if (info.paused) { // the restaurant paused online bookings for now
       const tel = r.phone ? `<a class="btn secondary block" href="tel:${esc(r.phone)}">📞 Call ${esc(r.name)}</a>` : '';
-      root.innerHTML = `${opts.compact ? '' : '<h2 class="serif">Make a reservation</h2>'}<p><b>Not taking online bookings right now.</b> Walk-ins welcome!</p>
-        <p class="muted small">Please check back a little later, or call to ask.</p>${tel}`;
+      root.innerHTML = `${opts.compact ? '' : '<h2 class="serif">Make a reservation</h2>'}<p><b>Looks like the restaurant is busy right now.</b></p>
+        <p class="muted">You can try walking in, or check back later when spots open up.</p>${tel}`;
       return state;
     }
 
