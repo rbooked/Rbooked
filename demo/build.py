@@ -17,7 +17,7 @@ files = {
   'admin/index.html': 'admin.html', 'admin/admin.js': 'admin/admin.js', 'admin/admin.css': 'admin/admin.css',
   'css/app.css': 'css/app.css', 'js/common.js': 'js/common.js', 'js/booking.js': 'js/booking.js', 'js/matcher.js': 'js/matcher.js',
   'js/samples.js': 'js/samples.js', 'js/places.js': 'js/places.js', 'js/menu-import.js': 'js/menu-import.js', 'js/pricing.js': 'js/pricing.js',
-  'js/rbmap.js': 'js/rbmap.js',
+  'js/rbmap.js': 'js/rbmap.js', 'js/showcase.js': 'js/showcase.js',
 }
 REPL = [
   ('<a href="/map">Map</a>', ''), ('href="/explore"', 'href="index.html"'), ('<a href="/login" class="btn sm nav-login" data-login>Log in</a>', '<a href="admin.html" class="btn sm nav-login">Restaurant dashboard</a>'),
