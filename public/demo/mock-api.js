@@ -800,14 +800,14 @@ window.RBOOKED_DEMO = true;
     bar.className = 'demo-bar';
     const onSite = /^\/demo\//.test(location.pathname);
     const trial = onSite ? '/for-restaurants#signup' : 'for-restaurants.html#signup';
-    const home = onSite ? '/' : 'index.html'; // on rbooked.com the logo and Back go to the real main page
+    const home = onSite ? '/demo/index.html' : 'index.html'; // the demo's own main page with all the sample restaurants
     bar.innerHTML = `<span><b>DEMO</b> · Try everything. Nothing here is real, no emails go out, and it starts fresh every visit.</span><span class="sp"></span>
       <a href="${trial}" target="_top" style="background:#16a34a;color:#fff;border-radius:7px;padding:5px 10px;font-weight:700;text-decoration:none">Start free trial</a>
-      ${/admin\.html/.test(location.pathname) ? `<a href="${home}" target="_top" style="background:#fff;color:#1f1b16;border-radius:7px;padding:5px 10px;font-weight:700;text-decoration:none">← Back to main page</a><a href="index.html" style="color:#f5e6d8">👀 Demo diner side</a>` : `<a href="admin.html" id="demo-dash" style="background:#fff;color:#1f1b16;border-radius:7px;padding:5px 10px;font-weight:700;text-decoration:none">🍽️ Open my restaurant dashboard →</a>`}
+      ${/admin\.html/.test(location.pathname) ? `<a href="${home}" style="background:#fff;color:#1f1b16;border-radius:7px;padding:5px 10px;font-weight:700;text-decoration:none">← Back to main page</a>` : `<a href="admin.html" id="demo-dash" style="background:#fff;color:#1f1b16;border-radius:7px;padding:5px 10px;font-weight:700;text-decoration:none">🍽️ Open my restaurant dashboard →</a>`}
       <button type="button" id="demo-inbox">Demo inbox (<span id="demo-count">0</span>)</button><button type="button" class="alt" id="demo-reset">Reset demo</button>`;
     document.body.prepend(bar);
     // In the demo dashboard, the Rbooked logo goes back to the main page with all the sample restaurants.
-    document.querySelectorAll('.logo').forEach((l) => { l.href = home; l.target = '_top'; l.title = 'Rbooked main page'; });
+    document.querySelectorAll('.logo').forEach((l) => { l.href = home; l.title = 'Demo main page'; });
     const count = () => { const n = (store.get() || db).emails.length; const el = document.getElementById('demo-count'); if (el) el.textContent = n; };
     window.TBDemo = { bump: () => setTimeout(count, 0) };
     count(); window.addEventListener('storage', count);
