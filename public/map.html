@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/app.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%229%22 fill=%22%23c2410c%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2218%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Georgia%22%3ER%3C/text%3E%3C/svg%3E">
+<title>Map · Rbooked</title>
+<meta name="robots" content="noindex">
+</head>
+<body>
+<header class="site-header"><div class="container">
+  <a class="logo" href="/"><span class="logo-mark">R</span>Rbooked</a>
+  <nav class="nav"><a href="/explore">Explore</a><a href="/login" class="btn sm nav-login" data-login>Log in</a></nav>
+</div></header>
+<main class="container" style="padding-top:20px;padding-bottom:40px">
+  <h1 class="serif" style="margin:0 0 10px;font-size:30px">Rbooked on the map</h1>
+  <div class="map-card"><div class="rb-map" id="map" role="region" aria-label="Map of restaurants" style="height:min(70vh,560px)"></div></div>
+</main>
+<footer class="footer"><div class="container row"><span>© Rbooked</span><span class="spacer"></span><a href="/explore">Explore</a><a href="/map">Map</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/for-restaurants" class="quiet">Rbooked for Restaurants</a></div></footer>
+<script src="/js/common.js"></script>
+<script src="/js/rbmap.js"></script>
+<script>
+TB.api('/api/public/map').then((d) => TBMap.draw(document.getElementById('map'), d.pins, { center: d.center, link: (p) => TB.rlink(p.slug) })).catch(() => {});
+</script>
+</body>
+</html>

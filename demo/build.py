@@ -20,6 +20,7 @@ files = {
   'js/rbmap.js': 'js/rbmap.js',
 }
 REPL = [
+  ('<a href="/map">Map</a>', ''), ('href="/explore"', 'href="index.html"'), ('<a href="/login" class="btn sm nav-login" data-login>Log in</a>', '<a href="admin.html" class="btn sm nav-login">Restaurant dashboard</a>'),
   ('href="/css/', 'href="css/'), ('src="/js/', 'src="js/'),
   ('href="/admin/admin.css"', 'href="admin/admin.css"'), ('src="/admin/admin.js"', 'src="admin/admin.js"'),
   ('href="/"', 'href="index.html"'), ('/for-restaurants#signup', 'for-restaurants.html#signup'),

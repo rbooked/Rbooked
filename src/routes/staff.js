@@ -23,7 +23,7 @@ router.use((req, res, next) => {
 
 router.get('/restaurants', wrap(async (req, res) => {
   res.json(all(`SELECT r.id, r.name, r.slug, r.city, r.state, r.created_at, r.featured, r.verified, r.free_months, (SELECT COUNT(*) FROM restaurants x WHERE x.referred_by = r.id) AS referred, (SELECT name FROM restaurants y WHERE y.id = r.referred_by) AS referred_by_name, (SELECT COUNT(*) FROM menu_items m WHERE m.restaurant_id = r.id) AS dishes,
-    (SELECT GROUP_CONCAT(u.email) FROM users u WHERE u.restaurant_id = r.id) AS logins FROM restaurants r ORDER BY r.id`));
+    (SELECT GROUP_CONCAT(u.email) FROM users u WHERE u.restaurant_id = r.id) AS logins FROM restaurants r WHERE COALESCE(r.listing, 'bookings') != 'exposure' ORDER BY r.id`));
 }));
 
 router.post('/restaurants/:id/reset', wrap(async (req, res) => {
@@ -41,6 +41,44 @@ router.get('/backup', wrap(async (req, res) => {
 }));
 router.post('/backup/email', wrap(async (req, res) => {
   res.json({ status: await require('../ops').dailyBackup(new Date(), { force: true }) });
+}));
+
+// Walk-in-only "exposure" listings: restaurants that don't take reservations, shown on Explore for free.
+const LISTING_FIELDS = ['name', 'cuisine', 'phone', 'address', 'city', 'state', 'zip', 'description', 'website_url', 'image_url', 'logo_url', 'hours'];
+router.get('/listings', wrap(async (req, res) => {
+  res.json(all(`SELECT id, slug, name, cuisine, city, state, zip, website_url, image_url, created_at FROM restaurants WHERE listing = 'exposure' ORDER BY id DESC`));
+}));
+router.post('/listings', wrap(async (req, res) => {
+  const places = require('../../public/js/places');
+  const b = req.body || {};
+  const clean = (k, n = 300) => String(b[k] || '').trim().slice(0, n);
+  const name = clean('name', 120); const zip = clean('zip', 5); const st = clean('state', 2).toUpperCase();
+  if (!name) return res.status(400).json({ error: 'Add the restaurant name.' });
+  if (!/^\d{5}$/.test(zip)) return res.status(400).json({ error: 'Add a 5-digit ZIP code.' });
+  const https = (u) => (/^https:\/\//i.test(u) ? u : '');
+  const geo = await require('../geo').lookupZip(zip);
+  const id = run(`INSERT INTO restaurants (slug, name, cuisine, phone, email, address, city, state, zip, lat, lng, timezone, description, trial_ends_at, subscription_status, listing, verified, website_url, image_url, logo_url, hours)
+    VALUES (?,?,?,?,'',?,?,?,?,?,?,?,?,?, 'expired', 'exposure', 1, ?,?,?,?)`,
+  require('./auth').slugify(name), name, places.cuisine(b.cuisine) || clean('cuisine', 40), clean('phone', 40), clean('address', 160), clean('city', 80) || (geo && geo.city) || '',
+  st || (geo && geo.state) || '', zip, geo ? geo.lat : null, geo ? geo.lng : null, places.timezoneFor(zip, st || (geo && geo.state) || 'NY'),
+  clean('description', 600), new Date().toISOString(), clean('website_url', 300), https(clean('image_url', 500)), https(clean('logo_url', 500)), clean('hours', 600)).lastInsertRowid;
+  const r = one('SELECT * FROM restaurants WHERE id = ?', id);
+  try { await require('../geo').ensureGeo(r); } catch { /* pins come later from the job */ }
+  res.status(201).json({ id, slug: r.slug, url: `/r/${r.slug}` });
+}));
+router.put('/listings/:id', wrap(async (req, res) => {
+  const r = one("SELECT id FROM restaurants WHERE id = ? AND listing = 'exposure'", Number(req.params.id));
+  if (!r) return res.status(404).json({ error: 'Not found' });
+  const sets = LISTING_FIELDS.filter((k) => req.body[k] !== undefined);
+  for (const k of sets) run(`UPDATE restaurants SET ${k} = ? WHERE id = ?`, String(req.body[k]).trim().slice(0, 600), r.id);
+  res.json({ ok: true });
+}));
+router.delete('/listings/:id', wrap(async (req, res) => {
+  const r = one("SELECT id FROM restaurants WHERE id = ? AND listing = 'exposure'", Number(req.params.id));
+  if (!r) return res.status(404).json({ error: 'Not found' });
+  for (const t of ['likes', 'gallery_photos', 'menu_items', 'images', 'reviews']) run(`DELETE FROM ${t} WHERE restaurant_id = ?`, r.id);
+  run('DELETE FROM restaurants WHERE id = ?', r.id);
+  res.json({ ok: true });
 }));
 
 // Diners' restaurant recommendations, most-asked first.

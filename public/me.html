@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/app.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%229%22 fill=%22%23c2410c%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2218%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Georgia%22%3ER%3C/text%3E%3C/svg%3E">
+<title>My Rbooked</title>
+<meta name="robots" content="noindex">
+<style>
+  .me-hi { margin: 0 0 4px; font-size: clamp(28px, 6vw, 38px); }
+  .me-stats { display: flex; gap: 10px; margin: 12px 0 18px; }
+  .me-stat { flex: 1; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px; text-align: center; }
+  .me-stat b { display: block; font: 700 26px var(--serif); }
+  .me-stat span { font-size: 13px; color: var(--muted); }
+  .me-h { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; margin: 20px 0 8px; }
+  .me-item { display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; gap: 12px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin-bottom: 8px; }
+  .me-av { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; color: #fff; font-weight: 700; background-size: cover; background-position: center; }
+  .me-item b a { color: var(--ink); text-decoration: none; }
+  .me-item .btn { white-space: nowrap; }
+  .me-stars { color: #f5a623; }
+</style>
+</head>
+<body>
+<header class="site-header"><div class="container">
+  <a class="logo" href="/"><span class="logo-mark">R</span>Rbooked</a>
+  <nav class="nav"><a href="/explore">Explore</a><a href="/login" class="btn sm nav-login" data-login>Log in</a></nav>
+</div></header>
+<main class="container" style="max-width:640px;padding-top:24px;padding-bottom:64px">
+  <div id="box"><p class="muted">Loading…</p></div>
+</main>
+<footer class="footer"><div class="container row"><span>© Rbooked</span><span class="spacer"></span><a href="/explore">Explore</a><a href="/map">Map</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/for-restaurants" class="quiet">Rbooked for Restaurants</a></div></footer>
+<script src="/js/common.js"></script>
+<script>
+(function () {
+  const { api, esc } = TB;
+  const box = document.getElementById('box');
+  const STATUS = { confirmed: 'Booked', seated: 'Seated', completed: 'Visited', cancelled: 'Cancelled', no_show: 'Missed' };
+
+  function loginForm(msg) {
+    box.innerHTML = `<div class="card"><span class="rq-pill" style="display:inline-block;background:var(--brand);color:#fff;font-weight:700;border-radius:999px;padding:4px 14px;font-size:14px">You Rbooked!</span>
+      <h1 class="serif me-hi" style="margin-top:10px">Your Rbooked</h1>
+      <p class="muted">See your bookings, the spots you've visited and your reviews. No password: we'll email you a link.</p>
+      ${msg || ''}
+      <form id="lf" novalidate><div class="field"><label for="lf-email">Your email</label><input id="lf-email" type="email" autocomplete="email" required placeholder="the email you book with"></div>
+        <div id="lf-msg" role="status"></div><button class="btn block lg" type="submit">Email me a login link</button></form>
+      <p class="small muted" style="margin:14px 0 0">Restaurant owner? <a href="/login">Restaurant login</a></p></div>`;
+    document.getElementById('lf').onsubmit = async (e) => {
+      e.preventDefault(); const b = e.target.querySelector('button'); const m = document.getElementById('lf-msg');
+      const em = document.getElementById('lf-email').value.trim();
+      b.disabled = true;
+      try { await api('/api/auth/diner/link', { body: { email: em } }); e.target.innerHTML = `<div class="alert ok-box">📬 Check <b>${esc(em)}</b> for your login link. It works for 30 minutes.</div>`; }
+      catch (err) { m.innerHTML = `<div class="alert error" style="margin-bottom:10px">${esc(err.message)}</div>`; b.disabled = false; }
+    };
+  }
+
+  const item = (x, past) => {
+    const r = x.restaurant;
+    const av = r.logo_url ? `style="background-image:url('${esc(r.logo_url).replace(/'/g, '%27')}')"` : `style="background:${esc(r.accent_color || '#c2410c')}"`;
+    let act = '';
+    if (!past) act = `<a class="btn secondary sm" href="${esc(x.manage_url)}">Manage</a>`;
+    else if (x.my_stars) act = `<a class="small" href="${esc(x.review_url || '#')}"><span class="me-stars">${'★'.repeat(x.my_stars)}</span></a>`;
+    else if (x.review_url) act = `<a class="btn sm" href="${esc(x.review_url)}">⭐ Review</a>`;
+    return `<div class="me-item"><span class="me-av" ${av}>${r.logo_url ? '' : esc(TB.initials(r.name))}</span>
+      <div style="min-width:0"><b><a href="${TB.rlink(r.slug)}">${esc(r.name)}</a></b><div class="small muted">${esc(TB.date(x.date))} · ${TB.time(x.time)} · ${x.party_size} ${x.party_size === 1 ? 'guest' : 'guests'}${past ? ` · ${STATUS[x.status] || x.status}` : ''}</div></div>${act}</div>`;
+  };
+
+  function render(d) {
+    box.innerHTML = `<h1 class="serif me-hi">Hi${d.first_name ? ` ${esc(d.first_name)}` : ''}! 👋</h1><p class="muted" style="margin:0">${esc(d.email)}</p>
+      <div class="me-stats"><div class="me-stat"><b>${d.upcoming.length}</b><span>Coming up</span></div><div class="me-stat"><b>${d.visits}</b><span>Visits</span></div><div class="me-stat"><b>${d.reviews}</b><span>Reviews</span></div></div>
+      <h2 class="me-h">Coming up</h2>${d.upcoming.length ? d.upcoming.map((x) => item(x, false)).join('') : '<div class="card muted">No bookings coming up. <a href="/">Find a table</a></div>'}
+      ${d.past.length ? `<h2 class="me-h">Past visits</h2>${d.past.map((x) => item(x, true)).join('')}` : ''}
+      <p style="margin-top:24px;text-align:center"><a href="/explore" class="btn secondary">🧭 Explore restaurants</a></p>
+      <p style="text-align:center"><button type="button" class="btn ghost sm" id="lo">Log out</button></p>`;
+    document.getElementById('lo').onclick = async () => { await api('/api/auth/diner/logout', { body: {} }).catch(() => {}); loginForm(); };
+  }
+
+  (async function () {
+    const t = TB.qs('login');
+    if (t) {
+      history.replaceState(null, '', '/me');
+      try { await api('/api/auth/diner/login', { body: { token: t } }); }
+      catch (e) { return loginForm(`<div class="alert error" style="margin-bottom:10px">${esc(e.message)}</div>`); }
+    }
+    try { const d = await api('/api/auth/diner/me'); if (d.email) render(d); else loginForm(); }
+    catch (e) { box.innerHTML = `<div class="alert error">${esc(e.message)}</div>`; }
+  })();
+})();
+</script>
+</body>
+</html>

@@ -14,7 +14,7 @@
 <body>
 <header class="site-header"><div class="container">
   <a class="logo" href="/"><span class="logo-mark">R</span>Rbooked</a>
-  <nav class="nav"><a href="/" class="hide-sm">Find a table</a><a href="/for-restaurants">For restaurants</a><a href="/login" id="nav-login"><span class="hide-xs">Restaurant login</span><span class="show-xs">Log in</span></a></nav>
+  <nav class="nav"><a href="/demo/admin.html#reservations" class="hide-xs">Try the demo</a><a href="/login" class="btn sm nav-login">Restaurant login</a></nav>
 </div></header>
 <section class="hero" style="padding-bottom:64px">
   <div class="container">
@@ -110,7 +110,8 @@
           <div id="site-out" class="find-results" role="status"></div>
         </div>
         <form id="signup-form" novalidate>
-          <input type="hidden" name="ref" id="s-ref">
+          <input type="hidden" name="ref" id="s-ref"><input type="hidden" name="claim" id="s-claim">
+          <div id="claim-note"></div>
           <div class="field"><label for="s-rname">Restaurant name</label><input id="s-rname" name="restaurant_name" required></div>
           <div class="grid-2">
             <div class="field"><label for="s-cuisine">Cuisine</label><select id="s-cuisine" name="cuisine" required><option value="">Pick a cuisine…</option></select></div>
@@ -191,6 +192,18 @@
     } catch (err) { found = null; out.innerHTML = `<div class="alert error">${TB.esc(err.message)}</div><p class="muted small">You can fill in the form below instead.</p>`; }
     btn.disabled = false;
   };
+
+  // "Is this your restaurant?" from a walk-in listing: fill in what we already know.
+  const claim = TB.qs('claim');
+  if (claim) {
+    TB.api(`/api/public/restaurants/${encodeURIComponent(claim)}`).then((d) => {
+      if (!d.exposure) return;
+      const r = d.restaurant; const set = (id, v) => { const el = document.getElementById(id); if (el && v && !el.value) el.value = v; };
+      document.getElementById('s-claim').value = r.slug;
+      set('s-rname', r.name); set('s-phone', r.phone); set('s-addr', r.address); set('s-zip', r.zip); set('s-city', r.city); set('s-state', r.state); set('s-cuisine', r.cuisine);
+      document.getElementById('claim-note').innerHTML = `<div class="alert" style="margin-bottom:12px">Taking over <b>${TB.esc(r.name)}</b>'s Rbooked page. We filled in what we know; check it and add your login.</div>`;
+    }).catch(() => {});
+  }
 
   document.getElementById('signup-form').onsubmit = async (e) => {
     e.preventDefault();

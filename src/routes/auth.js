@@ -119,6 +119,12 @@ router.post('/signup', wrap(async (req, res) => {
     return { restaurant: one('SELECT * FROM restaurants WHERE id = ?', rid), user: one('SELECT * FROM users WHERE id = ?', u.lastInsertRowid) };
   });
 
+  const claimed = b.claim && one("SELECT name, slug FROM restaurants WHERE slug = ? AND listing = 'exposure'", String(b.claim));
+  if (claimed) {
+    email.send({ to: config.supportEmail, kind: 'claim', subject: `Listing claimed: ${claimed.name}`,
+      html: email.layout(null, 'A walk-in listing was claimed', `<p><b>${email.esc(restaurant.name)}</b> (${email.esc(em)}) signed up from the listing <b>${email.esc(claimed.name)}</b> (/r/${email.esc(claimed.slug)}).</p>
+        <p>Once you've checked it's really the owner, remove the old walk-in listing on the support page so diners only see the bookable one.</p>`) }).catch(() => {});
+  }
   email.sendWelcome(restaurant, user, verifyUrl(newLink(user.id, 'verify', 24 * 7))).catch(() => {});
   auth.createSession(res, user.id);
   res.status(201).json({ ok: true, slug: restaurant.slug });
@@ -193,3 +199,4 @@ router.get('/me', (req, res) => {
 
 module.exports = router;
 module.exports.starterSetup = starterSetup;
+module.exports.slugify = slugify;

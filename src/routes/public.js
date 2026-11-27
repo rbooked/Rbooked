@@ -3,7 +3,7 @@ const express = require('express');
 const { one, all, run } = require('../db');
 const { getAvailability, findSlot } = require('../availability');
 const { createReservation, cancelReservation, BookingError } = require('../reservations');
-const { isBookable } = require('../billing');
+const { isBookable, isListed } = require('../billing');
 const { lookupZip, milesBetween } = require('../geo');
 const { nowInZone, toMin, zonedToUtc } = require('../time');
 const email = require('../email');
@@ -177,6 +177,30 @@ router.get('/map', wrap(async (req, res) => {
   })) });
 }));
 
+// Explore: every restaurant on Rbooked, including walk-in-only places (free "exposure" listings).
+router.get('/explore', wrap(async (req, res) => {
+  const zip = String(req.query.zip || '').trim();
+  const type = ['bookings', 'walkin'].includes(req.query.type) ? req.query.type : 'all';
+  const q = String(req.query.q || '').trim().toLowerCase().slice(0, 60);
+  const cuisine = places.cuisine(req.query.cuisine);
+  let rows = all('SELECT * FROM restaurants ORDER BY featured DESC, id DESC').filter(isListed);
+  if (type === 'bookings') rows = rows.filter((r) => r.listing !== 'exposure');
+  if (type === 'walkin') rows = rows.filter((r) => r.listing === 'exposure');
+  if (cuisine) rows = rows.filter((r) => r.cuisine === cuisine);
+  if (q) rows = rows.filter((r) => `${r.name} ${r.cuisine} ${r.city} ${r.zip}`.toLowerCase().includes(q));
+  const origin = /^\d{5}$/.test(zip) ? await lookupZip(zip) : null;
+  let list = rows.map((r) => ({ r, miles: origin && r.lat != null ? Math.round(milesBetween(origin, r) * 10) / 10 : (zip && r.zip === zip ? 0 : null) }));
+  if (zip) list.sort((a, b) => (a.miles ?? 9999) - (b.miles ?? 9999));
+  const rating = Object.fromEntries(all('SELECT restaurant_id AS id, COUNT(*) AS n, AVG(stars) AS avg FROM reviews WHERE hidden = 0 GROUP BY restaurant_id').map((x) => [x.id, x]));
+  res.setHeader('Cache-Control', 'public, max-age=60');
+  res.json({ origin: origin ? { city: origin.city, state: origin.state } : null, list: list.slice(0, 120).map(({ r, miles }) => ({
+    slug: r.slug, name: r.name, cuisine: r.cuisine || '', city: r.city, state: r.state, price_level: r.price_level || 0,
+    image_url: r.image_url || '', logo_url: r.logo_url || '', accent_color: r.accent_color || '', miles,
+    takes_reservations: r.listing !== 'exposure', featured: !!r.featured,
+    rating: rating[r.id] ? { n: rating[r.id].n, avg: Math.round(rating[r.id].avg * 10) / 10 } : null,
+  })) });
+}));
+
 // "Pick for me": choose restaurants from a few quick choices + time + live availability.
 router.get('/pick', wrap(async (req, res) => {
   const zip = String(req.query.zip || '').trim();
@@ -195,7 +219,9 @@ router.get('/pick', wrap(async (req, res) => {
 }));
 
 router.get('/restaurants/:slug', wrap(async (req, res) => {
-  const r = getBookableRestaurant(req.params.slug);
+  const found = one('SELECT * FROM restaurants WHERE slug = ?', String(req.params.slug));
+  const r = found && found.listing === 'exposure' && found.verified !== 0 ? found : getBookableRestaurant(req.params.slug);
+  const exposure = r.listing === 'exposure';
   const shifts = all('SELECT name, days, start_time, end_time FROM shifts WHERE restaurant_id = ? AND active = 1 ORDER BY start_time', r.id);
   const menu = all(`SELECT id, section, name, description, price_cents, tags, options FROM menu_items
     WHERE restaurant_id = ? AND available = 1 ORDER BY sort_order, id`, r.id);
@@ -214,7 +240,7 @@ router.get('/restaurants/:slug', wrap(async (req, res) => {
   const rl = counts('restaurant', [r.id])[r.id] || { likes: 0, liked: false };
   const today = nowInZone(r.timezone).date;
   const special = all("SELECT date, reason, open_time, close_time FROM closures WHERE restaurant_id = ? AND date >= ? ORDER BY date LIMIT 8", r.id, today);
-  res.json({ restaurant: { ...publicRestaurant(r), likes: rl.likes, liked: rl.liked }, shifts, menu, gallery, special, today, reviews: require('../reviews').forRestaurant(r.id) });
+  res.json({ restaurant: { ...publicRestaurant(r), likes: rl.likes, liked: rl.liked }, shifts, menu, gallery, special, today, reviews: require('../reviews').forRestaurant(r.id), exposure });
 }));
 
 // ---------- Likes ("hearts") from diners. No account needed: an anonymous id in a cookie. ----------
@@ -232,7 +258,7 @@ router.post('/like', wrap(async (req, res) => {
   const rid = kind === 'restaurant' ? id
     : (one(kind === 'dish' ? 'SELECT restaurant_id AS r FROM menu_items WHERE id = ? AND available = 1' : 'SELECT restaurant_id AS r FROM gallery_photos WHERE id = ?', id) || {}).r;
   const r = rid && one('SELECT * FROM restaurants WHERE id = ?', rid);
-  if (!r || !isBookable(r)) throw new BookingError('Not found.', 404);
+  if (!r || !isListed(r)) throw new BookingError('Not found.', 404);
   const fan = fanId(req, res);
   const had = one('SELECT id FROM likes WHERE kind = ? AND target_id = ? AND fan = ?', kind, id, fan);
   if (had) run('DELETE FROM likes WHERE id = ?', had.id);

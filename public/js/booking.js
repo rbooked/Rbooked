@@ -21,6 +21,18 @@
     if (!state.date || state.date < info.today) state.date = info.today;
     if (r.accent_color) root.style.setProperty('--brand', r.accent_color);
     const maxDate = TB.addDays(info.today, r.booking_window_days);
+    state.exposure = !!info.exposure;
+    if (state.exposure) { // walk-in-only listing: no online booking
+      if (opts.compact) { root.innerHTML = `<p>${esc(r.name)} doesn't take online reservations. Walk-ins welcome!</p>`; return state; }
+      const tel = r.phone ? `<a class="btn secondary block" href="tel:${esc(r.phone)}">📞 Call ${esc(r.name)}</a>` : '';
+      const dir = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${r.address}, ${r.city}, ${r.state} ${r.zip}`)}`;
+      root.classList.add('walkin-card');
+      root.innerHTML = `<div class="walkin-big" aria-hidden="true">🚶</div><h2 class="serif">Walk-ins welcome</h2>
+        <p class="muted">${esc(r.name)} doesn't take online reservations. Just show up, or call ahead to check the wait.</p>
+        <div style="display:grid;gap:8px;margin-top:12px">${tel}<a class="btn block" href="${dir}" target="_blank" rel="noopener">Get directions</a></div>
+        <p class="small muted" style="margin:16px 0 0">Is this your restaurant? <a href="/for-restaurants?claim=${encodeURIComponent(r.slug)}#signup">Take reservations on Rbooked</a></p>`;
+      return state;
+    }
 
     function renderPicker() {
       root.innerHTML = `

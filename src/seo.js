@@ -4,7 +4,7 @@
 const express = require('express');
 const config = require('./config');
 const { one, all } = require('./db');
-const { isBookable } = require('./billing');
+const { isBookable, isListed } = require('./billing');
 const { parseHours, hashtag } = require('../public/js/matcher');
 const OG_DEFAULT = '/img/og-rbooked.png';
 
@@ -30,8 +30,8 @@ function jsonLd(r, url) {
     priceRange: r.price_level ? '$'.repeat(r.price_level) : undefined,
     image: r.image_url ? [abs(r.image_url)] : undefined, logo: r.logo_url ? abs(r.logo_url) : undefined,
     address: { '@type': 'PostalAddress', streetAddress: r.address, addressLocality: r.city, addressRegion: r.state, postalCode: r.zip, addressCountry: 'US' },
-    acceptsReservations: 'True', keywords: hashtag(r.name) || undefined,
-    potentialAction: { '@type': 'ReserveAction', target: { '@type': 'EntryPoint', urlTemplate: url, actionPlatform: ['http://schema.org/DesktopWebPlatform', 'http://schema.org/MobileWebPlatform'] }, result: { '@type': 'FoodEstablishmentReservation', name: 'Reserve a table' } },
+    acceptsReservations: r.listing === 'exposure' ? 'False' : 'True',
+    potentialAction: r.listing === 'exposure' ? undefined : { '@type': 'ReserveAction', target: { '@type': 'EntryPoint', urlTemplate: url, actionPlatform: ['http://schema.org/DesktopWebPlatform', 'http://schema.org/MobileWebPlatform'] }, result: { '@type': 'FoodEstablishmentReservation', name: 'Reserve a table' } },
   };
   if (r.lat && r.lng) ld.geo = { '@type': 'GeoCoordinates', latitude: r.lat, longitude: r.lng };
   const h = parseHours(r.hours);
@@ -45,13 +45,14 @@ function jsonLd(r, url) {
 router.get('/r/:slug', (req, res) => {
   const r = one('SELECT * FROM restaurants WHERE slug = ?', String(req.params.slug));
   const html = restaurantTemplate();
-  if (!r || !isBookable(r)) {
+  if (!r || !isListed(r)) {
     return res.status(404).type('html').send(html.replace(HEAD, '<title>Restaurant not found · Rbooked</title>\n<meta name="robots" content="noindex">'));
   }
   const url = `${config.baseUrl}/r/${encodeURIComponent(r.slug)}`;
-  const tag = hashtag(r.name);
-  const title = `${r.name} · Book a table in ${r.city}, ${r.state} · Rbooked`;
-  const desc = (r.description || `Book a table at ${r.name}, ${r.cuisine ? `${r.cuisine} ` : ''}restaurant in ${r.city}, ${r.state}. See the menu, photos and open times, and reserve online in seconds.`).replace(/\s+/g, ' ').slice(0, 150 - tag.length) + (tag ? ` ${tag}` : '');
+  const walkin = r.listing === 'exposure';
+  const title = walkin ? `${r.name} · ${r.cuisine ? `${r.cuisine} in ` : ''}${r.city}, ${r.state} · Rbooked` : `${r.name} · Book a table in ${r.city}, ${r.state} · Rbooked`;
+  const desc = (r.description || (walkin ? `${r.name}, ${r.cuisine ? `${r.cuisine} ` : ''}restaurant in ${r.city}, ${r.state}. Walk-ins welcome. See photos, hours and directions on Rbooked.`
+    : `Book a table at ${r.name}, ${r.cuisine ? `${r.cuisine} ` : ''}restaurant in ${r.city}, ${r.state}. See the menu, photos and open times, and reserve online in seconds.`)).replace(/\s+/g, ' ').slice(0, 155);
   const img = abs(r.image_url) || abs(OG_DEFAULT);
   const head = `<title>${esc(title)}</title>
 <meta name="description" content="${esc(desc)}">
@@ -73,9 +74,9 @@ router.get('/tag/:tag', (req, res) => {
 });
 
 router.get('/sitemap.xml', (req, res) => {
-  const pages = [{ loc: '/', freq: 'daily', pri: '1.0' }, { loc: '/for-restaurants', freq: 'weekly', pri: '0.6' }, { loc: '/terms', freq: 'yearly', pri: '0.2' }, { loc: '/privacy', freq: 'yearly', pri: '0.2' }];
+  const pages = [{ loc: '/', freq: 'daily', pri: '1.0' }, { loc: '/explore', freq: 'daily', pri: '0.9' }, { loc: '/for-restaurants', freq: 'weekly', pri: '0.6' }, { loc: '/terms', freq: 'yearly', pri: '0.2' }, { loc: '/privacy', freq: 'yearly', pri: '0.2' }];
   for (const r of all('SELECT * FROM restaurants ORDER BY id')) {
-    if (isBookable(r)) pages.push({ loc: `/r/${encodeURIComponent(r.slug)}`, freq: 'daily', pri: '0.8', mod: String(r.created_at || '').slice(0, 10) });
+    if (isListed(r)) pages.push({ loc: `/r/${encodeURIComponent(r.slug)}`, freq: 'daily', pri: '0.8', mod: String(r.created_at || '').slice(0, 10) });
   }
   res.setHeader('Cache-Control', 'public, max-age=3600');
   res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>

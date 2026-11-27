@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="css/app.css">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%229%22 fill=%22%23c2410c%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2218%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Georgia%22%3ER%3C/text%3E%3C/svg%3E">
 <title>Rbooked · Book a table near you</title>
-<meta name="description" content="You Rbooked! Find food you'll love near you. Heart dishes, follow restaurants by their #hashtag, and book a table in seconds.">
+<meta name="description" content="You Rbooked! Find food you'll love near you. Heart dishes, discover new spots and book a table in seconds.">
 <link rel="canonical" href="https://rbooked.com/">
 <meta property="og:type" content="website"><meta property="og:site_name" content="Rbooked"><meta property="og:url" content="https://rbooked.com/">
 <meta property="og:title" content="You Rbooked! · Book a table near you"><meta property="og:image" content="https://rbooked.com/img/og-rbooked.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><meta property="og:description" content="Find food you'll love, follow restaurants by their #hashtag, and book a table in seconds.">
@@ -16,13 +16,13 @@
 <body class="home">
 <header class="site-header"><div class="container">
   <a class="logo" href="index.html"><span class="logo-mark">R</span>Rbooked</a>
-  <nav class="nav"><a href="index.html" class="hide-sm">Find a table</a><a href="for-restaurants.html">For restaurants</a><a href="login.html" id="nav-login"><span class="hide-xs">Restaurant login</span><span class="show-xs">Log in</span></a></nav>
+  <nav class="nav"><a href="index.html">Explore</a><a href="admin.html" class="btn sm nav-login">Restaurant dashboard</a></nav>
 </div></header>
 <section class="hero">
   <div class="container">
     <p class="slogan" aria-hidden="true">You Rbooked!</p>
     <h1>Find food you'll love. Book it in seconds.</h1>
-    <p>Heart the dishes you crave, follow your favorite spots by their <b>#hashtag</b>, and grab a table near you.</p>
+    <p>Heart the dishes you crave, discover new spots and grab a table near you.</p>
     <form class="tag-find" id="tag-find" role="search"><span aria-hidden="true">#</span><input id="tag-in" placeholder="Got a restaurant's hashtag? e.g. QueenMamasKitchen" aria-label="Find a restaurant by its hashtag" autocapitalize="off" autocorrect="off" spellcheck="false"><button class="btn sm" type="submit">Go</button></form>
     <p class="tag-miss" id="tag-miss" hidden></p>
     <div class="mode-tabs" role="tablist" aria-label="How do you want to find a table?">
@@ -60,10 +60,6 @@
     <div class="reel" id="reel"><div class="reel-track" id="reel-track"></div><span class="reel-mark" aria-hidden="true"></span></div>
     <div class="spin-out" id="spin-out" aria-live="polite"></div>
   </section>
-  <section class="section hidden" id="map-wrap">
-    <div class="row" style="align-items:baseline"><h2 class="serif" style="font-size:26px;margin:0">On the map</h2><span class="muted small" id="map-where"></span></div>
-    <div class="map-card"><div class="rb-map" id="home-map" role="region" aria-label="Map of restaurants"></div></div>
-  </section>
   <section class="section hidden" id="featured-wrap">
     <div class="row" style="align-items:baseline"><h2 class="serif" style="font-size:26px;margin:0">Featured restaurants</h2><span class="muted small" id="featured-where"></span></div>
     <div class="featured" id="featured"><p class="muted">Loading…</p></div>
@@ -71,6 +67,9 @@
   <section class="section hidden" id="trend-wrap">
     <div class="row" style="align-items:baseline"><h2 class="serif" style="font-size:26px;margin:0">Dishes diners love</h2><span class="muted small" id="trend-where"></span></div>
     <div class="trend-grid" id="trend"></div>
+  </section>
+  <section class="section">
+    <a class="card explore-teaser" href="index.html"><span class="ex-ic" aria-hidden="true">🧭</span><span><b>Explore every spot</b><span class="muted small">Places that take reservations and walk-in favorites, all in one list.</span></span><span class="rec-go" aria-hidden="true">›</span></a>
   </section>
   <section class="section" id="recommend">
     <details class="card rec-card" id="rec-box">
@@ -96,13 +95,12 @@
   </section>
 
 </main>
-<footer class="footer"><div class="container row"><span>© Rbooked</span><span class="spacer"></span><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="for-restaurants.html">For restaurants</a><a href="login.html">Restaurant login</a></div></footer>
+<footer class="footer"><div class="container row"><span>© Rbooked</span><span class="spacer"></span><a href="index.html">Explore</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="for-restaurants.html" class="quiet">Rbooked for Restaurants</a></div></footer>
 <script src="js/matcher.js"></script>
 <script src="js/places.js"></script>
 <script src="js/samples.js"></script>
 <script src="mock-api.js"></script>
 <script src="js/common.js"></script>
-<script src="js/rbmap.js"></script>
 <script src="js/matcher.js"></script>
 <script src="js/places.js"></script>
 <script>
@@ -308,7 +306,8 @@
   const cache = new Map();
   const getOnce = (url) => { if (!cache.has(url)) cache.set(url, api(url).catch((e) => { cache.delete(url); throw e; })); return cache.get(url); };
   const mapUrl = () => { const z = f.zip.value.trim(); return '/api/public/map' + (/^\d{5}$/.test(z) ? `?zip=${z}` : ''); };
-  async function loadMap() {
+  async function loadMap() { /* the map now lives on /map (footer link) */ }
+  async function loadMapOld() {
     const zip = f.zip.value.trim();
     try {
       const data = await getOnce(mapUrl());

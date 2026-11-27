@@ -274,6 +274,15 @@ CREATE TABLE IF NOT EXISTS reviews (
 );
 CREATE INDEX IF NOT EXISTS idx_reviews_restaurant ON reviews(restaurant_id, hidden);
 
+-- Diner sign-in by email link: 'link' rows are one-time links, 'session' rows are logged-in browsers.
+CREATE TABLE IF NOT EXISTS diner_tokens (
+  token_hash TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Small notes the system keeps for itself (last backup day, last alert times).
 CREATE TABLE IF NOT EXISTS ops_kv (
   key TEXT PRIMARY KEY,
@@ -311,6 +320,7 @@ function migrate(d) {
   for (const [c, def] of [['website_url', "''"], ['logo_url', "''"], ['hours', "''"]]) if (!cols.has(c)) d.exec(`ALTER TABLE restaurants ADD COLUMN ${c} TEXT DEFAULT ${def}`);
   if (!cols.has('featured')) d.exec('ALTER TABLE restaurants ADD COLUMN featured INTEGER DEFAULT 0');
   if (!cols.has('referred_by')) { d.exec('ALTER TABLE restaurants ADD COLUMN referred_by INTEGER'); d.exec('ALTER TABLE restaurants ADD COLUMN referral_credited INTEGER DEFAULT 0'); d.exec('ALTER TABLE restaurants ADD COLUMN free_months INTEGER DEFAULT 0'); }
+  if (!cols.has('listing')) d.exec("ALTER TABLE restaurants ADD COLUMN listing TEXT DEFAULT 'bookings'"); // 'exposure' = walk-in-only listing added by support
   if (!cols.has('verified')) d.exec('ALTER TABLE restaurants ADD COLUMN verified INTEGER DEFAULT 1');
   try { const ucols = new Set(d.all('PRAGMA table_info(users)').map((c) => c.name)); if (ucols.size && !ucols.has('email_verified')) d.exec('ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 1'); } catch { /* */ }
   if (!cols.has('geo_addr')) d.exec("ALTER TABLE restaurants ADD COLUMN geo_addr TEXT DEFAULT ''");

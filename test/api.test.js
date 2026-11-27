@@ -574,7 +574,7 @@ test('search engines: restaurant pages, sitemap and robots', async () => {
   const name = (await call('GET', '/api/admin/restaurant')).data.restaurant.name;
   const go = await fetch(`${base}/tag/${hashtag(name).slice(1).toLowerCase()}`, { redirect: 'manual' });
   assert.strictEqual(go.status, 302); assert.strictEqual(go.headers.get('location'), `/r/${slug}`);
-  assert.ok(html.includes(hashtag(name)), 'hashtag in the page description');
+  assert.ok(!html.includes(`${hashtag(name)}"`), 'hashtags are paused: not in the page description');
 });
 
 test('map: pins sit on the street address, looked up once', async () => {
@@ -732,4 +732,55 @@ test('verified reviews: only seated Rbooked guests, once, restaurant replies, su
   const after2 = await (await fetch(`${base}/api/public/restaurants/${r.slug}`)).json();
   assert.strictEqual(after2.reviews.count, 0);
   run('UPDATE reviews SET hidden = 0 WHERE id = ?', id);
+});
+
+test('explore: walk-in-only listings from support show up, never take bookings', async () => {
+  process.env.STAFF_API_KEY = 'k'.repeat(40);
+  const staff = (method, url, body) => fetch(base + url, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${'k'.repeat(40)}` }, body: body ? JSON.stringify(body) : undefined });
+  const add = await staff('POST', '/api/staff/listings', { name: 'Corner Taqueria', zip: '10011', city: 'New York', state: 'NY', cuisine: 'Mexican', phone: '555-111-2222', address: '9 Side St' });
+  assert.strictEqual(add.status, 201);
+  const { slug, id } = await add.json();
+  const all = await (await fetch(`${base}/api/public/explore`)).json();
+  const hit = all.list.find((x) => x.slug === slug);
+  assert.ok(hit); assert.strictEqual(hit.takes_reservations, false);
+  assert.ok(all.list.some((x) => x.takes_reservations), 'bookable restaurants listed too');
+  const walk = await (await fetch(`${base}/api/public/explore?type=walkin`)).json();
+  assert.ok(walk.list.every((x) => !x.takes_reservations));
+  const book = await (await fetch(`${base}/api/public/explore?type=bookings`)).json();
+  assert.ok(!book.list.some((x) => x.slug === slug));
+  const page = await (await fetch(`${base}/api/public/restaurants/${slug}`)).json();
+  assert.strictEqual(page.exposure, true);
+  assert.notStrictEqual((await fetch(`${base}/api/public/restaurants/${slug}/availability?date=${tomorrow}&party=2`)).status, 200);
+  const bk = await fetch(`${base}/api/public/restaurants/${slug}/reservations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: tomorrow, time: '19:00', party_size: 2, guest_name: 'X Y', guest_email: 'x@example.com', guest_phone: '5551112222' }) });
+  assert.notStrictEqual(bk.status, 201);
+  const html = await (await fetch(`${base}/r/${slug}`)).text();
+  assert.ok(html.includes('Walk-ins welcome'));
+  assert.ok(!(await (await staff('GET', '/api/staff/restaurants')).json()).some((x) => x.slug === slug), 'not in the restaurant accounts list');
+  assert.strictEqual((await staff('DELETE', `/api/staff/listings/${id}`)).status, 200);
+  assert.strictEqual((await fetch(`${base}/api/public/restaurants/${slug}`)).status, 404);
+  delete process.env.STAFF_API_KEY;
+});
+
+test('diner login: email link, one-time, shows only their own bookings', async () => {
+  const post = (url, body, c) => fetch(base + url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(c ? { Cookie: c } : {}) }, body: JSON.stringify(body) });
+  assert.strictEqual((await post('/api/auth/diner/link', { email: 'nope' })).status, 400);
+  assert.strictEqual((await post('/api/auth/diner/link', { email: 'Maria@Example.com' })).status, 200);
+  assert.strictEqual((await post('/api/auth/diner/link', { email: 'maria@example.com' })).status, 200); // no second email within 2 minutes
+  const sent = require('../src/db').all("SELECT html FROM email_log WHERE kind = 'diner_login' AND to_addr = 'maria@example.com'");
+  assert.strictEqual(sent.length, 1);
+  const token = decodeURIComponent(/me\?login=([^"&]+)/.exec(sent[0].html)[1]);
+  const anon = await (await fetch(`${base}/api/auth/diner/me`)).json();
+  assert.strictEqual(anon.email, null);
+  const lg = await post('/api/auth/diner/login', { token });
+  assert.strictEqual(lg.status, 200);
+  const c = lg.headers.get('set-cookie').split(';')[0];
+  assert.strictEqual((await post('/api/auth/diner/login', { token })).status, 400, 'link works once');
+  const me = await (await fetch(`${base}/api/auth/diner/me`, { headers: { Cookie: c } })).json();
+  assert.strictEqual(me.email, 'maria@example.com');
+  const allMine = [...me.upcoming, ...me.past];
+  assert.ok(allMine.length >= 1);
+  assert.ok(!JSON.stringify(me).includes('private@example.com'));
+  assert.ok(me.reviews >= 1, 'her review from the reviews test counts');
+  await post('/api/auth/diner/logout', {}, c);
+  assert.strictEqual((await (await fetch(`${base}/api/auth/diner/me`, { headers: { Cookie: c } })).json()).email, null);
 });

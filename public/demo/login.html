@@ -10,11 +10,12 @@
 <body>
 <header class="site-header"><div class="container">
   <a class="logo" href="index.html"><span class="logo-mark">R</span>Rbooked</a>
-  <nav class="nav"><a href="index.html" class="hide-sm">Find a table</a><a href="for-restaurants.html">For restaurants</a><a href="login.html" id="nav-login"><span class="hide-xs">Restaurant login</span><span class="show-xs">Log in</span></a></nav>
+  <nav class="nav"><a href="index.html">Explore</a><a href="admin.html" class="btn sm nav-login">Restaurant dashboard</a></nav>
 </div></header>
 <main class="container" style="max-width:440px;padding:48px 16px 80px">
   <div class="card">
     <h1 style="font-size:28px">Restaurant login</h1>
+    <p class="small muted" style="margin:-6px 0 14px">Booked a table as a diner? <a href="/me">Log in here instead</a>.</p>
     <form id="login">
       <div class="field"><label for="l-email">Email</label><input id="l-email" name="email" type="email" autocomplete="email" required></div>
       <div class="field"><label for="l-pw">Password</label><input id="l-pw" name="password" type="password" autocomplete="current-password" required></div>
@@ -27,7 +28,7 @@
     <p class="muted small hidden" id="demo-hint">Demo account: demo@rbooked.test / demo1234</p>
   </div>
 </main>
-<footer class="footer"><div class="container row"><span>© Rbooked</span><span class="spacer"></span><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="for-restaurants.html">List your restaurant</a><a href="login.html">Restaurant login</a></div></footer>
+<footer class="footer"><div class="container row"><span>© Rbooked</span><span class="spacer"></span><a href="index.html">Explore</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="for-restaurants.html" class="quiet">Rbooked for Restaurants</a></div></footer>
 <script src="js/matcher.js"></script>
 <script src="js/places.js"></script>
 <script src="js/samples.js"></script>

@@ -111,5 +111,18 @@
   TB.partyOptions = (sel = 2, max = 20) => Array.from({ length: max }, (_, i) => i + 1)
     .map((n) => `<option value="${n}"${n === Number(sel) ? ' selected' : ''}>${n} ${n === 1 ? 'person' : 'people'}</option>`).join('');
 
+  // One "Log in" button for everyone: pick diner or restaurant.
+  TB.loginChooser = () => TB.modal(`<h2 class="serif" style="margin:0 0 4px">Log in to Rbooked</h2><p class="muted" style="margin:0 0 14px">Who's logging in?</p>
+    <div class="who-pick">
+      <a class="who" href="/me"><span class="who-ic" aria-hidden="true">🍽️</span><span><b>I'm a diner</b><small>Your bookings, visits and reviews</small></span><span class="who-go" aria-hidden="true">›</span></a>
+      <a class="who" href="/login"><span class="who-ic" aria-hidden="true">🏪</span><span><b>I'm a restaurant</b><small>Reservations, floor plan and your page</small></span><span class="who-go" aria-hidden="true">›</span></a>
+    </div>
+    <p class="small muted" style="margin:14px 0 0;text-align:center">Own a restaurant? <a href="/for-restaurants">Rbooked for Restaurants</a></p>`);
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest('[data-login]');
+    if (!a || e.metaKey || e.ctrlKey) return;
+    e.preventDefault(); TB.loginChooser();
+  });
+
   window.TB = TB;
 })();

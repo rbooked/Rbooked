@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/app.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%229%22 fill=%22%23c2410c%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2218%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Georgia%22%3ER%3C/text%3E%3C/svg%3E">
+<title>Explore restaurants · Rbooked</title>
+<meta name="description" content="Explore restaurants on Rbooked: book a table online or find walk-in favorites near you.">
+<link rel="canonical" href="https://rbooked.com/explore">
+<style>
+  .ex-head h1 { margin: 0 0 4px; font-size: clamp(28px, 6vw, 40px); }
+  .ex-bar { display: grid; grid-template-columns: minmax(0, 1fr) 120px; gap: 8px; margin: 14px 0 10px; }
+  .ex-chips { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px; }
+  .ex-chips::-webkit-scrollbar { display: none; }
+  .ex-chip { flex: none; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 8px 14px; font: 600 14px var(--font); cursor: pointer; color: var(--ink); min-height: 40px; }
+  .ex-chip.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .ex-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 14px; margin: 16px 0 40px; }
+  .ex-card { display: block; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; text-decoration: none; color: var(--ink); }
+  .ex-card:hover { border-color: var(--brand); }
+  .ex-ph { aspect-ratio: 16 / 10; background-size: cover; background-position: center; position: relative; display: grid; place-items: center; color: #fff; font: 700 32px var(--serif); }
+  .ex-ph img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .ex-pill { position: absolute; left: 10px; top: 10px; font: 700 12px var(--font); border-radius: 999px; padding: 3px 10px; background: rgba(255,255,255,.95); color: var(--ink); }
+  .ex-pill.book { background: var(--brand); color: #fff; }
+  .ex-pill.walk { background: #ccfbf1; color: #0f766e; }
+  @media (max-width: 560px) { .ex-ph { aspect-ratio: 2 / 1; } }
+  .ex-tx { padding: 12px 14px 14px; }
+  .ex-tx b { display: block; font-size: 17px; }
+  .ex-tx .muted { font-size: 14px; }
+  .ex-stars { color: #f5a623; font-weight: 700; font-size: 14px; }
+</style>
+</head>
+<body>
+<header class="site-header"><div class="container">
+  <a class="logo" href="/"><span class="logo-mark">R</span>Rbooked</a>
+  <nav class="nav"><a href="/explore">Explore</a><a href="/login" class="btn sm nav-login" data-login>Log in</a></nav>
+</div></header>
+<main class="container" style="padding-top:24px">
+  <div class="ex-head"><h1 class="serif">Explore</h1><p class="muted" style="margin:0">Every spot on Rbooked. Book a table online, or find walk-in favorites.</p></div>
+  <form class="ex-bar" id="ex-form" role="search">
+    <input id="ex-q" type="search" placeholder="Name, food or city" aria-label="Search restaurants" autocomplete="off">
+    <input id="ex-zip" inputmode="numeric" maxlength="5" placeholder="ZIP" aria-label="ZIP code" autocomplete="postal-code">
+  </form>
+  <div class="ex-chips" role="group" aria-label="Filter">
+    <button type="button" class="ex-chip on" data-type="all">All</button>
+    <button type="button" class="ex-chip" data-type="bookings">📅 Takes reservations</button>
+    <button type="button" class="ex-chip" data-type="walkin">🚶 Walk-in only</button>
+  </div>
+  <div class="ex-grid" id="ex-list"><p class="muted">Loading…</p></div>
+</main>
+<footer class="footer"><div class="container row"><span>© Rbooked</span><span class="spacer"></span><a href="/explore">Explore</a><a href="/map">Map</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/for-restaurants" class="quiet">Rbooked for Restaurants</a></div></footer>
+<script src="/js/common.js"></script>
+<script>
+(function () {
+  const { api, esc } = TB;
+  let type = TB.qs('type') || 'all'; let t;
+  const zipIn = document.getElementById('ex-zip'); const qIn = document.getElementById('ex-q');
+  try { zipIn.value = TB.qs('zip') || localStorage.getItem('rb_zip') || ''; } catch { /* */ }
+  const card = (r) => {
+    const ph = r.image_url ? `<img src="${esc(r.image_url)}" alt="" loading="lazy" decoding="async">` : esc(TB.initials(r.name) || 'R');
+    return `<a class="ex-card" href="${TB.rlink(r.slug)}">
+      <div class="ex-ph" style="background:linear-gradient(135deg, ${esc(r.accent_color || '#c2410c')}, #2b1a10)">${ph}
+        <span class="ex-pill ${r.takes_reservations ? 'book' : 'walk'}">${r.takes_reservations ? 'Book online' : 'Walk-ins welcome'}</span></div>
+      <div class="ex-tx"><b>${esc(r.name)}</b><div class="muted">${esc([r.cuisine, r.city].filter(Boolean).join(' · '))}${r.price_level ? ` · ${TB.price(r.price_level)}` : ''}${r.miles != null ? ` · ${r.miles} mi` : ''}</div>
+        ${r.rating ? `<div class="ex-stars">★ ${r.rating.avg} <span class="muted">(${r.rating.n})</span></div>` : ''}</div></a>`;
+  };
+  async function load() {
+    const box = document.getElementById('ex-list');
+    const z = zipIn.value.trim();
+    try {
+      const d = await api(`/api/public/explore?type=${type}&q=${encodeURIComponent(qIn.value.trim())}${/^\d{5}$/.test(z) ? `&zip=${z}` : ''}`);
+      box.innerHTML = d.list.length ? d.list.map(card).join('')
+        : `<div class="card" style="grid-column:1/-1;text-align:center"><p style="margin:0 0 8px">No spots match yet.</p><a href="/#recommend">Recommend your favorite restaurant</a></div>`;
+    } catch (e) { box.innerHTML = `<div class="alert error">${esc(e.message)}</div>`; }
+  }
+  document.querySelectorAll('.ex-chip').forEach((b) => {
+    b.classList.toggle('on', b.dataset.type === type);
+    b.onclick = () => { type = b.dataset.type; document.querySelectorAll('.ex-chip').forEach((x) => x.classList.toggle('on', x === b)); load(); };
+  });
+  qIn.oninput = () => { clearTimeout(t); t = setTimeout(load, 250); };
+  zipIn.oninput = () => { const z = zipIn.value.trim(); if (!z || /^\d{5}$/.test(z)) { try { localStorage.setItem('rb_zip', z); } catch { /* */ } load(); } };
+  document.getElementById('ex-form').onsubmit = (e) => { e.preventDefault(); load(); };
+  load();
+})();
+</script>
+</body>
+</html>

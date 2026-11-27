@@ -22,6 +22,7 @@ const billingOff = () => config.isProduction && !stripe();
 function isBookable(r) {
   if (!r) return false;
   if (r.verified === 0) return false; // owner hasn't confirmed their email yet
+  if (r.listing === 'exposure') return false; // walk-in-only listing: shown, never booked
   if (billingOff()) return true;
   if (r.subscription_status === 'active' || r.subscription_status === 'past_due') return true;
   if (r.subscription_status === 'trialing') return new Date(r.trial_ends_at) > new Date();
@@ -131,4 +132,7 @@ async function webhook(req, res) {
   res.json({ received: true });
 }
 
-module.exports = { billingOff, isBookable, billingSummary, createCheckout, createPortal, webhook, stripe };
+/** Shown to diners: bookable restaurants plus walk-in-only listings. */
+const isListed = (r) => !!r && r.verified !== 0 && (r.listing === 'exposure' || isBookable(r));
+
+module.exports = { billingOff, isBookable, isListed, billingSummary, createCheckout, createPortal, webhook, stripe };
