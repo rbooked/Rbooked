@@ -814,3 +814,42 @@ test('walk-ins only switch hides booking; restaurant inquiries are emailed', asy
   assert.ok(mails[0].html.includes('for-restaurants?name=Taco'));
   assert.ok(one("SELECT id FROM email_log WHERE kind = 'lead_notice'"));
 });
+
+test('online guests can never double book; only staff can', async () => {
+  const day = addDays(tomorrow, 12);
+  const av = await call('GET', `/api/public/restaurants/test-bistro/availability?date=${day}&party=2`, null, false);
+  const time = av.data.slots.find((s) => s.available).time;
+  // 30 diners hit "Book" for the same time at the same moment.
+  const tries = await Promise.all(Array.from({ length: 30 }, (_, i) => call('POST', '/api/public/restaurants/test-bistro/reservations',
+    { date: day, time, party_size: 2, name: `Rush ${i}`, email: `rush${i}@example.com`, phone: '5553334444' }, false)));
+  const ok = tries.filter((t) => t.status === 201);
+  assert.ok(ok.length >= 1 && ok.length < 30);
+  assert.ok(tries.every((t) => t.status === 201 || t.status === 409));
+  const rows = (await call('GET', `/api/admin/reservations?date=${day}`)).data.reservations.filter((x) => x.time === time);
+  const seats = rows.map((x) => x.table_id || `c${x.combo_id}`);
+  assert.strictEqual(new Set(seats).size, seats.length, 'two online guests share a table');
+  const after = await call('GET', `/api/public/restaurants/test-bistro/availability?date=${day}&party=2`, null, false);
+  assert.strictEqual(after.data.slots.find((s) => s.time === time).available, false);
+  // Staff keep adding people (they go wherever, then without a table)...
+  for (let i = 0; i < 12; i++) assert.strictEqual((await call('POST', '/api/admin/reservations', { source: 'phone', date: day, time, party_size: 2, name: `Extra ${i}`, email: `x${i}@example.com`, phone: '5553335555' })).status, 201);
+  // ...so when one online guest cancels, that table goes to a waiting party, not back online.
+  await call('POST', `/api/admin/reservations/${ok[0].data.id || rows[0].id}/cancel`, {});
+  const still = await call('GET', `/api/public/restaurants/test-bistro/availability?date=${day}&party=2`, null, false);
+  assert.strictEqual(still.data.slots.find((s) => s.time === time).available, false);
+});
+
+test('a seated party running over time keeps its table blocked online', () => {
+  const { isSeatingFree } = require('../src/availability');
+  const r = one("SELECT * FROM restaurants WHERE slug = 'test-bistro'");
+  const now = nowInZone(r.timezone);
+  if (now.minutes < 200 || now.minutes > 1380) return; // needs room in today's clock either side
+  const t = one('SELECT id FROM tables WHERE restaurant_id = ? AND active = 1 ORDER BY id DESC LIMIT 1', r.id);
+  const hh = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  const start = hh(now.minutes - 180);
+  run(`INSERT INTO reservations (code, manage_token, restaurant_id, table_id, date, time, starts_at_utc, duration_minutes, party_size, guest_name, guest_email, guest_phone, source, status)
+       VALUES ('OVERTM', 'overtime-token', ?, ?, ?, ?, ?, 90, 2, 'Still Here', 'still@example.com', '5550000000', 'walk_in', 'seated')`,
+  r.id, t.id, now.date, start, new Date().toISOString());
+  assert.strictEqual(isSeatingFree(r.id, { tableId: t.id }, now.date, hh(now.minutes + 10), 90), false);
+  run("UPDATE reservations SET status = 'completed' WHERE code = 'OVERTM'");
+  assert.strictEqual(isSeatingFree(r.id, { tableId: t.id }, now.date, hh(now.minutes + 10), 90), true);
+});

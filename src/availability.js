@@ -44,9 +44,40 @@ function occupiedTables(res, combos) {
   return res.table_id ? [res.table_id] : [];
 }
 
+// A seated party that is running over time keeps its table: treat it as staying at least this much longer.
+const OVERTIME_HOLD_MIN = 30;
+
 function activeReservations(restaurantId, date, ignoreId = 0) {
-  return all(`SELECT id, table_id, combo_id, time, duration_minutes, party_size, shift_id FROM reservations
+  const rows = all(`SELECT id, table_id, combo_id, time, duration_minutes, party_size, shift_id, status FROM reservations
      WHERE restaurant_id = ? AND date = ? AND status IN ${ACTIVE} AND id != ?`, restaurantId, date, ignoreId);
+  const r = one('SELECT timezone FROM restaurants WHERE id = ?', restaurantId);
+  const now = nowInZone((r && r.timezone) || 'America/New_York');
+  if (date !== now.date) return rows;
+  return rows.map((x) => {
+    if (x.status !== 'seated') return x;
+    const until = Math.max(toMin(x.time) + x.duration_minutes, now.minutes + OVERTIME_HOLD_MIN);
+    return { ...x, duration_minutes: until - toMin(x.time) };
+  });
+}
+
+/**
+ * Staff can add bookings with no table when the room is full. Online, those
+ * parties still need somewhere to sit: only offer a table if, after taking it,
+ * every unassigned party at that time can still be placed on a free table.
+ */
+function roomForUnassigned(pick, options, reservations, combos, startMin, duration) {
+  const waiting = reservations.filter((r) => !r.table_id && !r.combo_id
+    && toMin(r.time) < startMin + duration && toMin(r.time) + r.duration_minutes > startMin)
+    .sort((a, b) => b.party_size - a.party_size);
+  if (!waiting.length) return true;
+  const used = new Set(pick.tableIds);
+  for (const w of waiting) {
+    const o = options.find((x) => w.party_size <= x.max && x.tableIds.every((id) => !used.has(id))
+      && tablesFree(x.tableIds, reservations, combos, Math.max(startMin, toMin(w.time)), Math.min(duration, w.duration_minutes)));
+    if (!o) return false;
+    o.tableIds.forEach((id) => used.add(id));
+  }
+  return true;
 }
 
 /** Are all of these tables free between start and start+duration? */
@@ -77,6 +108,16 @@ function seatingOptions(restaurantId, party, admin) {
   return [...tables, ...combos];
 }
 
+/** Every active table and combination, smallest first (for placing parties staff added without a table). */
+function allSeating(restaurantId) {
+  const t = all('SELECT id, max_seats FROM tables WHERE restaurant_id = ? AND active = 1 ORDER BY max_seats, id', restaurantId)
+    .map((x) => ({ tableIds: [x.id], max: x.max_seats }));
+  const active = new Set(t.map((x) => x.tableIds[0]));
+  const c = all('SELECT table_ids, max_seats FROM table_combos WHERE restaurant_id = ? AND active = 1 ORDER BY max_seats, id', restaurantId)
+    .map((x) => ({ tableIds: memberIds(x), max: x.max_seats })).filter((x) => x.tableIds.length && x.tableIds.every((id) => active.has(id)));
+  return [...t, ...c];
+}
+
 /**
  * Compute bookable slots for a date and party size.
  * opts.admin: include tables not bookable online, ignore notice/window rules.
@@ -98,6 +139,8 @@ function getAvailability(restaurant, date, partySize, opts = {}) {
   const options = seatingOptions(restaurant.id, party, opts.admin);
   const reservations = activeReservations(restaurant.id, date, opts.ignoreReservationId || 0);
   const combos = comboMap(restaurant.id);
+  // Any table (online or not) can take a party staff added without a table.
+  const waitOptions = opts.admin ? [] : allSeating(restaurant.id);
 
   for (const shift of shiftsForDate(restaurant.id, date)) {
     // How long this party holds the table: set by party size, or the service's turn time.
@@ -114,7 +157,8 @@ function getAvailability(restaurant, date, partySize, opts = {}) {
       }
       let pick = null;
       if (available) {
-        pick = options.find((o) => tablesFree(o.tableIds, reservations, combos, t, duration)) || null;
+        pick = options.find((o) => tablesFree(o.tableIds, reservations, combos, t, duration)
+          && (opts.admin || roomForUnassigned(o, waitOptions, reservations, combos, t, duration))) || null;
         if (!pick) available = false;
       }
       result.slots.push({
