@@ -3,7 +3,7 @@ const express = require('express');
 const { one, all, run } = require('../db');
 const { getAvailability, findSlot } = require('../availability');
 const { createReservation, cancelReservation, BookingError } = require('../reservations');
-const { isBookable, isListed } = require('../billing');
+const { isBookable, isListed, isWalkIn } = require('../billing');
 const { lookupZip, milesBetween } = require('../geo');
 const { nowInZone, toMin, zonedToUtc } = require('../time');
 const email = require('../email');
@@ -177,6 +177,29 @@ router.get('/map', wrap(async (req, res) => {
   })) });
 }));
 
+// Restaurants on /for-restaurants: "Send me a signup link" or "Request more info". Both are emailed; support is told.
+router.post('/lead', wrap(async (req, res) => {
+  const b = req.body || {};
+  if (b.company) return res.json({ ok: true }); // robots fill hidden fields
+  const name = String(b.name || '').trim().slice(0, 120);
+  const em = String(b.email || '').trim().toLowerCase().slice(0, 160);
+  if (!name) throw new BookingError("Enter your restaurant's name.");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) throw new BookingError('Please enter a valid email address.');
+  const want = b.want === 'info' ? 'info' : 'signup';
+  let website = String(b.website || '').trim().slice(0, 300);
+  if (website && !/^https?:\/\//i.test(website)) website = `https://${website}`;
+  const claim = String(b.claim || '').trim().slice(0, 80);
+  if (one("SELECT id FROM leads WHERE email = ? AND want = ? AND created_at > datetime('now', '-10 minutes')", em, want)) return res.json({ ok: true, want });
+  run('INSERT INTO leads (name, website, email, phone, want, claim) VALUES (?,?,?,?,?,?)', name, website, em, String(b.phone || '').trim().slice(0, 40), want, claim);
+  const q = new URLSearchParams({ name, email: em, ...(website ? { website } : {}), ...(claim ? { claim } : {}) });
+  const signupUrl = `${config.baseUrl}/for-restaurants?${q.toString()}#signup`;
+  await email.sendLeadEmail({ name, email: em, want }, signupUrl);
+  email.send({ to: config.supportEmail, kind: 'lead_notice', subject: `${want === 'info' ? 'Info request' : 'Signup link sent'}: ${name}`,
+    html: email.layout(null, want === 'info' ? 'A restaurant asked for more info' : 'A restaurant asked for a signup link', `<p><b>${email.esc(name)}</b><br>${email.esc(em)}${website ? `<br>${email.esc(website)}` : ''}${claim ? `<br>Matches the walk-in listing /r/${email.esc(claim)}` : ''}</p>
+      <p>We already emailed them ${want === 'info' ? 'the details and a link to start their free trial' : 'their signup link'}. You can follow up by replying to them directly.</p>`) }).catch(() => {});
+  res.json({ ok: true, want });
+}));
+
 // Explore: every restaurant on Rbooked, including walk-in-only places (free "exposure" listings).
 router.get('/explore', wrap(async (req, res) => {
   const zip = String(req.query.zip || '').trim();
@@ -184,8 +207,8 @@ router.get('/explore', wrap(async (req, res) => {
   const q = String(req.query.q || '').trim().toLowerCase().slice(0, 60);
   const cuisine = places.cuisine(req.query.cuisine);
   let rows = all('SELECT * FROM restaurants ORDER BY featured DESC, id DESC').filter(isListed);
-  if (type === 'bookings') rows = rows.filter((r) => r.listing !== 'exposure');
-  if (type === 'walkin') rows = rows.filter((r) => r.listing === 'exposure');
+  if (type === 'bookings') rows = rows.filter((r) => !isWalkIn(r));
+  if (type === 'walkin') rows = rows.filter(isWalkIn);
   if (cuisine) rows = rows.filter((r) => r.cuisine === cuisine);
   if (q) rows = rows.filter((r) => `${r.name} ${r.cuisine} ${r.city} ${r.zip}`.toLowerCase().includes(q));
   const origin = /^\d{5}$/.test(zip) ? await lookupZip(zip) : null;
@@ -196,7 +219,7 @@ router.get('/explore', wrap(async (req, res) => {
   res.json({ origin: origin ? { city: origin.city, state: origin.state } : null, list: list.slice(0, 120).map(({ r, miles }) => ({
     slug: r.slug, name: r.name, cuisine: r.cuisine || '', city: r.city, state: r.state, price_level: r.price_level || 0,
     image_url: r.image_url || '', logo_url: r.logo_url || '', accent_color: r.accent_color || '', miles,
-    takes_reservations: r.listing !== 'exposure', featured: !!r.featured,
+    takes_reservations: !isWalkIn(r), featured: !!r.featured,
     rating: rating[r.id] ? { n: rating[r.id].n, avg: Math.round(rating[r.id].avg * 10) / 10 } : null,
   })) });
 }));
@@ -220,8 +243,8 @@ router.get('/pick', wrap(async (req, res) => {
 
 router.get('/restaurants/:slug', wrap(async (req, res) => {
   const found = one('SELECT * FROM restaurants WHERE slug = ?', String(req.params.slug));
-  const r = found && found.listing === 'exposure' && found.verified !== 0 ? found : getBookableRestaurant(req.params.slug);
-  const exposure = r.listing === 'exposure';
+  const r = found && isWalkIn(found) && found.verified !== 0 ? found : getBookableRestaurant(req.params.slug);
+  const exposure = isWalkIn(r);
   const shifts = all('SELECT name, days, start_time, end_time FROM shifts WHERE restaurant_id = ? AND active = 1 ORDER BY start_time', r.id);
   const menu = all(`SELECT id, section, name, description, price_cents, tags, options FROM menu_items
     WHERE restaurant_id = ? AND available = 1 ORDER BY sort_order, id`, r.id);

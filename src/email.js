@@ -250,6 +250,27 @@ async function sendReviewAsk(restaurant, res, reviewUrl) {
   });
 }
 
+async function sendLeadEmail(lead, signupUrl) {
+  const signup = lead.want === 'signup';
+  return send({
+    to: lead.email, kind: signup ? 'lead_signup' : 'lead_info',
+    subject: signup ? `Your Rbooked signup link for ${lead.name}` : `Rbooked for ${lead.name}: how it works`,
+    html: layout(null, signup ? `Let's get ${lead.name} on Rbooked` : 'Rbooked for restaurants', `
+      <p>Hi! Thanks for your interest in Rbooked for <b>${esc(lead.name)}</b>.</p>
+      ${signup ? `<p>Tap the button to finish signing up. We've filled in what you told us, so it takes about 2 minutes.</p><p>${button(signupUrl, 'Finish my signup')}</p>` : ''}
+      <p><b>What you get</b></p>
+      <ul style="padding-left:18px;margin:0 0 12px">
+        <li>Online reservations on Rbooked and a booking button for your own website</li>
+        <li>Your own page with photos, menu, hours and verified guest reviews</li>
+        <li>Floor plan, table management, late and no-show tracking</li>
+        <li>Automatic confirmation and reminder emails for your guests</li>
+      </ul>
+      <p><b>Price:</b> free for 14 days, then $49/month. No credit card to sign up, cancel anytime. Restaurants that don't take reservations can be listed as "Walk-ins welcome".</p>
+      ${signup ? '' : `<p>${button(signupUrl, 'Start my free trial')}</p>`}
+      <p>Questions? Just reply to this email.</p>`),
+  });
+}
+
 async function sendPasswordReset(user, resetUrl) {
   return send({
     to: user.email, kind: 'password_reset',
@@ -260,4 +281,4 @@ async function sendPasswordReset(user, resetUrl) {
   });
 }
 
-module.exports = { flush, sendReservationEmail, sendWelcome, sendTrialEnding, sendVerify, sendPasswordReset, sendReferralEarned, sendReviewAsk, send, esc, layout };
+module.exports = { flush, sendReservationEmail, sendWelcome, sendTrialEnding, sendVerify, sendPasswordReset, sendReferralEarned, sendReviewAsk, sendLeadEmail, send, esc, layout };

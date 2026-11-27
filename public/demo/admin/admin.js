@@ -110,18 +110,18 @@
     const [floor, shifts, menu, gallery] = await Promise.all([api('/api/admin/floor'), api('/api/admin/shifts'), api('/api/admin/menu'), api('/api/admin/gallery')]);
     const r = S.me.restaurant; const b = S.me.billing;
     S.menuCount = menu.length;
+    const walkIn = Number(r.walk_in_only) === 1;
+    // Only what makes a page look complete and trustworthy. Tables and services come pre-set at signup.
     const steps = [
-      ['Name, cuisine and description', !!(r.name && r.cuisine && (r.description || '').length >= 20), '#profile', 'p-about'],
+      ['Name, cuisine and a short description', !!(r.name && r.name !== 'My restaurant' && r.cuisine && (r.description || '').length >= 20), '#profile', 'p-about'],
       ['Main photo', !!r.image_url, '#profile', 'p-photos'],
-      ['Logo', !!r.logo_url, '#profile', 'p-photos'],
+      ['Phone and address', !!(r.phone && r.address && r.city), '#profile', 'p-contact'],
       ['Opening hours', !!TBMatch.parseHours(r.hours), '#profile', 'p-hours'],
-      ['Link to your website', !!r.website_url, '#profile', 'p-contact'],
-      ['Menu with prices and dietary tags', menu.length >= 3, '#menu-items'],
-      ['Food photos in your gallery (3 or more)', gallery.length >= 3, '#gallery'],
-      ['Tables, seats and combinations', floor.tables.filter((t) => t.active).length >= 2, '#floor'],
-      ['Services and reservation length', shifts.shifts.some((s) => s.active), '#services'],
+      ['Menu (3 dishes or more)', menu.length >= 3, '#menu-items'],
+      ['3 food photos', gallery.length >= 3, '#gallery'],
       ['Payment method ($49/month after the trial)', b.hasPaymentMethod || b.status === 'active', '#billing'],
-    ].filter((s) => !(b.billingOff && s[2] === '#billing'));
+    ].filter((st) => !(b.billingOff && st[2] === '#billing'));
+    void floor; void shifts; void walkIn;
     const done = steps.filter((s) => s[1]).length;
     const pill = document.getElementById('setup-pill');
     if (pill) { pill.hidden = done === steps.length; pill.textContent = `${done}/${steps.length}`; }
@@ -135,60 +135,79 @@
     const hours = TBMatch.parseHours(r.hours) || TBSamples.hoursFromShifts((await api('/api/admin/shifts')).shifts);
     const hadHours = !!TBMatch.parseHours(r.hours);
     const pct = Math.round((done / steps.length) * 100);
+    const stepOk = Object.fromEntries(steps.filter((st) => st[3]).map((st) => [st[3], st[1]]));
+    const sec = (id, icon, title, summary, body, open) => `<details class="card pf-sec ${stepOk[id] === false ? 'todo' : ''}" id="${id}" ${open ? 'open' : ''}>
+        <summary><span class="pf-ic" aria-hidden="true">${icon}</span><span class="pf-t"><b>${title}</b><small>${summary}</small></span>
+          <span class="pf-st">${stepOk[id] === false ? '<span class="tag warn">To do</span>' : stepOk[id] ? '<span class="tag good">✓ Done</span>' : ''}<span class="pf-edit">Edit</span></span></summary>
+        <div class="pf-body">${body}</div></details>`;
+    const openDays = hours.filter((h) => !h.closed).length;
+    const walkIn = Number(r.walk_in_only) === 1;
+    const todo = steps.filter((st) => !st[1]);
     view.innerHTML = `
       ${S.welcome ? `<div class="card welcome"><h2 class="serif">Welcome to Rbooked${r.name && r.name !== 'My restaurant' ? `, ${esc(r.name)}` : ''}! 🎉</h2><p style="margin:0">${S.me.billing.billingOff ? 'Your account is ready.' : 'Your 14-day free trial has started.'} Start by finding your restaurant below, then add photos and your menu. This is what guests see when they find you.</p></div>` : ''}
-      <div class="card find-card"><div class="row"><b>⚡ Import from your website</b><span class="muted small">Optional. Pull in your details, hours, photos and menu, then check them. Or fill everything in by hand below.</span></div>
-        <form class="find-row site-row" id="pf-form" style="margin-top:10px"><input id="pf-url" type="text" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="www.yourrestaurant.com" value="${esc(r.website_url || '')}" aria-label="Your restaurant's website"><button class="btn secondary" type="submit">Import</button></form>
-        <div id="pf-results" class="find-results" role="status"></div></div>
-      ${r.name && r.name !== 'My restaurant' ? `<div class="card tag-card"><div><span class="muted small">Your Rbooked hashtag</span><div class="tag-big">${esc(TBMatch.hashtag(r.name))}</div>
-        <p class="small muted" style="margin:4px 0 0">Put it on your Instagram, menus and receipts. Guests can type it on Rbooked to land on your page: <b>rbooked.com/tag/${esc(TBMatch.hashtag(r.name).slice(1))}</b></p></div>
-        <button class="btn secondary sm" type="button" id="tag-copy">Copy</button></div>` : ''}
-      <div class="card setup ${done === steps.length ? 'complete' : ''}">
-        <div class="row"><h2 style="margin:0">${done === steps.length ? '✅ Your restaurant is ready for guests' : 'Get your restaurant ready'}</h2><span class="spacer"></span><b>${done} of ${steps.length}</b></div>
-        <div class="progress"><i style="width:${pct}%"></i></div>
-        <ol class="steps">${steps.map(([label, ok, href, anchor]) => `<li class="${ok ? 'ok' : ''}"><a href="${href}" ${anchor ? `data-jump="${anchor}"` : ''}>${ok ? '✓' : '○'} ${esc(label)}</a></li>`).join('')}</ol>
-      </div>
-      <form id="p-form">
-      <div class="card" id="p-photos"><div class="row"><h2 style="margin:0">Photos</h2><span class="spacer"></span><a class="btn ghost sm" href="${TB.rlink(r.slug)}">View my guest page ↗</a></div>
-        <p class="muted small">Your main photo is the big picture at the top of your page and in search results. Wide photos work best (at least 1600 × 900). Your logo shows on your page and booking widget.</p>
+      <div class="card pf-top" id="p-photos">
         <div class="p-hero" id="p-hero" style="${TB.thumbStyle(r)}">
           <div class="p-logo" id="p-logo" style="${r.logo_url ? `background-image:url('${esc(r.logo_url)}')` : `background:${esc(r.accent_color)}`}">${r.logo_url ? '' : esc(TB.initials(r.name))}</div>
-          <div class="p-hero-name">${esc(r.name)}</div>
+          <div class="p-hero-name">${esc(r.name)}<small>${esc([r.cuisine, r.city].filter(Boolean).join(' · '))}${walkIn ? ' · Walk-ins welcome' : ''}</small></div>
           <div class="p-hero-btns"><label class="btn sm">📷 ${r.image_url ? 'Change main photo' : 'Add main photo'}<input type="file" accept="image/*" id="up-cover" hidden></label>
           <label class="btn secondary sm">${r.logo_url ? 'Change logo' : 'Add logo'}<input type="file" accept="image/*" id="up-logo" hidden></label></div>
         </div>
         <div class="row small" style="margin-top:8px">${r.image_url ? '<button type="button" class="btn ghost sm" id="rm-cover">Remove photo</button>' : ''}${r.logo_url ? '<button type="button" class="btn ghost sm" id="rm-logo">Remove logo</button>' : ''}<span class="muted">Tip: you can also drag a photo onto the picture.</span></div>
+        <div class="pf-ready">
+          <div class="pf-ready-h"><b>${done === steps.length ? '✅ Your page is complete' : `Your page is ${pct}% ready`}</b><a class="btn secondary sm" href="${TB.rlink(r.slug)}" target="_blank" rel="noopener">View my page ↗</a></div>
+          <div class="progress"><i style="width:${pct}%"></i></div>
+          ${todo.length ? `<div class="pf-todo"><span class="small muted">Still to do:</span>${todo.map(([label, , href, anchor]) => `<a class="pf-chip" href="${href}" ${anchor ? `data-jump="${anchor}"` : ''}>${esc(label)}</a>`).join('')}</div>` : ''}
+        </div>
       </div>
-      <div class="two-col" style="margin-top:16px">
-        <div class="card" id="p-about"><h2>About your restaurant</h2>
+      <div class="card pf-mode">
+        <h2 style="margin:0 0 10px">How do guests come in?</h2>
+        <div class="pf-modes" role="radiogroup" aria-label="Reservations or walk-ins">
+          <label class="pf-mode-opt"><input type="radio" name="pf-walk" value="0" ${walkIn ? '' : 'checked'}><span><b>📅 Takes reservations</b><small>Guests book tables online on Rbooked and your website.</small></span></label>
+          <label class="pf-mode-opt"><input type="radio" name="pf-walk" value="1" ${walkIn ? 'checked' : ''}><span><b>🚶 Walk-ins only</b><small>No online booking. Your page says “Walk-ins welcome” with call and directions.</small></span></label>
+        </div>
+      </div>
+      <details class="card find-card pf-import" ${done <= 2 ? 'open' : ''}>
+        <summary><b>⚡ Fill it in from your website</b><span class="muted small">Paste your site and we'll grab your details, hours, photos and menu.</span></summary>
+        <form class="find-row site-row" id="pf-form" style="margin-top:10px"><input id="pf-url" type="text" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="www.yourrestaurant.com" value="${esc(r.website_url || '')}" aria-label="Your restaurant's website"><button class="btn secondary" type="submit">Import</button></form>
+        <div id="pf-results" class="find-results" role="status"></div></details>
+      <form id="p-form">
+      ${sec('p-about', '🏪', 'Basics', esc([r.name, r.cuisine, TB.price(r.price_level)].filter(Boolean).join(' · ')), `
           <div class="field"><label for="p-name">Restaurant name</label><input id="p-name" name="name" value="${esc(r.name)}" required></div>
           <div class="grid-2"><div class="field"><label for="p-cuisine">Cuisine</label><select id="p-cuisine" name="cuisine">${(TBPlaces.CUISINES.includes(r.cuisine) ? [] : [r.cuisine || '']).concat(TBPlaces.CUISINES).map((c) => `<option value="${esc(c)}"${c === (r.cuisine || '') ? ' selected' : ''}>${esc(c || 'Pick a cuisine…')}</option>`).join('')}</select></div>
           <div class="field"><label for="p-price">Price</label><select id="p-price" name="price_level">${[1, 2, 3, 4].map((n) => `<option value="${n}"${n === r.price_level ? ' selected' : ''}>${'$'.repeat(n)} ${['Inexpensive', 'Moderate', 'Pricey', 'Fine dining'][n - 1]}</option>`).join('')}</select></div></div>
-          <div class="field"><label for="p-desc">Description</label><textarea id="p-desc" name="description" rows="4" placeholder="What makes your place special? Signature dishes, atmosphere, chef…">${esc(r.description)}</textarea></div>
-          <div class="field"><label>What describes you? <span class="muted small">(used in search and “Pick for me”)</span></label>
-            <div class="days">${TBMatch.TAGS.map((t) => `<label><input type="checkbox" data-tag="${t.id}" ${TBMatch.parseTags(r.tags).includes(t.id) ? 'checked' : ''}>${esc(t.label)}</label>`).join('')}</div></div>
-          <div class="field"><label for="p-color">Brand color</label><input id="p-color" type="color" name="accent_color" value="${esc(r.accent_color)}" style="height:44px;padding:4px;max-width:120px"></div>
-        </div>
-        <div>
-          <div class="card" id="p-contact" style="margin-bottom:16px"><h2>Contact & location</h2>
-            <div class="field"><label for="p-web">Your website</label><input id="p-web" name="website_url" value="${esc(r.website_url || '')}" placeholder="www.yourrestaurant.com" inputmode="url"></div>
-            <div class="field"><label for="p-phone">Phone</label><input id="p-phone" name="phone" type="tel" value="${esc(r.phone)}"></div>
-            <div class="field"><label for="p-addr">Street address</label><input id="p-addr" name="address" value="${esc(r.address)}"></div>
-            <div class="grid-3"><div class="field"><label for="p-city">City</label><input id="p-city" name="city" value="${esc(r.city)}"></div>
-            <div class="field"><label for="p-state">State</label><select id="p-state" name="state">${TBPlaces.STATES.map(([c, n]) => `<option value="${c}"${c === r.state ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></div>
-            <div class="field"><label for="p-zip">ZIP</label><input id="p-zip" name="zip" value="${esc(r.zip)}" maxlength="5" inputmode="numeric"></div></div>
-            <p class="small muted" style="margin:0">Time zone: <b>${esc(TBPlaces.tzLabel(r.timezone))}</b>, set automatically from your ZIP code.</p>
-          </div>
-          <div class="card" id="p-hours"><div class="row"><h2 style="margin:0">Opening hours</h2><span class="spacer"></span><button type="button" class="btn ghost sm" id="h-copy">Copy Monday to all</button></div>
-            ${hadHours ? '' : '<p class="small muted">We filled these in from your services. Adjust and save.</p>'}
-            <div class="hours-ed">${hours.map((h, i) => `<div class="h-row ${h.closed ? 'closed' : ''}" data-d="${i}"><b>${DAY_LONG[i]}</b>
+          <div class="field"><label for="p-desc">Short description</label><textarea id="p-desc" name="description" rows="3" maxlength="600" placeholder="One or two sentences: your signature dishes and the vibe.">${esc(r.description)}</textarea></div>`, stepOk['p-about'] === false)}
+      ${sec('p-contact', '📍', 'Contact & location', esc([r.phone, [r.address, r.city].filter(Boolean).join(', ')].filter(Boolean).join(' · ') || 'Phone, address and website'), `
+          <div class="grid-2"><div class="field"><label for="p-phone">Phone</label><input id="p-phone" name="phone" type="tel" value="${esc(r.phone)}"></div>
+          <div class="field"><label for="p-web">Website or Instagram <span class="muted small">(optional)</span></label><input id="p-web" name="website_url" value="${esc(r.website_url || '')}" placeholder="www.yourrestaurant.com" inputmode="url"></div></div>
+          <div class="field"><label for="p-addr">Street address</label><input id="p-addr" name="address" value="${esc(r.address)}"></div>
+          <div class="grid-3"><div class="field"><label for="p-city">City</label><input id="p-city" name="city" value="${esc(r.city)}"></div>
+          <div class="field"><label for="p-state">State</label><select id="p-state" name="state">${TBPlaces.STATES.map(([c, n]) => `<option value="${c}"${c === r.state ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></div>
+          <div class="field"><label for="p-zip">ZIP</label><input id="p-zip" name="zip" value="${esc(r.zip)}" maxlength="5" inputmode="numeric"></div></div>`, stepOk['p-contact'] === false)}
+      ${sec('p-hours', '🕒', 'Opening hours', hadHours ? `Open ${openDays} day${openDays === 1 ? '' : 's'} a week` : 'Not set yet', `
+          <div class="row" style="margin-bottom:6px"><span class="small muted">${hadHours ? '' : 'Filled in from your services. Adjust and save.'}</span><span class="spacer"></span><button type="button" class="btn ghost sm" id="h-copy">Copy Monday to all</button></div>
+          <div class="hours-ed">${hours.map((h, i) => `<div class="h-row ${h.closed ? 'closed' : ''}" data-d="${i}"><b>${DAY_LONG[i]}</b>
               <label class="check"><input type="checkbox" data-open ${h.closed ? '' : 'checked'}> Open</label>
-              <input type="time" data-from value="${h.open}" aria-label="${DAY_LONG[i]} opens"><span class="muted">to</span><input type="time" data-to value="${h.close}" aria-label="${DAY_LONG[i]} closes"></div>`).join('')}</div>
-          </div>
-        </div>
-      </div>
-      <div class="savebar"><button class="btn lg" type="submit">Save profile</button><span class="muted small">Changes show on your guest page right away.</span></div>
+              <input type="time" data-from value="${h.open}" aria-label="${DAY_LONG[i]} opens"><span class="muted">to</span><input type="time" data-to value="${h.close}" aria-label="${DAY_LONG[i]} closes"></div>`).join('')}</div>`, stepOk['p-hours'] === false)}
+      ${sec('p-more', '✨', 'Extras', 'Optional: what describes you, brand color', `
+          <div class="field"><label>What describes you? <span class="muted small">(helps diners find you)</span></label>
+            <div class="days">${TBMatch.TAGS.map((t) => `<label><input type="checkbox" data-tag="${t.id}" ${TBMatch.parseTags(r.tags).includes(t.id) ? 'checked' : ''}>${esc(t.label)}</label>`).join('')}</div></div>
+          <div class="field"><label for="p-color">Brand color</label><input id="p-color" type="color" name="accent_color" value="${esc(r.accent_color)}" style="height:44px;padding:4px;max-width:120px"></div>`, false)}
+      <div class="savebar pf-save" id="pf-save" hidden><button class="btn lg" type="submit">Save changes</button><button class="btn ghost" type="button" id="pf-undo">Undo</button></div>
       </form>`;
+    view.querySelectorAll('input[name=pf-walk]').forEach((rad) => {
+      rad.onchange = async () => {
+        try {
+          await api('/api/admin/restaurant', { method: 'PUT', body: { walk_in_only: rad.value === '1' } });
+          S.me = await api('/api/admin/restaurant');
+          TB.toast(rad.value === '1' ? 'Walk-ins only: online booking is off' : 'Taking reservations online');
+          viewProfile().catch(fail);
+        } catch (e) { fail(e); }
+      };
+    });
+    const pform = document.getElementById('p-form');
+    const showSave = () => { document.getElementById('pf-save').hidden = false; };
+    pform.addEventListener('input', showSave); pform.addEventListener('change', showSave);
+    document.getElementById('pf-undo').onclick = () => viewProfile().catch(fail);
     // Import from your website: read it, let the owner untick anything, then save.
     document.getElementById('pf-form').onsubmit = async (e) => {
       e.preventDefault();
@@ -217,7 +236,7 @@
     };
 
     S.welcome = false;
-    view.querySelectorAll('[data-jump]').forEach((a) => { a.onclick = (e) => { const el = document.getElementById(a.dataset.jump); if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1200); } }; });
+    view.querySelectorAll('[data-jump]').forEach((a) => { a.onclick = (e) => { const el = document.getElementById(a.dataset.jump); if (el) { e.preventDefault(); if (el.tagName === 'DETAILS') el.open = true; el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1200); } }; });
     view.querySelectorAll('.h-row [data-open]').forEach((c) => { c.onchange = () => c.closest('.h-row').classList.toggle('closed', !c.checked); });
     document.getElementById('h-copy').onclick = () => {
       const rows = [...view.querySelectorAll('.h-row')]; const mon = rows[1];

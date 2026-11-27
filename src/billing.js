@@ -19,10 +19,13 @@ function stripe() {
 const billingOff = () => config.isProduction && !stripe();
 
 /** A restaurant shows up in search and accepts bookings while trialing or paid (or while billing is off). */
+/** Walk-in only: a support-added listing, or a restaurant that switched off online reservations. */
+function isWalkIn(r) { return !!r && (r.listing === 'exposure' || Number(r.walk_in_only) === 1); }
+
 function isBookable(r) {
   if (!r) return false;
   if (r.verified === 0) return false; // owner hasn't confirmed their email yet
-  if (r.listing === 'exposure') return false; // walk-in-only listing: shown, never booked
+  if (isWalkIn(r)) return false; // walk-in only: shown, never booked online
   if (billingOff()) return true;
   if (r.subscription_status === 'active' || r.subscription_status === 'past_due') return true;
   if (r.subscription_status === 'trialing') return new Date(r.trial_ends_at) > new Date();
@@ -133,6 +136,6 @@ async function webhook(req, res) {
 }
 
 /** Shown to diners: bookable restaurants plus walk-in-only listings. */
-const isListed = (r) => !!r && r.verified !== 0 && (r.listing === 'exposure' || isBookable(r));
+const isListed = (r) => !!r && r.verified !== 0 && (isWalkIn(r) || isBookable(r));
 
-module.exports = { billingOff, isBookable, isListed, billingSummary, createCheckout, createPortal, webhook, stripe };
+module.exports = { billingOff, isBookable, isListed, isWalkIn, billingSummary, createCheckout, createPortal, webhook, stripe };

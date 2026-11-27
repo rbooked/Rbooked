@@ -16,14 +16,24 @@
   <a class="logo" href="/"><span class="logo-mark">R</span>Rbooked</a>
   <nav class="nav"><a href="/demo/admin.html#reservations" class="hide-xs">Try the demo</a><a href="/login" class="btn sm nav-login">Restaurant login</a></nav>
 </div></header>
-<section class="hero" style="padding-bottom:64px">
-  <div class="container">
-    <h1>Fill more tables. Pay $49 a month. That's it.</h1>
-    <p>Online reservations, a booking widget for your own website, floor plan and table management, and automatic guest emails. Try everything free for 14 days.</p>
-    <div class="perks"><span>✓ 14 days free</span><span>✓ Then $49/month</span><span>✓ Cancel anytime</span><span>✓ No credit card to sign up</span></div>
-    <div class="hero-ctas"><a class="btn lg" href="#signup" style="background:#fff;color:#7c2d12">Start your free trial</a>
-      <a class="btn lg demo-cta" href="/demo/admin.html#reservations">▶ Try the demo</a></div>
-    <p class="demo-note">No sign-up needed. Play with a sample restaurant: reservations, floor plan, the dashboard and what diners see.</p>
+<section class="hero fr-hero">
+  <div class="container fr-grid">
+    <div>
+      <h1>Get your restaurant on Rbooked.</h1>
+      <p>Online reservations, your own page with photos, menu and verified guest reviews, and a simple floor plan. Free for 14 days.</p>
+      <p class="demo-note" style="margin-top:14px"><a class="btn demo-cta" href="/demo/admin.html#reservations">▶ Try the demo</a> <span style="margin-left:8px">No sign-up needed.</span></p>
+    </div>
+    <form class="card fr-form" id="lead-form" novalidate>
+      <h2 class="serif" style="margin:0 0 4px">Enter your restaurant</h2>
+      <p class="muted small" style="margin:0 0 12px">We'll email you a signup link with everything filled in, or the details if you'd like to know more first.</p>
+      <div class="field"><label for="ld-name">Restaurant name</label><input id="ld-name" name="name" list="ld-list" autocomplete="organization" required placeholder="e.g. Queen Mama's Kitchen"><datalist id="ld-list"></datalist><div class="small" id="ld-match"></div></div>
+      <div class="field"><label for="ld-web">Website or Instagram <span class="muted">(optional)</span></label><input id="ld-web" name="website" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="www.yourrestaurant.com"></div>
+      <div class="field"><label for="ld-email">Your email</label><input id="ld-email" name="email" type="email" autocomplete="email" required></div>
+      <input type="hidden" name="claim" id="ld-claim"><input type="text" name="company" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true">
+      <div id="ld-msg" role="status"></div>
+      <div class="fr-btns"><button class="btn lg" type="submit" data-want="signup">Send me a signup link</button><button class="btn lg secondary" type="submit" data-want="info">Request more info</button></div>
+      <p class="small muted" style="margin:12px 0 0;text-align:center">Already on Rbooked? <a href="/login">Restaurant login</a> · Ready now? <a href="#signup">Sign up here</a></p>
+    </form>
   </div>
 </section>
 <main class="container">
@@ -192,6 +202,29 @@
     } catch (err) { found = null; out.innerHTML = `<div class="alert error">${TB.esc(err.message)}</div><p class="muted small">You can fill in the form below instead.</p>`; }
     btn.disabled = false;
   };
+
+  // "Enter your restaurant": email a signup link or more info.
+  const lf = document.getElementById('lead-form'); let want = 'signup'; let walkins = [];
+  lf.querySelectorAll('[data-want]').forEach((b) => { b.onclick = () => { want = b.dataset.want; }; });
+  TB.api('/api/public/explore?type=walkin').then((d) => { walkins = d.list; document.getElementById('ld-list').innerHTML = walkins.map((w) => `<option value="${TB.esc(w.name)}">${TB.esc([w.city, w.state].filter(Boolean).join(', '))}</option>`).join(''); }).catch(() => {});
+  document.getElementById('ld-name').oninput = (e) => {
+    const hit = walkins.find((w) => w.name.toLowerCase() === e.target.value.trim().toLowerCase());
+    document.getElementById('ld-claim').value = hit ? hit.slug : '';
+    document.getElementById('ld-match').innerHTML = hit ? `✓ Found your page on Rbooked (${TB.esc(hit.city)}). We'll connect it to your account.` : '';
+  };
+  lf.onsubmit = async (e) => {
+    e.preventDefault();
+    const msg = document.getElementById('ld-msg'); const btns = lf.querySelectorAll('button'); btns.forEach((b) => { b.disabled = true; });
+    try {
+      const body = { ...TB.formData(lf), want };
+      await TB.api('/api/public/lead', { body });
+      lf.innerHTML = `<div style="text-align:center;padding:12px 0"><div style="font-size:40px">📬</div><h2 class="serif" style="margin:6px 0">Check your email</h2>
+        <p class="muted">${want === 'info' ? 'We sent the details to' : 'Your signup link is on its way to'} <b>${TB.esc(body.email)}</b>.</p>
+        <a class="btn secondary" href="/demo/admin.html#reservations">▶ Try the demo meanwhile</a></div>`;
+    } catch (err) { msg.innerHTML = `<div class="alert error" style="margin-bottom:10px">${TB.esc(err.message)}</div>`; btns.forEach((b) => { b.disabled = false; }); }
+  };
+  // Arrived from the emailed signup link: fill in what they told us.
+  [['name', 's-rname'], ['email', 's-email'], ['website', 'site-url']].forEach(([k, id]) => { const v = TB.qs(k); const el = document.getElementById(id); if (v && el && !el.value) el.value = v; });
 
   // "Is this your restaurant?" from a walk-in listing: fill in what we already know.
   const claim = TB.qs('claim');

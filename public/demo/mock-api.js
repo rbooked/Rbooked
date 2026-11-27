@@ -507,7 +507,7 @@ window.RBOOKED_DEMO = true;
   on('POST', '/api/auth/logout', () => { db.session = null; return { ok: true }; });
   on('GET', '/api/auth/me', () => { const u = db.users.find((x) => x.id === db.session); return { user: u ? { name: u.name, email: u.email } : null, demo: true }; });
 
-  const SETTINGS = ['name', 'cuisine', 'price_level', 'description', 'phone', 'email', 'address', 'city', 'state', 'zip', 'timezone', 'image_url', 'max_party_size', 'booking_window_days', 'min_notice_minutes', 'reminder_hours', 'no_show_grace_minutes', 'auto_no_show', 'send_no_show_email', 'cancellation_policy', 'accent_color', 'tags', 'turn_times', 'website_url', 'logo_url', 'hours'];
+  const SETTINGS = ['name', 'cuisine', 'price_level', 'description', 'phone', 'email', 'address', 'city', 'state', 'zip', 'timezone', 'image_url', 'max_party_size', 'booking_window_days', 'min_notice_minutes', 'reminder_hours', 'no_show_grace_minutes', 'auto_no_show', 'send_no_show_email', 'cancellation_policy', 'accent_color', 'tags', 'turn_times', 'website_url', 'logo_url', 'hours', 'walk_in_only'];
   on('GET', '/api/admin/restaurant', () => {
     const { u, r } = me();
     const base = location.href.replace(/[^/]*$/, '').replace(/\/$/, '');
@@ -518,7 +518,7 @@ window.RBOOKED_DEMO = true;
     delete f.timezone;
     if ((f.zip && f.zip !== r.zip) || (f.state && f.state !== r.state)) f.timezone = window.TBPlaces.timezoneFor(f.zip || r.zip, f.state || r.state);
     ['price_level', 'max_party_size', 'booking_window_days', 'min_notice_minutes', 'reminder_hours', 'no_show_grace_minutes'].forEach((k) => { if (f[k] !== undefined) f[k] = Math.max(0, Number(f[k]) || 0); });
-    ['auto_no_show', 'send_no_show_email'].forEach((k) => { if (f[k] !== undefined) f[k] = f[k] ? 1 : 0; });
+    ['auto_no_show', 'send_no_show_email', 'walk_in_only'].forEach((k) => { if (f[k] !== undefined) f[k] = f[k] ? 1 : 0; });
     if (f.website_url !== undefined) {
       f.website_url = String(f.website_url).trim().slice(0, 300);
       if (f.website_url && !/^https?:\/\//i.test(f.website_url)) f.website_url = `https://${f.website_url}`;

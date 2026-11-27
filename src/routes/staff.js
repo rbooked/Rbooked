@@ -81,6 +81,13 @@ router.delete('/listings/:id', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// Restaurants that asked for a signup link or info.
+router.get('/leads', wrap(async (req, res) => { res.json(all('SELECT * FROM leads ORDER BY id DESC LIMIT 200')); }));
+router.put('/leads/:id', wrap(async (req, res) => {
+  const st = ['new', 'contacted', 'joined', 'skip'].includes(req.body.status) ? req.body.status : 'new';
+  run('UPDATE leads SET status = ? WHERE id = ?', st, Number(req.params.id)); res.json({ ok: true });
+}));
+
 // Diners' restaurant recommendations, most-asked first.
 router.get('/suggestions', wrap(async (req, res) => {
   res.json(all(`SELECT lower(name) AS k, MAX(name) AS name, GROUP_CONCAT(DISTINCT NULLIF(zip, '')) AS zips, GROUP_CONCAT(DISTINCT NULLIF(city, '')) AS cities,

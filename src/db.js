@@ -274,6 +274,19 @@ CREATE TABLE IF NOT EXISTS reviews (
 );
 CREATE INDEX IF NOT EXISTS idx_reviews_restaurant ON reviews(restaurant_id, hidden);
 
+-- Restaurants that asked for a signup link or more info on /for-restaurants.
+CREATE TABLE IF NOT EXISTS leads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  website TEXT DEFAULT '',
+  email TEXT NOT NULL,
+  phone TEXT DEFAULT '',
+  want TEXT DEFAULT 'signup',   -- signup | info
+  claim TEXT DEFAULT '',
+  status TEXT DEFAULT 'new',    -- new | contacted | joined | skip
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Diner sign-in by email link: 'link' rows are one-time links, 'session' rows are logged-in browsers.
 CREATE TABLE IF NOT EXISTS diner_tokens (
   token_hash TEXT PRIMARY KEY,
@@ -320,6 +333,7 @@ function migrate(d) {
   for (const [c, def] of [['website_url', "''"], ['logo_url', "''"], ['hours', "''"]]) if (!cols.has(c)) d.exec(`ALTER TABLE restaurants ADD COLUMN ${c} TEXT DEFAULT ${def}`);
   if (!cols.has('featured')) d.exec('ALTER TABLE restaurants ADD COLUMN featured INTEGER DEFAULT 0');
   if (!cols.has('referred_by')) { d.exec('ALTER TABLE restaurants ADD COLUMN referred_by INTEGER'); d.exec('ALTER TABLE restaurants ADD COLUMN referral_credited INTEGER DEFAULT 0'); d.exec('ALTER TABLE restaurants ADD COLUMN free_months INTEGER DEFAULT 0'); }
+  if (!cols.has('walk_in_only')) d.exec('ALTER TABLE restaurants ADD COLUMN walk_in_only INTEGER DEFAULT 0'); // the restaurant's own "Walk-ins only" switch
   if (!cols.has('listing')) d.exec("ALTER TABLE restaurants ADD COLUMN listing TEXT DEFAULT 'bookings'"); // 'exposure' = walk-in-only listing added by support
   if (!cols.has('verified')) d.exec('ALTER TABLE restaurants ADD COLUMN verified INTEGER DEFAULT 1');
   try { const ucols = new Set(d.all('PRAGMA table_info(users)').map((c) => c.name)); if (ucols.size && !ucols.has('email_verified')) d.exec('ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 1'); } catch { /* */ }

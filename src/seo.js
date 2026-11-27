@@ -4,7 +4,7 @@
 const express = require('express');
 const config = require('./config');
 const { one, all } = require('./db');
-const { isBookable, isListed } = require('./billing');
+const { isBookable, isListed, isWalkIn } = require('./billing');
 const { parseHours, hashtag } = require('../public/js/matcher');
 const OG_DEFAULT = '/img/og-rbooked.png';
 
@@ -30,8 +30,8 @@ function jsonLd(r, url) {
     priceRange: r.price_level ? '$'.repeat(r.price_level) : undefined,
     image: r.image_url ? [abs(r.image_url)] : undefined, logo: r.logo_url ? abs(r.logo_url) : undefined,
     address: { '@type': 'PostalAddress', streetAddress: r.address, addressLocality: r.city, addressRegion: r.state, postalCode: r.zip, addressCountry: 'US' },
-    acceptsReservations: r.listing === 'exposure' ? 'False' : 'True',
-    potentialAction: r.listing === 'exposure' ? undefined : { '@type': 'ReserveAction', target: { '@type': 'EntryPoint', urlTemplate: url, actionPlatform: ['http://schema.org/DesktopWebPlatform', 'http://schema.org/MobileWebPlatform'] }, result: { '@type': 'FoodEstablishmentReservation', name: 'Reserve a table' } },
+    acceptsReservations: isWalkIn(r) ? 'False' : 'True',
+    potentialAction: isWalkIn(r) ? undefined : { '@type': 'ReserveAction', target: { '@type': 'EntryPoint', urlTemplate: url, actionPlatform: ['http://schema.org/DesktopWebPlatform', 'http://schema.org/MobileWebPlatform'] }, result: { '@type': 'FoodEstablishmentReservation', name: 'Reserve a table' } },
   };
   if (r.lat && r.lng) ld.geo = { '@type': 'GeoCoordinates', latitude: r.lat, longitude: r.lng };
   const h = parseHours(r.hours);
@@ -49,7 +49,7 @@ router.get('/r/:slug', (req, res) => {
     return res.status(404).type('html').send(html.replace(HEAD, '<title>Restaurant not found · Rbooked</title>\n<meta name="robots" content="noindex">'));
   }
   const url = `${config.baseUrl}/r/${encodeURIComponent(r.slug)}`;
-  const walkin = r.listing === 'exposure';
+  const walkin = isWalkIn(r);
   const title = walkin ? `${r.name} · ${r.cuisine ? `${r.cuisine} in ` : ''}${r.city}, ${r.state} · Rbooked` : `${r.name} · Book a table in ${r.city}, ${r.state} · Rbooked`;
   const desc = (r.description || (walkin ? `${r.name}, ${r.cuisine ? `${r.cuisine} ` : ''}restaurant in ${r.city}, ${r.state}. Walk-ins welcome. See photos, hours and directions on Rbooked.`
     : `Book a table at ${r.name}, ${r.cuisine ? `${r.cuisine} ` : ''}restaurant in ${r.city}, ${r.state}. See the menu, photos and open times, and reserve online in seconds.`)).replace(/\s+/g, ' ').slice(0, 155);

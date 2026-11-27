@@ -96,20 +96,22 @@
   const map = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${r.address}, ${r.city}, ${r.state} ${r.zip}`)}`;
   const webLabel = web.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '');
   document.getElementById('about').innerHTML = `
-    <div class="tagchips" style="margin:0 0 10px">${TBMatch.parseTags(r.tags).map((t) => `<span class="tagchip">${esc(TBMatch.label(t))}</span>`).join('')}</div>
+    <div class="tagchips" style="margin:0 0 10px">${TBMatch.parseTags(r.tags).slice(0, 5).map((t) => `<span class="tagchip">${esc(TBMatch.label(t))}</span>`).join('')}</div>
     <p style="font-size:17px">${esc(r.description || '')}</p>
     <div class="about-grid">
       <div><b>Address</b><br>${esc(r.address)}<br>${esc(r.city)}, ${esc(r.state)} ${esc(r.zip)}<br><a href="${map}" target="_blank" rel="noopener">Map & directions</a>
         <p style="margin:12px 0 0"><b>Phone</b><br><a href="tel:${esc(r.phone)}">${esc(String(r.phone || '').replace(/^\+?1?(\d{3})(\d{3})(\d{4})$/, '($1) $2-$3'))}</a></p>
         ${web ? `<p style="margin:12px 0 0"><b>Website</b><br><a href="${esc(web)}" target="_blank" rel="noopener nofollow">${esc(webLabel)}</a></p>` : ''}</div>
-      ${hours || special.length ? `<div>${hours ? `<b>Hours</b><table class="hours">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<tr class="${d === wd ? 'today' : ''}"><td>${DAYS[d]}</td><td>${hours[d].closed ? 'Closed' : `${TB.time(hours[d].open)} – ${TB.time(hours[d].close)}`}</td></tr>`).join('')}</table>` : ''}
+      ${hours || special.length ? `<div>${hours ? `<details class="hours-dd"><summary><b>Hours</b> <span class="muted">${hours[wd].closed ? 'Closed today' : `Today ${TB.time(hours[wd].open)} – ${TB.time(hours[wd].close)}`}</span></summary><table class="hours">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<tr class="${d === wd ? 'today' : ''}"><td>${DAYS[d]}</td><td>${hours[d].closed ? 'Closed' : `${TB.time(hours[d].open)} – ${TB.time(hours[d].close)}`}</td></tr>`).join('')}</table></details>` : ''}
         ${special.length ? `<p style="margin:12px 0 4px"><b>Special hours</b></p><table class="hours">${special.map((s) => `<tr class="${s.date === state.today ? 'today' : ''}"><td>${esc(TB.date(s.date, { weekday: 'short', month: 'short' }))}${s.reason ? `<div class="muted small">${esc(s.reason)}</div>` : ''}</td><td>${s.open_time ? `${TB.time(s.open_time)} – ${TB.time(s.close_time)}` : 'Closed'}</td></tr>`).join('')}</table>` : ''}</div>` : ''}
     </div>
     ${state.exposure ? '' : `<p class="muted small" style="margin-top:14px">${esc(r.cancellation_policy || '')}</p>`}`;
 
   // Menu with dietary filters. Pick several to combine them (for example vegan + gluten-free).
   const menu = state.menu;
-  if (!menu.length) return;
+  // Phones: book right after the basics instead of at the very bottom.
+  if (matchMedia('(max-width: 900px)').matches) { const bk = document.getElementById('booking'); bk.style.marginTop = '16px'; document.getElementById('about').after(bk); }
+  if (menu.length) (function renderMenu() {
   const box = document.getElementById('menu'); box.hidden = false;
   const want = new Set(); let q = '';
   const counts = {};
@@ -155,6 +157,14 @@
   });
   box.querySelector('#m-q').oninput = (e) => { q = e.target.value.trim().toLowerCase(); draw(); };
   draw();
+  })();
+  // Long menus start folded so the page stays short.
+  const ml = document.getElementById('m-list');
+  if (ml && ml.scrollHeight > 760) {
+    ml.classList.add('m-clip');
+    ml.insertAdjacentHTML('afterend', '<button type="button" class="btn secondary block" id="m-more" style="margin-top:10px">See the full menu</button>');
+    document.getElementById('m-more').onclick = (e) => { ml.classList.remove('m-clip'); e.target.remove(); };
+  }
   // Food gallery: photos from the restaurant that diners can heart.
   const gal = document.getElementById('gallery');
   if (state.gallery.length) {
@@ -201,6 +211,7 @@
   }
 
   const toMenu = document.getElementById('to-menu');
+  const box = document.getElementById('menu');
   if (toMenu) toMenu.onclick = (e) => { e.preventDefault(); box.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
   if (location.hash === '#menu') setTimeout(() => box.scrollIntoView({ block: 'start' }), 50);
 })();

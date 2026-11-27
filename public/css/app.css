@@ -520,3 +520,20 @@ table.data tr:hover td { background: #fcfaf7; }
 .explore-teaser b { display: block; font-size: 18px; }
 .explore-teaser .ex-ic { font-size: 30px; text-align: center; }
 .explore-teaser:hover { border-color: var(--brand); }
+/* For restaurants: one short form up top */
+.fr-hero { padding: 48px 0 56px; }
+.fr-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 440px); gap: 32px; align-items: center; }
+.fr-form { color: var(--ink); }
+.fr-form .field label { color: var(--ink); }
+.fr-btns { display: grid; gap: 8px; }
+.hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+@media (max-width: 860px) { .fr-grid { grid-template-columns: 1fr; gap: 20px; } .fr-hero { padding: 28px 0 32px; } }
+/* Restaurant page: tidy on phones */
+.hours-dd summary { cursor: pointer; list-style: none; }
+.hours-dd summary::-webkit-details-marker { display: none; }
+.hours-dd summary::after { content: ' ›'; color: var(--muted); }
+.hours-dd[open] summary::after { content: ''; }
+.hours-dd .hours { margin-top: 6px; }
+.m-clip { max-height: 640px; overflow: hidden; position: relative; }
+.m-clip::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 90px; background: linear-gradient(rgba(255,255,255,0), #fff); }
+.fr-form p { color: var(--muted); }

@@ -31,7 +31,7 @@ const owned = (table, id, rid) => {
 // ---------- Restaurant profile & settings ----------
 const SETTINGS = ['name', 'cuisine', 'price_level', 'description', 'phone', 'email', 'address', 'city', 'state', 'zip', 'timezone',
   'image_url', 'max_party_size', 'booking_window_days', 'min_notice_minutes', 'reminder_hours', 'no_show_grace_minutes',
-  'auto_no_show', 'send_no_show_email', 'cancellation_policy', 'accent_color', 'tags', 'turn_times', 'website_url', 'logo_url', 'hours'];
+  'auto_no_show', 'send_no_show_email', 'cancellation_policy', 'accent_color', 'tags', 'turn_times', 'website_url', 'logo_url', 'hours', 'walk_in_only'];
 const { parseTags, parseTurns, formatTurns, parseMenuTags, parseHours } = require('../../public/js/matcher');
 
 
@@ -60,7 +60,7 @@ router.put('/restaurant', wrap(async (req, res) => {
   for (const k of ['price_level', 'max_party_size', 'booking_window_days', 'min_notice_minutes', 'reminder_hours', 'no_show_grace_minutes']) {
     if (f[k] !== undefined) f[k] = Math.max(0, Number(f[k]) || 0);
   }
-  for (const k of ['auto_no_show', 'send_no_show_email']) if (f[k] !== undefined) f[k] = f[k] ? 1 : 0;
+  for (const k of ['auto_no_show', 'send_no_show_email', 'walk_in_only']) if (f[k] !== undefined) f[k] = f[k] ? 1 : 0;
   if (f.tags !== undefined) f.tags = parseTags(Array.isArray(f.tags) ? f.tags.join(',') : f.tags).join(',');
   if (f.website_url !== undefined) {
     f.website_url = String(f.website_url).trim().slice(0, 300);

@@ -784,3 +784,23 @@ test('diner login: email link, one-time, shows only their own bookings', async (
   await post('/api/auth/diner/logout', {}, c);
   assert.strictEqual((await (await fetch(`${base}/api/auth/diner/me`, { headers: { Cookie: c } })).json()).email, null);
 });
+
+test('walk-ins only switch hides booking; restaurant inquiries are emailed', async () => {
+  const slug = (await call('GET', '/api/admin/restaurant')).data.restaurant.slug;
+  assert.strictEqual((await call('PUT', '/api/admin/restaurant', { walk_in_only: true })).status, 200);
+  const page = await (await fetch(`${base}/api/public/restaurants/${slug}`)).json();
+  assert.strictEqual(page.exposure, true);
+  const ex = await (await fetch(`${base}/api/public/explore?type=walkin`)).json();
+  assert.ok(ex.list.some((x) => x.slug === slug));
+  assert.notStrictEqual((await fetch(`${base}/api/public/restaurants/${slug}/availability?date=${tomorrow}&party=2`)).status, 200);
+  assert.strictEqual((await call('PUT', '/api/admin/restaurant', { walk_in_only: false })).status, 200);
+  assert.strictEqual((await (await fetch(`${base}/api/public/restaurants/${slug}`)).json()).exposure, false);
+  const lead = (b) => fetch(`${base}/api/public/lead`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
+  assert.strictEqual((await lead({ name: '', email: 'a@b.co' })).status, 400);
+  assert.strictEqual((await lead({ name: 'Taco Luna', email: 'owner@tacoluna.test', website: 'tacoluna.com', want: 'signup' })).status, 200);
+  assert.strictEqual((await lead({ name: 'Taco Luna', email: 'owner@tacoluna.test', want: 'signup' })).status, 200); // no double email
+  const mails = require('../src/db').all("SELECT kind, html FROM email_log WHERE to_addr = 'owner@tacoluna.test'");
+  assert.strictEqual(mails.length, 1);
+  assert.ok(mails[0].html.includes('for-restaurants?name=Taco'));
+  assert.ok(one("SELECT id FROM email_log WHERE kind = 'lead_notice'"));
+});
