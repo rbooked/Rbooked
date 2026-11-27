@@ -195,7 +195,7 @@
       ${x.reply ? `<div class="rvw-reply"><b>Reply from ${esc(r.name)}</b><p>${esc(x.reply)}</p></div>` : ''}</article>`;
     const SHOW = 4;
     rvBox.innerHTML = `<div class="row"><h2 class="serif" style="margin:0">Reviews</h2><span class="muted small">from guests who Rbooked and dined here</span></div>
-      <div class="rv-sum"><div class="rv-avg"><b>${rv.avg}</b>${starRow(Math.round(rv.avg))}<span class="muted small">${rv.count} review${rv.count > 1 ? 's' : ''}</span></div>
+      <div class="rvs-sum"><div class="rv-avg"><b>${rv.avg}</b>${starRow(Math.round(rv.avg))}<span class="muted small">${rv.count} review${rv.count > 1 ? 's' : ''}</span></div>
         <div class="rv-dist">${[5, 4, 3, 2, 1].map((k) => `<div><span>${k}★</span><i><b style="width:${Math.round(((rv.dist[k] || 0) / rv.count) * 100)}%"></b></i></div>`).join('')}</div></div>
       <div class="rvw-list">${rv.list.slice(0, SHOW).map(card).join('')}</div>
       ${rv.list.length > SHOW ? `<button type="button" class="btn secondary block" id="rv-more">Show all ${rv.list.length} reviews</button>` : ''}`;

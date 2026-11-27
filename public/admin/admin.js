@@ -664,7 +664,8 @@
     if (f !== 'all' && !counts[f]) S.resFilter = 'all';
     const live = document.getElementById('live');
     if (live) live.title = `Updated ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
-    renderUpNext(data.reservations);
+    if (S.mode === 'list') document.getElementById('upnext').innerHTML = ''; // the list already puts late and next guests first
+    else renderUpNext(data.reservations);
     const body = document.getElementById('res-body');
     if (S.mode === 'timeline') return renderTimeline(body, data.reservations, floor);
     if (S.mode === 'floor') return renderResFloor(body, data.reservations, floor);
@@ -711,7 +712,7 @@
   function lateTag(x) {
     const m = lateBy(x); if (!m) return '';
     const g = graceMin(); const left = g - m;
-    const dur = m >= 24 * 60 ? '' : m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`;
+    const dur = m >= 24 * 60 ? '' : m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m} min`;
     return `<span class="tag warn late-tag">Late ${dur}</span>${g && !x.keep_late && left > 0 ? `<div class="small muted">No-show in ${left} min</div>` : ''}`;
   }
   const RES_GROUPS = [
@@ -737,38 +738,62 @@
     return { html, bind };
   }
 
+  // One clean line per reservation: time, guest, party, table and the one next step (Seat / Finished).
+  // Tap the line for phone, notes, table change, no-show, cancel and edit. Same layout on phone, iPad and Mac.
   function renderList(body, rows) {
-    if (!rows.length) { body.innerHTML = `<div class="card"><p class="muted" style="margin:0">No reservations for ${TB.date(S.date, { weekday: 'long', month: 'long' })}. Use “+ New reservation” to add one.</p></div>`; return; }
-    const now = nowLocal();
-    const fb = resFilterBar(rows, () => renderList(body, rows));
+    if (!rows.length) { body.innerHTML = `<div class="card rl-empty"><div style="font-size:34px">📖</div><p style="margin:6px 0 12px">No reservations for ${TB.date(S.date, { weekday: 'long', month: 'long' })} yet.</p><button class="btn" data-empty-new>+ New reservation</button></div>`; body.querySelector('[data-empty-new]').onclick = () => reservationModal(null, load); return; }
+    S.rlOpen = S.rlOpen || new Set();
     const secs = resSections(rows);
-    body.innerHTML = `${fb.html}<div class="card" style="padding:0"><div class="table-wrap"><table class="data res-list">
-      <thead><tr><th>Time</th><th>Guest</th><th>Party</th><th>Table</th><th>Status</th><th>Actions</th></tr></thead>
-      ${secs.map((g) => `<tbody><tr class="res-sec"><th colspan="6">${esc(g.label)} <span class="muted">${g.rows.length} · ${g.rows.reduce((a, x) => a + x.party_size, 0)} guests</span></th></tr>${g.rows.map((x) => {
-        const late = lateBy(x) > 0;
-        const dim = ['cancelled', 'no_show', 'completed'].includes(x.status);
-        return `<tr class="${dim ? 'dim' : ''}${late ? ' is-late' : ''}" data-id="${x.id}">
-          <td class="time-cell">${TB.time(x.time)}${late ? `<br>${lateTag(x)}` : ''}</td>
-          <td>${x.guest_id ? `<a href="#guests" class="guest-link" data-guest="${x.guest_id}"><b>${esc(x.guest_name)}</b></a>` : `<b>${esc(x.guest_name)}</b>`}<br><a href="tel:${esc(x.guest_phone)}">${esc(x.guest_phone)}</a> · <span class="muted">${esc(x.guest_email)}</span>
-            ${guestTags(x)}${x.notes ? `<div class="small" style="margin-top:4px">📝 ${esc(x.notes)}</div>` : ''}${x.guest_notes ? `<div class="small muted">📇 ${esc(x.guest_notes)}</div>` : ''}${x.internal_notes ? `<div class="small muted">🔒 ${esc(x.internal_notes)}</div>` : ''}
-            <div class="small muted">#${esc(x.code)}</div></td>
-          <td class="party-cell" data-label="Party">${x.party_size}<span class="show-sm"> ${x.party_size === 1 ? 'guest' : 'guests'}</span></td>
-          <td data-label="Table"><select data-act="table" ${dim ? 'disabled' : ''} style="min-width:130px" aria-label="Table">${seatOptions(seatVal(x))}</select></td>
-          <td data-label="Status"><span class="badge ${late ? 'late' : x.status}">${late ? 'Late' : STATUS_LABEL[x.status]}</span></td>
-          <td><div class="res-actions">
-            ${statusButtons(x, 'data-act')}
-            ${x.guest_email !== 'walkin@guest.local' ? '<button class="btn ghost sm" data-act="resend" title="Resend email" aria-label="Resend email">✉️</button>' : ''}
-          </div></td></tr>`;
-      }).join('')}</tbody>`).join('') || '<tbody><tr><td colspan="6" class="muted">Nothing in this section.</td></tr></tbody>'}</table></div></div>`;
-    fb.bind(body);
-    body.querySelectorAll('tr[data-id]').forEach((tr) => {
-      const x = rows.find((r) => r.id === Number(tr.dataset.id));
-      tr.querySelectorAll('[data-act]').forEach((el) => {
+    const flags = (x) => {
+      const t = (x.guest_tags || '').toLowerCase(); const h = x.history || {};
+      return [/vip/.test(t) ? '<span class="rl-flag vip">VIP</span>' : '', /allerg/.test(t) ? '<span class="rl-flag warn">Allergy</span>' : '',
+        x.occasion ? `<span class="rl-flag good">🎉 ${esc(x.occasion)}</span>` : '', h.no_shows > 0 ? `<span class="rl-flag warn">${h.no_shows} no-show${h.no_shows > 1 ? 's' : ''}</span>` : '',
+        x.notes || x.internal_notes ? '<span class="rl-flag" title="Has notes">📝</span>' : ''].join('');
+    };
+    const primary = (x) => {
+      if (x.status === 'confirmed') return '<button class="btn ok rl-go" data-act="seat">✓ Seat</button>';
+      if (x.status === 'seated') return '<button class="btn ok rl-go" data-act="complete">✓ Finished</button>';
+      if (x.status === 'no_show') return '<button class="btn secondary rl-go" data-act="seat">Seat</button>';
+      if (x.status === 'completed') return '<span class="rl-done">Done</span>';
+      return `<span class="badge ${x.status}">${STATUS_LABEL[x.status]}</span>`;
+    };
+    const line = (x) => {
+      const late = lateBy(x) > 0; const open = S.rlOpen.has(x.id);
+      const dim = ['cancelled', 'no_show', 'completed'].includes(x.status);
+      const st = late ? 'late' : x.status;
+      const more = [x.status === 'confirmed' ? ['noshow', 'No-show'] : null, x.status === 'seated' ? ['undo', 'Undo seat'] : null,
+        x.status === 'no_show' ? ['undo', lateBy({ ...x, status: 'confirmed' }) ? '⏱ Late' : 'Upcoming'] : null, x.status === 'completed' ? ['undo', 'Undo finished'] : null,
+        ['confirmed', 'seated', 'no_show'].includes(x.status) ? ['cancel', 'Cancel'] : null, ['confirmed', 'seated'].includes(x.status) ? ['edit', '✎ Edit'] : null,
+        x.guest_email !== 'walkin@guest.local' ? ['resend', '✉️ Resend email'] : null].filter(Boolean);
+      return `<li class="rl st-${st}${dim ? ' dim' : ''}${open ? ' open' : ''}" data-id="${x.id}">
+        <div class="rl-main" role="button" tabindex="0" aria-expanded="${open}">
+          <div class="rl-time"><b>${TB.time(x.time).replace(' ', '&nbsp;')}</b>${late ? lateTag(x) : ''}</div>
+          <div class="rl-who"><b class="rl-name">${esc(x.guest_name)}</b>
+            <div class="rl-sub"><span class="rl-party">👥 ${x.party_size}</span><span class="rl-table">${esc(x.table_label || 'No table')}</span>${flags(x)}${x.notes || x.guest_notes ? `<span class="rl-wide">📝 ${esc(x.notes || x.guest_notes)}</span>` : ''}</div></div>
+          <div class="rl-act">${primary(x)}<span class="rl-caret" aria-hidden="true">⌄</span></div>
+        </div>
+        ${open ? `<div class="rl-more">
+          <div class="rl-contact"><a class="btn secondary sm" href="tel:${esc(x.guest_phone)}">📞 ${esc(x.guest_phone)}</a>${x.guest_email !== 'walkin@guest.local' ? `<span class="muted small">${esc(x.guest_email)}</span>` : ''}
+            ${x.guest_id ? `<a href="#guests" class="guest-link small" data-guest="${x.guest_id}">Guest profile ›</a>` : ''}<span class="muted small">#${esc(x.code)}</span></div>
+          ${guestTags(x)}${x.notes ? `<div class="small">📝 ${esc(x.notes)}</div>` : ''}${x.guest_notes ? `<div class="small muted">📇 ${esc(x.guest_notes)}</div>` : ''}${x.internal_notes ? `<div class="small muted">🔒 ${esc(x.internal_notes)}</div>` : ''}
+          <div class="rl-row"><label class="small"><b>Table</b> <select data-act="table" ${dim ? 'disabled' : ''} aria-label="Table">${seatOptions(seatVal(x))}</select></label></div>
+          <div class="rl-btns">${more.map(([a, l]) => `<button class="btn ${a === 'cancel' || a === 'noshow' ? 'secondary danger-text' : 'secondary'} sm" data-act="${a}">${l}</button>`).join('')}</div>
+        </div>` : ''}</li>`;
+    };
+    body.innerHTML = secs.map((g) => `<section class="rl-sec rl-${g.id}"><h3 class="rl-h">${esc(g.label)} <span>${g.rows.length} · ${g.rows.reduce((a, x) => a + x.party_size, 0)} guests</span></h3>
+      <ul class="rl-list">${g.rows.map(line).join('')}</ul></section>`).join('') || '<div class="card muted">Nothing in this section.</div>';
+    body.querySelectorAll('li.rl').forEach((li) => {
+      const x = rows.find((r) => r.id === Number(li.dataset.id));
+      const main = li.querySelector('.rl-main');
+      const toggle = () => { if (S.rlOpen.has(x.id)) S.rlOpen.delete(x.id); else S.rlOpen.add(x.id); renderList(body, rows); };
+      main.onclick = (e) => { if (!e.target.closest('[data-act]')) toggle(); };
+      main.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } };
+      li.querySelectorAll('[data-act]').forEach((el) => {
         const act = el.dataset.act;
         if (act === 'table') {
           el.onchange = () => withForce((force) => api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { ...seatBody(el.value), force } }))
             .then(() => { TB.toast('Table updated'); load(); }).catch((e) => { fail(e); load(); });
-        } else el.onclick = () => resAction(act, x);
+        } else el.onclick = (e) => { e.stopPropagation(); resAction(act, x); };
       });
     });
     body.querySelectorAll('.guest-link').forEach((a) => { a.onclick = (e) => { e.preventDefault(); S.openGuest = Number(a.dataset.guest); location.hash = 'guests'; }; });
@@ -1701,7 +1726,7 @@
   async function viewReviews() {
     const d = await api('/api/admin/reviews');
     const starRow = (n) => `<span class="stars">${'★'.repeat(n)}<i>${'★'.repeat(5 - n)}</i></span>`;
-    const head = d.count ? `<div class="card"><div class="rv-sum"><div class="rv-avg"><b>${d.avg}</b>${starRow(Math.round(d.avg))}<span class="muted small">${d.count} review${d.count > 1 ? 's' : ''}</span></div>
+    const head = d.count ? `<div class="card"><div class="rvs-sum"><div class="rv-avg"><b>${d.avg}</b>${starRow(Math.round(d.avg))}<span class="muted small">${d.count} review${d.count > 1 ? 's' : ''}</span></div>
         <div class="rv-dist">${[5, 4, 3, 2, 1].map((k) => `<div><span>${k}★</span><i><b style="width:${Math.round(((d.dist[k] || 0) / d.count) * 100)}%"></b></i></div>`).join('')}</div></div>
         <p class="small muted" style="margin:8px 0 0">Only guests who booked on Rbooked and were seated can review, about 2 hours after their table is finished. You can reply to any review. Reviews can't be removed; if one is abusive, email <a href="mailto:rbookedsupport@gmail.com">rbookedsupport@gmail.com</a>.</p></div>` : '';
     const item = (x) => `<div class="card rvw-admin" data-id="${x.id}">
