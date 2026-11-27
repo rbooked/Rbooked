@@ -149,6 +149,15 @@ test('staff phone booking, seat, no-show and guest history', async () => {
   const w = await call('POST', '/api/admin/reservations', { source: 'walk_in', party_size: 2 });
   assert.strictEqual(w.status, 201, JSON.stringify(w.data));
   assert.strictEqual(w.data.status, 'seated');
+  // Overbooked: staff can always add and seat people, even with no table free and a huge party.
+  for (let i = 0; i < 25; i++) {
+    const o = await call('POST', '/api/admin/reservations', { source: i % 2 ? 'walk_in' : 'phone', date: tomorrow, time: '19:00', party_size: 8, name: `Over ${i}`, email: `o${i}@example.com`, phone: '5550002222' });
+    assert.strictEqual(o.status, 201, JSON.stringify(o.data));
+  }
+  const busy = (await call('GET', `/api/admin/reservations?date=${tomorrow}`)).data.reservations.filter((x) => x.table_id);
+  const a = busy[0]; const b2 = busy[1];
+  const dbl = await call('PATCH', `/api/admin/reservations/${b2.id}`, { status: 'seated', table_id: a.table_id, combo_id: null });
+  assert.strictEqual(dbl.status, 200, JSON.stringify(dbl.data));
 });
 
 test('tables, services and closures can be managed', async () => {
@@ -348,9 +357,10 @@ test('table combinations seat larger parties and block their member tables', asy
   const b = await call('POST', '/api/admin/reservations', { date: day, time: '19:00', party_size: party, name: 'Big Party', email: 'big@example.com', phone: '5557778888', source: 'phone' });
   assert.strictEqual(b.status, 201);
   assert.strictEqual(b.data.combo_id, c.data.id);
-  // T4 is now taken by the combination, so a direct booking on it conflicts.
+  // T4 is now taken by the combination, so it is no longer offered online...
+  // ...but staff can still put someone there (double-seat) without being stopped.
   const clash = await call('POST', '/api/admin/reservations', { date: day, time: '19:30', party_size: 2, name: 'Two', email: 'two@example.com', phone: '5557778889', table_id: byLabel.T4.id, source: 'phone' });
-  assert.strictEqual(clash.status, 409);
+  assert.strictEqual(clash.status, 201, JSON.stringify(clash.data));
   const list = await call('GET', `/api/admin/reservations?date=${day}`);
   assert.strictEqual(list.data.reservations.find((x) => x.guest_email === 'big@example.com').table_label, 'T4 + T5');
 });

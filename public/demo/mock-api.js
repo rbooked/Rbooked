@@ -277,7 +277,7 @@ window.RBOOKED_DEMO = true;
         const t = db.tables.find((x) => x.id === Number(d.table_id) && x.restaurant_id === r.id);
         if (!t) throw new E('Table not found.'); seat = { tableId: t.id, comboId: null }; label = `Table ${t.label}`;
       }
-      if (!d.force && !isSeatingFree(r.id, seat, date, time, dur)) throw new E(`${label} is already booked around that time.`, 409);
+      if (!d.force && !opts.admin && !isSeatingFree(r.id, seat, date, time, dur)) throw new E(`${label} is already booked around that time.`, 409);
       const s = findSlot(r, date, time, party, { admin: true });
       slot = { ...seat, shiftId: s ? s.shiftId : null, duration: dur };
     } else {
@@ -285,7 +285,7 @@ window.RBOOKED_DEMO = true;
       if (!slot && opts.admin) {
         const dur = Number(d.duration_minutes) || window.TBMatch.turnFor(r.turn_times, party, 90);
         const o = anyFreeSeating(r.id, party, date, time, dur);
-        if (o) slot = { tableId: o.tableId, comboId: o.comboId, shiftId: null, duration: dur };
+        slot = o ? { tableId: o.tableId, comboId: o.comboId, shiftId: null, duration: dur } : { tableId: null, comboId: null, shiftId: null, duration: dur };
       }
       if (!slot) throw new E('Sorry, that time was just taken. Please pick another time.', 409);
     }
@@ -567,7 +567,7 @@ window.RBOOKED_DEMO = true;
     const moved = ['table_id', 'combo_id', 'date', 'time', 'duration_minutes'].some((k) => f[k] !== undefined && String(f[k]) !== String(x[k]));
     if (moved && (next.table_id || next.combo_id)) {
       if (next.combo_id) owned('combos', next.combo_id, r.id); else owned('tables', next.table_id, r.id);
-      if (!b.force && !isSeatingFree(r.id, { tableId: next.table_id, comboId: next.combo_id }, next.date, next.time, Number(next.duration_minutes), x.id)) throw new E('That table is already booked around that time.', 409);
+      if (false && !isSeatingFree(r.id, { tableId: next.table_id, comboId: next.combo_id }, next.date, next.time, Number(next.duration_minutes), x.id)) throw new E('That table is already booked around that time.', 409);
     }
     if (f.date || f.time) f.starts_at_utc = zonedToUtc(next.date, next.time, r.timezone).toISOString();
     const changed = (f.date && f.date !== x.date) || (f.time && f.time !== x.time) || (f.party_size && Number(f.party_size) !== x.party_size);

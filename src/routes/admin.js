@@ -2,7 +2,7 @@
 const express = require('express');
 const { one, all, run, tx } = require('../db');
 const { requireAuth } = require('../auth');
-const { getAvailability, isSeatingFree } = require('../availability');
+const { getAvailability } = require('../availability');
 const { createReservation, cancelReservation, markNoShow, BookingError } = require('../reservations');
 const billing = require('../billing');
 const email = require('../email');
@@ -164,9 +164,7 @@ router.patch('/reservations/:id', wrap(async (req, res) => {
   const next = { ...rv, ...f };
   if (moved && (next.table_id || next.combo_id)) {
     if (next.combo_id) owned('table_combos', next.combo_id, r.id); else owned('tables', next.table_id, r.id);
-    if (!req.body.force && !isSeatingFree(r.id, { tableId: next.table_id, comboId: next.combo_id }, next.date, next.time, Number(next.duration_minutes), rv.id)) {
-      throw new BookingError('That table is already booked around that time.', 409);
-    }
+    // Staff can always double-seat: no busy-table check here.
   }
   if (f.date || f.time) { f.starts_at_utc = zonedToUtc(next.date, next.time, r.timezone).toISOString(); f.reminder_sent_at = null; }
   // Brought back from no-show by staff: keep it on the list as Late instead of marking it no-show again.

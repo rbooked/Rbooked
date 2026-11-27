@@ -608,12 +608,8 @@
     const c = (f.combos || []).filter((x) => x.active).map((x) => `<option value="c${x.id}"${sel === `c${x.id}` ? ' selected' : ''}>${esc(x.name)} (${x.min_seats}-${x.max_seats})</option>`).join('');
     return `<option value="">${esc(blankLabel)}</option><optgroup label="Tables">${t}</optgroup>${c ? `<optgroup label="Combined tables">${c}</optgroup>` : ''}`;
   }
-  async function withForce(fn, message) {
-    try { return await fn(false); } catch (e) {
-      if (e.status === 409 && await ask(`${e.message} ${message || 'Seat them there anyway?'}`, 'Yes, double-seat')) return fn(true);
-      throw e;
-    }
-  }
+  // Staff actions never block on a busy table: always go ahead (the floor shows +N).
+  async function withForce(fn) { return fn(true); }
 
   // ---------------- Reservations ----------------
   let refreshTimer = null;
@@ -834,32 +830,14 @@
   async function resAction(act, x) {
     try {
       if (act === 'seat') {
+        // Staff can always seat anyone, anywhere, right away. Just a small note if the table is shared.
         const rows = S.lastRows || [];
         const f = S.floor || { tables: [], combos: [] };
         const combo = x.combo_id && (f.combos || []).find((c) => c.id === x.combo_id);
         const mine = combo ? comboTables(combo) : x.table_id ? [x.table_id] : [];
-        const seatedOn = (ids) => rows.filter((y) => y.id !== x.id && y.status === 'seated' && (ids.includes(y.table_id) || (y.combo_id && (f.combos || []).some((c) => c.id === y.combo_id && comboTables(c).some((t) => ids.includes(t))))));
-        const busy = mine.length ? seatedOn(mine) : [];
-        if (busy.length || !mine.length) {
-          const freeTables = f.tables.filter((t) => t.active && t.max_seats >= x.party_size && !seatedOn([t.id]).length)
-            .sort((a, b) => a.max_seats - b.max_seats);
-          return TB.modal(`<h2>Seat ${esc(x.guest_name)} (${x.party_size})</h2>
-            <p>${busy.length ? `<b>${esc(busy.map((y) => y.guest_name).join(', '))}</b> ${busy.length > 1 ? 'are' : 'is'} still seated at ${esc(x.table_label || 'their table')}. Pick a free table:` : 'Pick a table:'}</p>
-            <div class="seat-pick">${freeTables.map((t) => `<button class="btn ok" data-t="${t.id}">${esc(t.label)} <small>(${t.min_seats}-${t.max_seats})</small></button>`).join('') || '<p class="muted">No free table fits this party right now.</p>'}</div>
-            <div class="row" style="margin-top:14px;flex-wrap:wrap;gap:8px">${mine.length ? `<button class="btn secondary" data-t="keep">Seat at ${esc(x.table_label || 'their table')} anyway</button>` : ''}<button class="btn ghost" data-close>Back</button></div>`, (m, close) => {
-            m.querySelectorAll('[data-t]').forEach((b) => {
-              b.onclick = async () => {
-                b.disabled = true;
-                try {
-                  const body = b.dataset.t === 'keep' ? { status: 'seated', force: true } : { status: 'seated', table_id: Number(b.dataset.t), combo_id: null, force: true };
-                  await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body });
-                  close(); TB.toast(`${x.guest_name} seated`); load();
-                } catch (e) { b.disabled = false; fail(e); }
-              };
-            });
-          });
-        }
-        await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { status: 'seated' } }); TB.toast(`${x.guest_name} seated`);
+        const others = mine.length ? rows.filter((y) => y.id !== x.id && y.status === 'seated' && (mine.includes(y.table_id) || (y.combo_id && (f.combos || []).some((c) => c.id === y.combo_id && comboTables(c).some((t) => mine.includes(t)))))) : [];
+        await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { status: 'seated', force: true } });
+        TB.toast(`${x.guest_name} seated${others.length ? ` (+${others.length} at ${x.table_label || 'table'})` : ''}`);
       }
       if (act === 'complete') { await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { status: 'completed' } }); TB.toast(`${x.guest_name}'s table is finished`); }
       if (act === 'undo') { await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { status: 'confirmed' } }); if (x.status === 'no_show') TB.toast(`${x.guest_name} is back on the list`); }

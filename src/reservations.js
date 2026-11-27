@@ -82,7 +82,7 @@ function createReservation(restaurant, data, opts = {}) {
         if (!t) throw new BookingError('Table not found.');
         tableId = t.id; label = `Table ${t.label}`;
       }
-      if (!data.force && !isSeatingFree(restaurant.id, { tableId, comboId }, date, time, duration)) {
+      if (!data.force && !opts.admin && !isSeatingFree(restaurant.id, { tableId, comboId }, date, time, duration)) {
         throw new BookingError(`${label} is already booked around that time.`, 409);
       }
       const slot = findSlot(restaurant, date, time, party, { admin: true });
@@ -94,6 +94,11 @@ function createReservation(restaurant, data, opts = {}) {
         const dur = Number(data.duration_minutes) || turnFor(restaurant.turn_times, party, 90);
         const o = anyFreeSeating(restaurant.id, party, date, time, dur);
         if (o) slot = { tableId: o.tableId, comboId: o.comboId, shiftId: null, duration: dur };
+      }
+      if (!slot && opts.admin) {
+        // Fully booked: staff can still book or seat them. It goes in without a table, to be placed on the floor.
+        const dur = Number(data.duration_minutes) || turnFor(restaurant.turn_times, party, 90);
+        slot = { tableId: null, comboId: null, shiftId: null, duration: dur };
       }
       if (!slot) throw new BookingError('Sorry, that time was just taken. Please pick another time.', 409);
       tableId = slot.tableId; comboId = slot.comboId || null; shiftId = slot.shiftId; duration = slot.duration;
