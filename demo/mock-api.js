@@ -463,6 +463,7 @@ window.RBOOKED_DEMO = true;
     return { ok: true, slug: r.slug };
   });
   on('GET', '/api/admin/referrals', () => { const { r } = me(); return { code: r.slug, link: `https://rbooked.com/for-restaurants?ref=${r.slug}#signup`, free_months: 1, max_months: 12, referred: [{ name: 'Harbor Grill', city: 'Boston', state: 'MA', joined: '2026-11-20', status: 'earned' }, { name: 'Taco Luna', city: 'Austin', state: 'TX', joined: '2026-11-25', status: 'waiting' }] }; });
+  on('POST', '/api/public/suggest', (q, b) => { if (!String((b && b.name) || '').trim()) throw new E('Tell us the restaurant\'s name.'); return { ok: true }; });
   on('POST', '/api/auth/forgot', () => ({ ok: true }));
   on('POST', '/api/auth/reset', () => { throw new E('Password reset links only work on the live site.'); });
   on('POST', '/api/auth/login', (q, b) => {

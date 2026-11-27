@@ -666,3 +666,17 @@ test('import from your website: schema.org data, a menu page and photos', async 
   assert.strictEqual(L.safeUrl('http://169.254.169.254/latest'), null);
   assert.ok(L.safeUrl('joes-diner.com'));
 });
+
+test('diners can recommend a restaurant to join (support gets it, no duplicates)', async () => {
+  const post = (b) => fetch(`${base}/api/public/suggest`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
+  assert.strictEqual((await post({ name: '' })).status, 400);
+  assert.strictEqual((await post({ name: 'Taco Town', email: 'not-an-email' })).status, 400);
+  assert.strictEqual((await post({ name: 'Taco Town', zip: '10011', website: 'tacotown.com', email: 'fan@example.com', note: 'Best al pastor' })).status, 200);
+  assert.strictEqual((await post({ name: 'taco town', zip: '10011' })).status, 200); // same day, counted once
+  assert.strictEqual((await post({ name: 'Bot Spam', company: 'x' })).status, 200); // robots are ignored
+  assert.strictEqual(one("SELECT COUNT(*) AS n FROM suggestions WHERE lower(name) = 'taco town'").n, 1);
+  assert.ok(!one("SELECT id FROM suggestions WHERE name = 'Bot Spam'"));
+  const s = one("SELECT * FROM suggestions WHERE name = 'Taco Town'");
+  assert.strictEqual(s.website, 'https://tacotown.com');
+  assert.ok(one("SELECT id FROM email_log WHERE kind = 'suggestion' AND to_addr = 'rbookedsupport@gmail.com'"));
+});

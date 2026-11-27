@@ -244,6 +244,19 @@ CREATE TABLE IF NOT EXISTS auth_tokens (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Diners recommending a restaurant they'd like to see on Rbooked.
+CREATE TABLE IF NOT EXISTS suggestions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  zip TEXT DEFAULT '',
+  city TEXT DEFAULT '',
+  website TEXT DEFAULT '',
+  diner_email TEXT DEFAULT '',
+  note TEXT DEFAULT '',
+  status TEXT DEFAULT 'new',   -- new | contacted | joined | skip
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Small notes the system keeps for itself (last backup day, last alert times).
 CREATE TABLE IF NOT EXISTS ops_kv (
   key TEXT PRIMARY KEY,

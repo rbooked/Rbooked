@@ -72,6 +72,23 @@
     <div class="row" style="align-items:baseline"><h2 class="serif" style="font-size:26px;margin:0">Dishes diners love</h2><span class="muted small" id="trend-where"></span></div>
     <div class="trend-grid" id="trend"></div>
   </section>
+  <section class="section" id="recommend">
+    <details class="card rec-card" id="rec-box">
+      <summary><span class="rec-ic" aria-hidden="true">💌</span><span><b>Recommend your fav restaurant to join us!</b><span class="muted small">Your go-to spot isn't on the Rbooked network yet? Bring them in.</span></span><span class="rec-go" aria-hidden="true">＋</span></summary>
+      <form id="rec-form" class="rec-form" novalidate>
+        <div class="field"><label for="rec-name">Restaurant name</label><input id="rec-name" name="name" required maxlength="120" autocomplete="off" placeholder="e.g. Queen Mama's Kitchen"></div>
+        <div class="grid-2">
+          <div class="field"><label for="rec-zip">ZIP code</label><input id="rec-zip" name="zip" inputmode="numeric" maxlength="5" pattern="\d{5}" autocomplete="postal-code"></div>
+          <div class="field"><label for="rec-city">City <span class="muted small">(optional)</span></label><input id="rec-city" name="city" maxlength="80" autocomplete="address-level2"></div>
+        </div>
+        <div class="field"><label for="rec-web">Their website or Instagram <span class="muted small">(optional)</span></label><input id="rec-web" name="website" maxlength="200" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+        <div class="field"><label for="rec-email">Your email <span class="muted small">(optional, we'll tell you when they're on Rbooked)</span></label><input id="rec-email" name="email" type="email" maxlength="120" autocomplete="email"></div>
+        <input type="text" name="company" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true">
+        <div id="rec-msg" role="status"></div>
+        <button class="btn block" type="submit">Get them Rbooked! 💌</button>
+      </form>
+    </details>
+  </section>
   <section class="section steps" id="how">
     <div class="step"><span class="step-n">1</span><div><h3>Search by ZIP</h3><p>Real open times at places near you.</p></div></div>
     <div class="step"><span class="step-n">2</span><div><h3>Tap a time</h3><p>Your table is held live. No account needed.</p></div></div>
@@ -140,8 +157,33 @@
   function noneNear(zip, cuisine) {
     empty.classList.remove('hidden');
     empty.innerHTML = `<h3>No ${cuisine ? `${esc(cuisine)} ` : ''}restaurants on Rbooked near ${esc(zip)} yet.</h3>
-      <p class="muted">${cuisine ? 'Try "Any cuisine", or a' : 'Try a'} nearby ZIP code. New restaurants join every week.</p>`;
+      <p class="muted">${cuisine ? 'Try "Any cuisine", or a' : 'Try a'} nearby ZIP code. New restaurants join every week.</p>
+      <p style="margin:10px 0 0"><button class="btn secondary" type="button" id="rec-open">💌 Get your fav spot near ${esc(zip)} Rbooked</button></p>`;
+    document.getElementById('rec-open').onclick = () => openRecommend(zip);
   }
+
+  // "Recommend your fav restaurant": a small form, opened from its card or from an empty search.
+  function openRecommend(zip) {
+    const box = document.getElementById('rec-box'); box.open = true;
+    if (zip && !document.getElementById('rec-zip').value) document.getElementById('rec-zip').value = zip;
+    box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(() => document.getElementById('rec-name').focus({ preventScroll: true }), 400);
+  }
+  document.getElementById('rec-box').addEventListener('toggle', (e) => {
+    const z = f.zip.value.trim(); if (e.target.open && /^\d{5}$/.test(z) && !document.getElementById('rec-zip').value) document.getElementById('rec-zip').value = z;
+  });
+  document.getElementById('rec-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const form = e.target; const msg = document.getElementById('rec-msg'); const btn = form.querySelector('button[type=submit]');
+    if (form.name.value.trim().length < 2) { msg.innerHTML = '<div class="alert error">Tell us the restaurant\'s name.</div>'; form.name.focus(); return; }
+    btn.disabled = true;
+    try {
+      await api('/api/public/suggest', { body: TB.formData(form) });
+      const n = form.name.value.trim();
+      form.reset(); msg.innerHTML = `<div class="alert ok-box">🎉 Nice pick! We're inviting <b>${esc(n)}</b> to the Rbooked network. Soon you can heart their dishes, follow their #hashtag and book a table here.</div>`;
+    } catch (err) { msg.innerHTML = `<div class="alert error">${esc(err.message)}</div>`; }
+    btn.disabled = false;
+  };
 
   async function search(push) {
     const v = readForm(); if (!v) return;

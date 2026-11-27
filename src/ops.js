@@ -9,7 +9,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 
 // Everything needed to rebuild Rbooked. Logins' sessions and one-time links are left out on purpose.
 const BACKUP_TABLES = ['restaurants', 'users', 'areas', 'tables', 'table_combos', 'shifts', 'closures', 'reservations', 'guests',
-  'menu_items', 'gallery_photos', 'images', 'likes', 'email_log'];
+  'menu_items', 'gallery_photos', 'images', 'likes', 'suggestions', 'email_log'];
 const IMAGE_BUDGET = 20 * 1024 * 1024; // photos are included while the file stays under ~20 MB
 
 function toBase64(v) {

@@ -115,6 +115,38 @@ router.get('/search', wrap(async (req, res) => {
 }));
 
 // Featured restaurants, near a ZIP when one is given, with tonight's open times.
+// "Recommend your fav restaurant to join us!" from diners. Emails support; listed on the support page.
+router.post('/suggest', wrap(async (req, res) => {
+  const b = req.body || {};
+  if (b.company) return res.json({ ok: true }); // hidden field only robots fill in
+  const clean = (v, n) => String(v || '').replace(/\s+/g, ' ').trim().slice(0, n);
+  const name = clean(b.name, 120);
+  if (name.length < 2) throw new BookingError('Tell us the restaurant\'s name.');
+  const zip = clean(b.zip, 5); const city = clean(b.city, 80); const note = clean(b.note, 400);
+  let website = clean(b.website, 200); if (website && !/^https?:\/\//i.test(website)) website = `https://${website}`;
+  if (website && !/^https?:\/\/[^\s/]+\.[^\s]+$/i.test(website)) website = '';
+  const dinerEmail = clean(b.email, 120).toLowerCase();
+  if (dinerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(dinerEmail)) throw new BookingError('That email doesn\'t look right (or leave it empty).');
+  if (zip && !/^\d{5}$/.test(zip)) throw new BookingError('ZIP code should be 5 digits.');
+  // The same restaurant recommended again within a day just counts once.
+  const dupe = one(`SELECT id FROM suggestions WHERE lower(name) = lower(?) AND zip = ? AND created_at > datetime('now', '-1 day')`, name, zip);
+  if (!dupe) {
+    run('INSERT INTO suggestions (name, zip, city, website, diner_email, note) VALUES (?,?,?,?,?,?)', name, zip, city, website, dinerEmail, note);
+    const total = one('SELECT COUNT(*) AS n FROM suggestions WHERE lower(name) = lower(?)', name).n;
+    email.send({
+      to: config.supportEmail, kind: 'suggestion',
+      subject: `Diner recommends: ${name}${zip ? ` (${zip})` : city ? ` (${city})` : ''}${total > 1 ? ` · ${total} times now` : ''}`,
+      html: email.layout(null, 'A diner wants this restaurant on Rbooked', `<p style="font-size:18px"><b>${email.esc(name)}</b></p>
+        <p>${[city, zip].filter(Boolean).map(email.esc).join(' · ') || 'No location given'}</p>
+        ${website ? `<p>Website: <a href="${email.esc(website)}">${email.esc(website)}</a></p>` : ''}
+        ${note ? `<p>Note: ${email.esc(note)}</p>` : ''}
+        <p>Diner's email: ${dinerEmail ? `<a href="mailto:${email.esc(dinerEmail)}">${email.esc(dinerEmail)}</a>` : 'not given'}</p>
+        <p style="font-size:13px;color:#7a6f63">All recommendations are on your support page: ${email.esc(config.baseUrl)}/staff.html</p>`),
+    }).catch(() => {});
+  }
+  res.json({ ok: true });
+}));
+
 router.get('/featured', wrap(async (req, res) => {
   const zip = String(req.query.zip || '').trim();
   const party = Math.max(1, Math.min(20, Number(req.query.party) || 2));

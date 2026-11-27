@@ -43,6 +43,20 @@ router.post('/backup/email', wrap(async (req, res) => {
   res.json({ status: await require('../ops').dailyBackup(new Date(), { force: true }) });
 }));
 
+// Diners' restaurant recommendations, most-asked first.
+router.get('/suggestions', wrap(async (req, res) => {
+  res.json(all(`SELECT lower(name) AS k, MAX(name) AS name, GROUP_CONCAT(DISTINCT NULLIF(zip, '')) AS zips, GROUP_CONCAT(DISTINCT NULLIF(city, '')) AS cities,
+    MAX(website) AS website, GROUP_CONCAT(DISTINCT NULLIF(diner_email, '')) AS emails, GROUP_CONCAT(NULLIF(note, ''), ' | ') AS notes,
+    COUNT(*) AS times, MAX(created_at) AS last_at, MAX(id) AS id, MAX(status) AS status FROM suggestions GROUP BY lower(name) ORDER BY times DESC, last_at DESC LIMIT 200`));
+}));
+router.put('/suggestions/:id', wrap(async (req, res) => {
+  const st = ['new', 'contacted', 'joined', 'skip'].includes(req.body.status) ? req.body.status : 'new';
+  const row = one('SELECT name FROM suggestions WHERE id = ?', Number(req.params.id));
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  run('UPDATE suggestions SET status = ? WHERE lower(name) = lower(?)', st, row.name);
+  res.json({ ok: true });
+}));
+
 // Show a restaurant first on the home page (or stop).
 router.put('/restaurants/:id/featured', wrap(async (req, res) => {
   const r = one('SELECT id, name FROM restaurants WHERE id = ?', Number(req.params.id));
