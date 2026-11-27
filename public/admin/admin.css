@@ -508,3 +508,4 @@ tr.is-late > td:first-child { box-shadow: inset 4px 0 0 #f59e0b; }
   .pf-st .tag { display: none; }
 }
 .pf-mode-opt input { width: auto; flex: none; min-height: 0; }
+.seat-pick { display: flex; flex-wrap: wrap; gap: 8px; } .seat-pick .btn { min-height: 48px; min-width: 88px; } .seat-pick small { opacity: .8; font-weight: 500; }

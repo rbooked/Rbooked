@@ -669,6 +669,7 @@
     if (!document.getElementById('res-body')) return;
     S.floor = floor;
     S.lastStats = stats;
+    S.lastRows = data.reservations;
     // One tidy row: tap a count to show just those reservations (works in List and Floor plan).
     const R = data.reservations;
     const counts = { all: R.length };
@@ -832,7 +833,34 @@
   }
   async function resAction(act, x) {
     try {
-      if (act === 'seat') { await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { status: 'seated' } }); TB.toast(`${x.guest_name} seated`); }
+      if (act === 'seat') {
+        const rows = S.lastRows || [];
+        const f = S.floor || { tables: [], combos: [] };
+        const combo = x.combo_id && (f.combos || []).find((c) => c.id === x.combo_id);
+        const mine = combo ? comboTables(combo) : x.table_id ? [x.table_id] : [];
+        const seatedOn = (ids) => rows.filter((y) => y.id !== x.id && y.status === 'seated' && (ids.includes(y.table_id) || (y.combo_id && (f.combos || []).some((c) => c.id === y.combo_id && comboTables(c).some((t) => ids.includes(t))))));
+        const busy = mine.length ? seatedOn(mine) : [];
+        if (busy.length || !mine.length) {
+          const freeTables = f.tables.filter((t) => t.active && t.max_seats >= x.party_size && !seatedOn([t.id]).length)
+            .sort((a, b) => a.max_seats - b.max_seats);
+          return TB.modal(`<h2>Seat ${esc(x.guest_name)} (${x.party_size})</h2>
+            <p>${busy.length ? `<b>${esc(busy.map((y) => y.guest_name).join(', '))}</b> ${busy.length > 1 ? 'are' : 'is'} still seated at ${esc(x.table_label || 'their table')}. Pick a free table:` : 'Pick a table:'}</p>
+            <div class="seat-pick">${freeTables.map((t) => `<button class="btn ok" data-t="${t.id}">${esc(t.label)} <small>(${t.min_seats}-${t.max_seats})</small></button>`).join('') || '<p class="muted">No free table fits this party right now.</p>'}</div>
+            <div class="row" style="margin-top:14px;flex-wrap:wrap;gap:8px">${mine.length ? `<button class="btn secondary" data-t="keep">Seat at ${esc(x.table_label || 'their table')} anyway</button>` : ''}<button class="btn ghost" data-close>Back</button></div>`, (m, close) => {
+            m.querySelectorAll('[data-t]').forEach((b) => {
+              b.onclick = async () => {
+                b.disabled = true;
+                try {
+                  const body = b.dataset.t === 'keep' ? { status: 'seated', force: true } : { status: 'seated', table_id: Number(b.dataset.t), combo_id: null, force: true };
+                  await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body });
+                  close(); TB.toast(`${x.guest_name} seated`); load();
+                } catch (e) { b.disabled = false; fail(e); }
+              };
+            });
+          });
+        }
+        await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { status: 'seated' } }); TB.toast(`${x.guest_name} seated`);
+      }
       if (act === 'complete') { await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { status: 'completed' } }); TB.toast(`${x.guest_name}'s table is finished`); }
       if (act === 'undo') { await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { status: 'confirmed' } }); if (x.status === 'no_show') TB.toast(`${x.guest_name} is back on the list`); }
       if (act === 'resend') { await api(`/api/admin/reservations/${x.id}/resend`, { body: {} }); TB.toast('Email sent'); return; }
@@ -939,9 +967,12 @@
     const t0 = toMin(S.rfTime);
     const state = (t) => {
       const list = at(t);
-      const cur = list.find((x) => x.status !== 'completed' && toMin(x.time) <= t0 && toMin(x.time) + x.duration_minutes > t0);
+      // Seated guests stay on their table until someone taps Finished, even if they run past their booked time.
+      const seatedHere = list.filter((x) => x.status === 'seated');
+      const cur = seatedHere[seatedHere.length - 1]
+        || list.find((x) => x.status === 'confirmed' && toMin(x.time) <= t0 && toMin(x.time) + x.duration_minutes > t0);
       const next = list.find((x) => x.status === 'confirmed' && toMin(x.time) > t0 && x !== cur);
-      return { list, cur, next };
+      return { list, cur, next, seatedN: seatedHere.length };
     };
     const until = (x) => TB.time(hhmm(toMin(x.time) + x.duration_minutes));
     const inMin = (m) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`);
@@ -949,7 +980,7 @@
     const tables = floor.tables.filter((t) => t.active && (S.rfArea ? t.area_id === S.rfArea : !t.area_id));
     const sel = S.rfSel || [];
     const free = floor.tables.filter((t) => t.active && !state(t).cur).length;
-    const covers = live.filter((x) => x.status !== 'completed' && toMin(x.time) <= t0 && toMin(x.time) + x.duration_minutes > t0).reduce((a, x) => a + x.party_size, 0);
+    const covers = live.filter((x) => x.status === 'seated').reduce((a, x) => a + x.party_size, 0);
     body.innerHTML = `<div class="rf-bar">
         <div class="seg" id="rf-areas">${areas.map((a) => `<button data-a="${a.id}" class="${a.id === S.rfArea ? 'on' : ''}">${esc(a.name)}</button>`).join('')}</div>
         <span class="muted small rf-info"><b>${free}</b> free tables · <b>${covers}</b> guests in house</span>
@@ -962,7 +993,8 @@
         <div><div class="canvas-scroll"><div class="canvas rf" id="rf-canvas">${tables.map((t) => {
           const [w, h] = tableSize(t); const st = state(t);
           const cls = st.cur ? `busy-${st.cur.status}` : st.next && toMin(st.next.time) - t0 <= 30 ? 'soon' : '';
-          const line = st.cur ? `${esc(st.cur.guest_name.split(' ')[0])} · ${st.cur.party_size}<br>until ${until(st.cur)}` : st.next ? `Next ${TB.time(st.next.time)}<br>${esc(st.next.guest_name.split(' ')[0])} · ${st.next.party_size}` : 'Free';
+          const over = st.cur && st.cur.status === 'seated' && isToday && toMin(st.cur.time) + st.cur.duration_minutes < t0;
+          const line = st.cur ? `${esc(st.cur.guest_name.split(' ')[0])} · ${st.cur.party_size}${st.seatedN > 1 ? ` <b>+${st.seatedN - 1}</b>` : ''}<br>${over ? '<b>over time</b>' : `until ${until(st.cur)}`}` : st.next ? `Next ${TB.time(st.next.time)}<br>${esc(st.next.guest_name.split(' ')[0])} · ${st.next.party_size}` : 'Free';
           const inCombo = st.cur && st.cur.combo_id ? '<span class="rf-link">⛓</span>' : '';
           return `<div class="ftable ${t.shape} ${cls} ${S.rfTable === t.id ? 'sel' : ''} ${sel.includes(t.id) ? 'combo-hl' : ''}" data-id="${t.id}"
             style="left:${t.x}px;top:${t.y}px;width:${w}px;height:${h}px;transform:rotate(${t.rotation}deg)">${inCombo}

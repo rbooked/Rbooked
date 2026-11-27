@@ -37,10 +37,11 @@ function autoNoShows(now = new Date()) {
 }
 
 function autoComplete(now = new Date()) {
-  // Seated tables whose turn ended over an hour ago are closed out as completed.
+  // Seated tables are closed out as completed only well after the night is over (4 hours past their booked end),
+  // so guests who linger never vanish from the Seated list while they're still at the table. Staff tap Finished.
   const rows = all(`SELECT id, starts_at_utc, duration_minutes FROM reservations WHERE status = 'seated'`);
   for (const r of rows) {
-    if (new Date(r.starts_at_utc).getTime() + (r.duration_minutes + 60) * 60000 < now.getTime()) {
+    if (new Date(r.starts_at_utc).getTime() + (r.duration_minutes + 240) * 60000 < now.getTime()) {
       run(`UPDATE reservations SET status='completed', updated_at=datetime('now') WHERE id = ?`, r.id);
     }
   }
