@@ -853,3 +853,19 @@ test('a seated party running over time keeps its table blocked online', () => {
   run("UPDATE reservations SET status = 'completed' WHERE code = 'OVERTM'");
   assert.strictEqual(isSeatingFree(r.id, { tableId: t.id }, now.date, hh(now.minutes + 10), 90), true);
 });
+
+test('pause online bookings: diners see no times, staff still book, resume brings them back', async () => {
+  const day = addDays(tomorrow, 14);
+  const times = async () => (await call('GET', `/api/public/restaurants/test-bistro/availability?date=${day}&party=2`, null, false)).data.slots.filter((s) => s.available).length;
+  assert.ok(await times() > 0);
+  const p = await call('PUT', '/api/admin/pause', { mode: 'minutes', minutes: 30 });
+  assert.strictEqual(p.data.online_paused, true);
+  assert.strictEqual(await times(), 0);
+  const g = await call('POST', '/api/public/restaurants/test-bistro/reservations', { date: day, time: '19:00', party_size: 2, name: 'P', email: 'p@example.com', phone: '5551110000' }, false);
+  assert.strictEqual(g.status, 409);
+  assert.strictEqual((await call('GET', '/api/public/restaurants/test-bistro', null, false)).data.paused, true);
+  assert.strictEqual((await call('POST', '/api/admin/reservations', { source: 'walk_in', party_size: 2 })).status, 201);
+  assert.strictEqual((await call('PUT', '/api/admin/pause', { mode: 'on' })).data.online_paused, true);
+  assert.strictEqual((await call('PUT', '/api/admin/pause', { mode: 'off' })).data.online_paused, false);
+  assert.ok(await times() > 0);
+});

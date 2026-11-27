@@ -2,14 +2,14 @@
 const express = require('express');
 const { one, all, run, tx } = require('../db');
 const { requireAuth } = require('../auth');
-const { getAvailability } = require('../availability');
+const { getAvailability, onlinePaused } = require('../availability');
 const { createReservation, cancelReservation, markNoShow, BookingError } = require('../reservations');
 const billing = require('../billing');
 const email = require('../email');
 const config = require('../config');
 const { lookupZip, ensureGeo } = require('../geo');
 const places = require('../../public/js/places');
-const { nowInZone, zonedToUtc } = require('../time');
+const { nowInZone, zonedToUtc, addDays } = require('../time');
 const { wrap } = require('./public');
 
 const router = express.Router();
@@ -52,7 +52,24 @@ function resetRestaurant(rid) {
 }
 
 router.get('/restaurant', wrap(async (req, res) => {
-  res.json({ restaurant: pick(req.restaurant, ['id', 'slug', 'featured', 'verified', ...SETTINGS]), user: { id: req.user.id, name: req.user.name, email: req.user.email }, billing: billing.billingSummary(req.restaurant), baseUrl: config.baseUrl });
+  res.json({ restaurant: { ...pick(req.restaurant, ['id', 'slug', 'featured', 'verified', 'bookings_paused_until', ...SETTINGS]), online_paused: onlinePaused(req.restaurant) }, user: { id: req.user.id, name: req.user.name, email: req.user.email }, billing: billing.billingSummary(req.restaurant), baseUrl: config.baseUrl });
+}));
+
+// Pause online bookings: "minutes" (30, 60, 120…), "tonight" (back on at 5 AM tomorrow), "on" (until resumed) or "off". Staff can still book and seat anyone.
+router.put('/pause', wrap(async (req, res) => {
+  const r = req.restaurant;
+  const mode = String(req.body.mode || '');
+  let v = null;
+  const mins = Number(req.body.minutes);
+  if (mode === 'on') v = 'on';
+  else if (mode === 'minutes' && mins > 0 && mins <= 24 * 60) v = new Date(Date.now() + mins * 60000).toISOString();
+  else if (mode === 'tonight') {
+    const now = nowInZone(r.timezone);
+    v = zonedToUtc(now.minutes < 5 * 60 ? now.date : addDays(now.date, 1), '05:00', r.timezone).toISOString();
+  } else if (mode !== 'off') throw new BookingError('Pick how long to pause.');
+  run('UPDATE restaurants SET bookings_paused_until = ? WHERE id = ?', v, r.id);
+  const fresh = one('SELECT * FROM restaurants WHERE id = ?', r.id);
+  res.json({ bookings_paused_until: fresh.bookings_paused_until, online_paused: onlinePaused(fresh) });
 }));
 
 router.put('/restaurant', wrap(async (req, res) => {

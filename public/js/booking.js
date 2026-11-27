@@ -34,6 +34,13 @@
       return state;
     }
 
+    if (info.paused) { // the restaurant paused online bookings for now
+      const tel = r.phone ? `<a class="btn secondary block" href="tel:${esc(r.phone)}">📞 Call ${esc(r.name)}</a>` : '';
+      root.innerHTML = `${opts.compact ? '' : '<h2 class="serif">Make a reservation</h2>'}<p><b>Not taking online bookings right now.</b> Walk-ins welcome!</p>
+        <p class="muted small">Please check back a little later, or call to ask.</p>${tel}`;
+      return state;
+    }
+
     function renderPicker() {
       root.innerHTML = `
         ${opts.compact ? `<div class="row" style="margin-bottom:12px"><b class="serif" style="font-size:20px">${esc(r.name)}</b></div>` : '<h2 class="serif">Make a reservation</h2>'}

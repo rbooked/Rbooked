@@ -5,6 +5,14 @@ const { turnFor } = require('../public/js/matcher');
 
 const ACTIVE = "('confirmed','seated')";
 
+/** Has the restaurant paused online bookings right now? ("on" = until they resume, else an ISO end time.) */
+function onlinePaused(r) {
+  const v = r && r.bookings_paused_until;
+  if (!v) return false;
+  if (v === 'on') return true;
+  return new Date(v) > new Date();
+}
+
 /** A special day: closed (no times) or special hours that replace the usual services for that date only. */
 function specialDay(restaurantId, date) {
   return one('SELECT * FROM closures WHERE restaurant_id = ? AND date = ? ORDER BY id DESC LIMIT 1', restaurantId, date) || null;
@@ -127,6 +135,7 @@ function getAvailability(restaurant, date, partySize, opts = {}) {
   const party = Number(partySize);
   const result = { date, partySize: party, closed: false, slots: [] };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !(party >= 1)) return result;
+  if (!opts.admin && onlinePaused(restaurant)) return { ...result, paused: true };
   if (!opts.admin && party > restaurant.max_party_size) return { ...result, tooLarge: true };
   if (isClosed(restaurant.id, date)) return { ...result, closed: true };
 
@@ -200,4 +209,4 @@ function nextOpenDate(restaurantId, date, days = 30) {
   return null;
 }
 
-module.exports = { nextOpenDate, specialDay, getAvailability, findSlot, isTableFree, isSeatingFree, anyFreeSeating, shiftsForDate, comboMap, occupiedTables };
+module.exports = { onlinePaused, nextOpenDate, specialDay, getAvailability, findSlot, isTableFree, isSeatingFree, anyFreeSeating, shiftsForDate, comboMap, occupiedTables };

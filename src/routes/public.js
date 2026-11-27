@@ -1,7 +1,7 @@
 'use strict';
 const express = require('express');
 const { one, all, run } = require('../db');
-const { getAvailability, findSlot } = require('../availability');
+const { getAvailability, findSlot, onlinePaused } = require('../availability');
 const { createReservation, cancelReservation, BookingError } = require('../reservations');
 const { isBookable, isListed, isWalkIn } = require('../billing');
 const { lookupZip, milesBetween } = require('../geo');
@@ -263,7 +263,7 @@ router.get('/restaurants/:slug', wrap(async (req, res) => {
   const rl = counts('restaurant', [r.id])[r.id] || { likes: 0, liked: false };
   const today = nowInZone(r.timezone).date;
   const special = all("SELECT date, reason, open_time, close_time FROM closures WHERE restaurant_id = ? AND date >= ? ORDER BY date LIMIT 8", r.id, today);
-  res.json({ restaurant: { ...publicRestaurant(r), likes: rl.likes, liked: rl.liked }, shifts, menu, gallery, special, today, reviews: require('../reviews').forRestaurant(r.id), exposure });
+  res.json({ restaurant: { ...publicRestaurant(r), likes: rl.likes, liked: rl.liked }, shifts, menu, gallery, special, today, reviews: require('../reviews').forRestaurant(r.id), exposure, paused: !exposure && onlinePaused(r) });
 }));
 
 // ---------- Likes ("hearts") from diners. No account needed: an anonymous id in a cookie. ----------

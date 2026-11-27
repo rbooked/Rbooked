@@ -333,6 +333,7 @@ function migrate(d) {
   for (const [c, def] of [['website_url', "''"], ['logo_url', "''"], ['hours', "''"]]) if (!cols.has(c)) d.exec(`ALTER TABLE restaurants ADD COLUMN ${c} TEXT DEFAULT ${def}`);
   if (!cols.has('featured')) d.exec('ALTER TABLE restaurants ADD COLUMN featured INTEGER DEFAULT 0');
   if (!cols.has('referred_by')) { d.exec('ALTER TABLE restaurants ADD COLUMN referred_by INTEGER'); d.exec('ALTER TABLE restaurants ADD COLUMN referral_credited INTEGER DEFAULT 0'); d.exec('ALTER TABLE restaurants ADD COLUMN free_months INTEGER DEFAULT 0'); }
+  if (!cols.has('bookings_paused_until')) d.exec('ALTER TABLE restaurants ADD COLUMN bookings_paused_until TEXT'); // online bookings paused: ISO time it ends, or "on" until resumed
   if (!cols.has('walk_in_only')) d.exec('ALTER TABLE restaurants ADD COLUMN walk_in_only INTEGER DEFAULT 0'); // the restaurant's own "Walk-ins only" switch
   if (!cols.has('listing')) d.exec("ALTER TABLE restaurants ADD COLUMN listing TEXT DEFAULT 'bookings'"); // 'exposure' = walk-in-only listing added by support
   if (!cols.has('verified')) d.exec('ALTER TABLE restaurants ADD COLUMN verified INTEGER DEFAULT 1');

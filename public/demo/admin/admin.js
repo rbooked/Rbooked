@@ -613,6 +613,50 @@
 
   // ---------------- Reservations ----------------
   let refreshTimer = null;
+  // Pause online bookings (staff can still add and seat anyone).
+  function pausedUntil() {
+    const v = S.me.restaurant.bookings_paused_until;
+    if (!v) return null;
+    if (v === 'on') return 'on';
+    return new Date(v) > new Date() ? new Date(v) : null;
+  }
+  function renderPause() {
+    const bar = document.getElementById('pause-bar'); const btn = document.getElementById('pause-btn');
+    if (!bar) return;
+    const u = pausedUntil();
+    if (btn) btn.hidden = !!u;
+    if (!u) { bar.innerHTML = ''; return; }
+    let when = 'until you turn it back on';
+    if (u !== 'on') {
+      const t = new Intl.DateTimeFormat('en-US', { timeZone: S.me.restaurant.timezone, hour: 'numeric', minute: '2-digit' }).format(u);
+      const left = Math.max(1, Math.round((u - new Date()) / 60000));
+      when = `resumes ${t} (in ${left < 60 ? `${left} min` : `${Math.floor(left / 60)} h ${left % 60 ? `${left % 60} min` : ''}`.trim()})`;
+    }
+    bar.innerHTML = `<div class="pause-bar"><span>⏸ <b>Online bookings paused</b> · ${esc(when)}. You can still add and seat anyone.</span><button class="btn ok sm" id="pause-resume">Resume</button></div>`;
+    bar.querySelector('#pause-resume').onclick = () => setPause({ mode: 'off' });
+  }
+  async function setPause(body) {
+    try {
+      const out = await api('/api/admin/pause', { method: 'PUT', body });
+      S.me.restaurant.bookings_paused_until = out.bookings_paused_until;
+      renderPause();
+      TB.toast(out.online_paused ? 'Online bookings paused' : 'Online bookings are back on');
+    } catch (e) { fail(e); }
+  }
+  function pauseModal() {
+    const opts = [['30 minutes', 30], ['1 hour', 60], ['2 hours', 120], ['4 hours', 240]];
+    TB.modal(`<h2>Pause online bookings</h2>
+      <p class="muted">Diners can't book online while paused. Your reservations stay as they are, and you can still add and seat anyone.</p>
+      <div class="pause-pick">${opts.map(([l, m]) => `<button class="btn secondary" data-m="${m}">${l}</button>`).join('')}
+        <button class="btn secondary" data-mode="tonight">Rest of tonight</button>
+        <button class="btn secondary" data-mode="on">Until I turn it back on</button></div>
+      <div class="row" style="margin-top:14px"><button class="btn ghost" data-close>Cancel</button></div>`, (m, close) => {
+      m.querySelectorAll('[data-m],[data-mode]').forEach((b) => {
+        b.onclick = async () => { close(); await setPause(b.dataset.m ? { mode: 'minutes', minutes: Number(b.dataset.m) } : { mode: b.dataset.mode }); };
+      });
+    });
+  }
+
   async function viewReservations() {
     view.innerHTML = `
       <div class="rv-bar">
@@ -625,10 +669,12 @@
         <div class="seg rv-seg" role="tablist"><button data-mode="list">List</button><button data-mode="floor">Floor plan</button><button data-mode="timeline">Timeline</button></div>
         <div class="rv-search"><input type="search" id="d-q" placeholder="Search name, phone or code" aria-label="Search reservations"><span class="live" id="live" title="Updates on its own"><i></i>Live</span></div>
         <div class="rv-actions">
+          <button class="btn secondary" id="pause-btn" title="Pause online bookings">⏸ Pause</button>
           <button class="btn secondary" id="walkin">+ Walk-in</button>
           <button class="btn" id="newres">+ New reservation</button>
         </div>
       </div>
+      <div id="pause-bar"></div>
       <div class="rv-strip" id="stats"></div>
       <div id="upnext"></div>
       <div id="res-body"></div>`;
@@ -644,6 +690,8 @@
     });
     document.getElementById('newres').onclick = () => reservationModal(null, load);
     document.getElementById('walkin').onclick = () => walkInModal(load);
+    document.getElementById('pause-btn').onclick = pauseModal;
+    renderPause();
     clearInterval(refreshTimer);
     // Keep the book live: refresh every 30s while nobody is editing.
     refreshTimer = setInterval(() => {
@@ -655,6 +703,7 @@
   }
 
   async function load(quiet) {
+    renderPause();
     const qEl = document.getElementById('d-q');
     const q = qEl ? qEl.value : '';
     const [data, stats, floor] = await Promise.all([
