@@ -514,3 +514,73 @@ tr.is-late > td:first-child { box-shadow: inset 4px 0 0 #f59e0b; }
 .pause-bar span { flex: 1; min-width: 200px; }
 .pause-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
 .pause-pick [data-mode] { grid-column: span 2; }
+
+/* ---- Reservations on iPad and iPhone: nothing overlaps, lists scroll on their own ---- */
+body.on-res #banner .alert:not(.error) { display: none; } /* trial reminder lives on the other pages */
+.rv-find { display: none; }
+.rv-actions { flex-wrap: wrap; }
+.rl { position: relative; }
+.rl-main { position: relative; z-index: 1; background: inherit; transition: transform .2s; touch-action: pan-y; }
+.rl.st-late .rl-main { background: #fffbeb; }
+.rl-swipe { position: absolute; inset: 0; display: flex; align-items: center; justify-content: flex-end; padding-right: 22px; background: #bbf7d0; color: #166534; font-weight: 800; font-size: 16px; }
+.rl.swipe-ready .rl-swipe { background: #16a34a; color: #fff; }
+.rl.open .rl-swipe { bottom: auto; height: 64px; }
+
+/* iPad (and laptops): page stays still; the list and the floor plan each scroll by themselves */
+@media (min-width: 641px) {
+  body.rv-fit .view { padding-bottom: 12px; }
+  body.rv-fit #res-body { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding-right: 2px; }
+  body.rv-fit #res-body:has(.floor-wrap) { overflow: visible; height: auto !important; }
+  body.rv-fit .rf-wrap { align-items: stretch; min-height: 0; grid-template-rows: minmax(0, 1fr); }
+  body.rv-fit .rf-wrap > div:not(#rf-panel) { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  body.rv-fit .rf-wrap .canvas-scroll { flex: 1; min-height: 0; -webkit-overflow-scrolling: touch; }
+  body.rv-fit #rf-panel { position: static; align-self: stretch; display: flex; flex-direction: column; min-height: 0; overflow: hidden; margin: 0; }
+  body.rv-fit #rf-panel .rf-list { flex: 1; min-height: 0; max-height: none; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding-right: 2px; }
+  body.rv-fit #rf-panel .rf-len { display: none; }
+  .rf-item { min-height: 52px; }
+}
+/* iPad portrait and split view: list on the left, floor plan on the right */
+@media (min-width: 641px) and (max-width: 1100px) {
+  .floor-wrap.rf-wrap { grid-template-columns: 300px minmax(0, 1fr); }
+  .rv-bar { grid-template-columns: minmax(0, 1fr) auto; }
+  .rv-actions .btn { min-height: 46px; }
+}
+@media (min-width: 641px) and (max-width: 900px) {
+  .rv-search { grid-column: 1 / -1; }
+  .rv-actions { grid-column: 1 / -1; justify-content: stretch; }
+  .rv-actions .btn { flex: 1; }
+  #pause-btn { flex: 0 0 auto; }
+}
+@media (min-width: 901px) and (max-width: 1180px) {
+  .rv-search { grid-column: 1; }
+  .rv-search .live { display: none; }
+  .rv-strip { margin-bottom: 10px; }
+  .rf-bar { margin-bottom: 8px; }
+}
+@media (min-width: 641px) and (max-width: 820px) {
+  .floor-wrap.rf-wrap { grid-template-columns: 290px minmax(0, 1fr); gap: 10px; }
+  .rv-date input[type=date] { width: 140px; }
+}
+/* iPhone */
+@media (max-width: 640px) {
+  .rv-find { display: inline-flex; }
+  .rv-bar { position: sticky; top: var(--rv-top, 56px); z-index: 8; background: #f6f3ee; margin: -16px -16px 10px; padding: 10px 16px 8px; border-bottom: 1px solid var(--line); }
+  .rv-bar .rv-search { display: none; }
+  .rv-bar.show-search .rv-search { display: flex; }
+  .rv-search .live { display: none; }
+  .rv-date .btn.sm, .rv-date input[type=date] { min-height: 42px; }
+  .rv-seg button { min-height: 42px; }
+  .rv-actions { display: grid; grid-template-columns: auto 1fr 1.4fr; gap: 8px; }
+  .rv-actions .btn { padding-left: 10px; padding-right: 10px; }
+  .rv-strip { margin-bottom: 10px; }
+  .pause-bar { font-size: 14px; padding: 8px 12px; }
+}
+
+.rf-item-main .small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#rf-panel .rf-hint { margin-bottom: 6px; }
+.rl-main { background: var(--surface); }
+.rl.st-late .rl-main { background: #fffbeb; }
+.rl.dim .rl-main { opacity: 1; }
+.rl.dim .rl-main > * { opacity: .62; }
+.rl-swipe { visibility: hidden; }
+.rl.swiping .rl-swipe { visibility: visible; }

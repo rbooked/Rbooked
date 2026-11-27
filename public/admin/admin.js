@@ -77,6 +77,7 @@
     document.getElementById('view-title').textContent = title;
     document.querySelectorAll('#side-nav a').forEach((a) => a.classList.toggle('active', a.dataset.view === key));
     document.getElementById('sidebar').classList.remove('open');
+    document.body.classList.toggle('on-res', key === 'reservations');
     view.innerHTML = '<p class="muted">Loading…</p>';
     fn().catch(fail);
   }
@@ -665,6 +666,7 @@
           <input type="date" id="d-date" value="${S.date}" aria-label="Date">
           <button class="btn secondary sm" id="d-next" aria-label="Next day">›</button>
           <button class="btn secondary sm" id="d-today">Today</button>
+          <button class="btn secondary sm rv-find" id="d-find" aria-label="Search">🔍</button>
         </div>
         <div class="seg rv-seg" role="tablist"><button data-mode="list">List</button><button data-mode="floor">Floor plan</button><button data-mode="timeline">Timeline</button></div>
         <div class="rv-search"><input type="search" id="d-q" placeholder="Search name, phone or code" aria-label="Search reservations"><span class="live" id="live" title="Updates on its own"><i></i>Live</span></div>
@@ -691,6 +693,7 @@
     document.getElementById('newres').onclick = () => reservationModal(null, load);
     document.getElementById('walkin').onclick = () => walkInModal(load);
     document.getElementById('pause-btn').onclick = pauseModal;
+    document.getElementById('d-find').onclick = () => { const bar = view.querySelector('.rv-bar'); bar.classList.toggle('show-search'); if (bar.classList.contains('show-search')) document.getElementById('d-q').focus(); };
     renderPause();
     clearInterval(refreshTimer);
     // Keep the book live: refresh every 30s while nobody is editing.
@@ -732,10 +735,26 @@
     if (S.mode === 'list') document.getElementById('upnext').innerHTML = ''; // the list already puts late and next guests first
     else renderUpNext(data.reservations);
     const body = document.getElementById('res-body');
-    if (S.mode === 'timeline') return renderTimeline(body, data.reservations, floor);
-    if (S.mode === 'floor') return renderResFloor(body, data.reservations, floor);
-    renderList(body, data.reservations);
+    if (S.mode === 'timeline') renderTimeline(body, data.reservations, floor);
+    else if (S.mode === 'floor') renderResFloor(body, data.reservations, floor);
+    else renderList(body, data.reservations);
+    fitPanes();
   }
+
+  // iPad and up: the list (and floor plan) fill the screen and scroll on their own, so the page stays put.
+  function fitPanes() {
+    const body = document.getElementById('res-body');
+    if (!body) return;
+    const tb = document.querySelector('.topbar'); if (tb) document.documentElement.style.setProperty('--rv-top', `${tb.offsetHeight}px`);
+    const wide = window.innerWidth > 640 && S.mode !== 'timeline';
+    document.body.classList.toggle('rv-fit', wide);
+    const el = S.mode === 'floor' ? body.querySelector('.floor-wrap') : body;
+    body.style.height = ''; if (el && el !== body) el.style.height = '';
+    if (!wide || !el) return;
+    const top = el.getBoundingClientRect().top + window.scrollY;
+    el.style.height = `${Math.max(320, window.innerHeight - top - 12)}px`;
+  }
+  let fitT; window.addEventListener('resize', () => { clearTimeout(fitT); fitT = setTimeout(fitPanes, 120); });
 
   function renderUpNext(rows) {
     const box = document.getElementById('upnext');
@@ -851,8 +870,30 @@
       const x = rows.find((r) => r.id === Number(li.dataset.id));
       const main = li.querySelector('.rl-main');
       const toggle = () => { if (S.rlOpen.has(x.id)) S.rlOpen.delete(x.id); else S.rlOpen.add(x.id); renderList(body, rows); };
-      main.onclick = (e) => { if (!e.target.closest('[data-act]')) toggle(); };
+      main.onclick = (e) => { if (main.dataset.swiped) return; if (!e.target.closest('[data-act]')) toggle(); };
       main.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } };
+      // Swipe a row left to Seat (or Finished when they're already seated).
+      const swipeAct = x.status === 'seated' ? ['complete', '✓ Finished'] : ['confirmed', 'no_show'].includes(x.status) ? ['seat', '✓ Seat'] : null;
+      if (swipeAct) {
+        li.insertAdjacentHTML('afterbegin', `<div class="rl-swipe" aria-hidden="true">${swipeAct[1]}</div>`);
+        let sx = 0; let sy = 0; let dx = 0; let mode = null;
+        main.addEventListener('touchstart', (e) => { const t = e.touches[0]; sx = t.clientX; sy = t.clientY; dx = 0; mode = null; main.style.transition = 'none'; }, { passive: true });
+        main.addEventListener('touchmove', (e) => {
+          const t = e.touches[0]; const mx = t.clientX - sx; const my = t.clientY - sy;
+          if (!mode) { if (Math.abs(mx) < 8 && Math.abs(my) < 8) return; mode = Math.abs(mx) > Math.abs(my) && mx < 0 ? 'x' : 'y'; }
+          if (mode !== 'x') return;
+          e.preventDefault(); li.classList.add('swiping'); dx = Math.min(0, mx); main.style.transform = `translateX(${dx}px)`;
+          li.classList.toggle('swipe-ready', dx < -90);
+        }, { passive: false });
+        main.addEventListener('touchend', () => {
+          main.style.transition = ''; main.style.transform = '';
+          if (mode === 'x') {
+            main.dataset.swiped = '1'; setTimeout(() => { delete main.dataset.swiped; }, 350);
+            if (dx < -90) resAction(swipeAct[0], x);
+          }
+          li.classList.remove('swipe-ready'); setTimeout(() => li.classList.remove('swiping'), 220); mode = null;
+        });
+      }
       li.querySelectorAll('[data-act]').forEach((el) => {
         const act = el.dataset.act;
         if (act === 'table') {
@@ -980,6 +1021,8 @@
   // Floor view of the book: every table on the floor plan, colored by what's happening at the
   // chosen time. Click a table to see who's there now, who's next, and the rest of its night.
   function renderResFloor(body, rows, floor) {
+    const keep = body.querySelector('.rf-list'); const keepTop = keep ? keep.scrollTop : 0;
+    requestAnimationFrame(() => { fitPanes(); const l = body.querySelector('.rf-list'); if (l && keepTop) l.scrollTop = keepTop; });
     const now = nowLocal();
     const isToday = S.date === now.date;
     // Tables show who's there right now (today) or their first booking (other days). No time slider.
