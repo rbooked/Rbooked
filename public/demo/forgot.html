@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="robots" content="noindex"><meta name="robots" content="noindex"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%229%22 fill=%22%23c2410c%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2218%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Georgia%22%3ER%3C/text%3E%3C/svg%3E">
+<title>Forgot password · Rbooked</title>
+</head>
+<body>
+<header class="site-header"><div class="container">
+  <a class="logo" href="index.html"><span class="logo-mark">R</span>Rbooked</a>
+  <nav class="nav"><a href="index.html" class="hide-sm">Find a table</a><a href="for-restaurants.html">For restaurants</a><a href="login.html" id="nav-login"><span class="hide-xs">Restaurant login</span><span class="show-xs">Log in</span></a></nav>
+</div></header>
+<main class="container" style="max-width:440px;padding:48px 16px 80px">
+  <div class="card">
+    <h1 style="font-size:28px">Forgot your password?</h1>
+    <p class="muted">Enter your login email. We'll send you a link to choose a new password.</p>
+    <form id="f">
+      <div class="field"><label for="f-email">Email</label><input id="f-email" name="email" type="email" autocomplete="email" required></div>
+      <div id="f-msg"></div>
+      <button class="btn block lg" type="submit">Send reset link</button>
+    </form>
+    <p class="muted small" style="margin-top:16px"><a href="login.html">Back to login</a></p>
+  </div>
+</main>
+<footer class="footer"><div class="container row"><span>© Rbooked</span><span class="spacer"></span><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="for-restaurants.html">List your restaurant</a><a href="login.html">Restaurant login</a></div></footer>
+<script src="js/matcher.js"></script>
+<script src="js/places.js"></script>
+<script src="js/samples.js"></script>
+<script src="mock-api.js"></script>
+<script src="js/common.js"></script>
+<script>
+document.getElementById('f').onsubmit = async (e) => {
+  e.preventDefault(); const btn = e.target.querySelector('button'); btn.disabled = true;
+  const msg = document.getElementById('f-msg');
+  try {
+    await TB.api('/api/auth/forgot', { body: TB.formData(e.target) });
+    msg.innerHTML = '<div class="alert" style="margin-bottom:12px">If that email has an Rbooked login, a reset link is on its way. It works for 1 hour. Check your spam folder too.</div>';
+  } catch (err) { msg.innerHTML = `<div class="alert error" style="margin-bottom:12px">${TB.esc(err.message)}</div>`; btn.disabled = false; }
+};
+</script>
+</body>
+</html>

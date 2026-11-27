@@ -490,3 +490,9 @@ table.data tr:hover td { background: #fcfaf7; }
 .rvw-photo { display: block; margin-top: 10px; width: 100%; max-width: 320px; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 12px; cursor: zoom-in; }
 .rvw-reply { margin-top: 10px; padding: 10px 12px; background: var(--brand-soft, #fff1e8); border-radius: 10px; font-size: 14px; }
 .rvw-reply p { margin: 4px 0 0; white-space: pre-line; overflow-wrap: anywhere; }
+/* "Try the demo" on the For restaurants page */
+.hero-ctas { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.demo-cta { background: transparent; color: #fff; border: 2px solid #fff; }
+.demo-cta:hover { background: rgba(255, 255, 255, .12); }
+.hero p.demo-note { font-size: 14px; margin-top: 10px; opacity: .9; }
+@media (max-width: 480px) { .hero-ctas .btn { flex: 1 1 100%; text-align: center; } }

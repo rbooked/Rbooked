@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="robots" content="noindex"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%229%22 fill=%22%23c2410c%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2218%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Georgia%22%3ER%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="admin/admin.css">
+<title>Dashboard · Rbooked</title>
+<meta name="robots" content="noindex">
+</head>
+<body class="admin">
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <a class="logo" href="admin.html"><span class="logo-mark">R</span>Rbooked</a>
+    <div class="rest-name" id="rest-name"></div>
+    <nav class="side-nav" id="side-nav">
+      <a href="#profile" data-view="profile">🏪 Restaurant profile <span class="setup-pill" id="setup-pill" hidden></span></a>
+      <a href="#menu-items" data-view="menu-items">🍽️ Menu</a>
+      <a href="#gallery" data-view="gallery">📸 Gallery</a>
+      <a href="#reservations" data-view="reservations">📖 Reservations</a>
+      <a href="#floor" data-view="floor">🪑 Floor plan & tables</a>
+      <a href="#services" data-view="services">🕒 Services & hours</a>
+      <a href="#reviews" data-view="reviews">⭐ Reviews</a>
+      <a href="#guests" data-view="guests">📇 Address book</a>
+      <a href="#widget" data-view="widget">🧩 Website widget</a>
+      <a href="#preferences" data-view="preferences">⚙️ Settings</a>
+      <a href="#billing" data-view="billing">💳 Billing</a>
+      <a href="#emails" data-view="emails">✉️ Email log</a>
+    </nav>
+    <div class="side-foot">
+      <a id="public-link" target="_blank" rel="noopener">View public page ↗</a>
+      <button class="btn ghost sm" id="logout">Log out</button>
+    </div>
+  </aside>
+  <div class="main">
+    <div class="topbar">
+      <button class="btn secondary sm menu-btn" id="menu-btn" aria-label="Menu">☰</button>
+      <h1 id="view-title">Reservations</h1>
+      <span class="spacer"></span>
+      <span id="user-name" class="muted small"></span>
+    </div>
+    <div id="banner"></div>
+    <div id="view" class="view"></div>
+  </div>
+</div>
+<script src="js/matcher.js"></script>
+<script src="js/places.js"></script>
+<script src="js/samples.js"></script>
+<script src="mock-api.js"></script>
+<script src="js/common.js"></script>
+<script src="js/matcher.js"></script>
+<script src="js/places.js"></script>
+<script src="js/menu-import.js"></script>
+<script src="js/site-apply.js"></script>
+<script src="js/samples.js"></script>
+<script src="admin/admin.js"></script>
+</body>
+</html>

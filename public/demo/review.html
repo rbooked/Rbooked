@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="robots" content="noindex"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%229%22 fill=%22%23c2410c%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2218%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Georgia%22%3ER%3C/text%3E%3C/svg%3E">
+<title>How was it? · Rbooked</title>
+<meta name="robots" content="noindex">
+<style>
+  .rq-head { text-align: center; }
+  .rq-head h1 { margin: 6px 0 2px; font-size: 26px; }
+  .rq-stars { display: flex; justify-content: center; gap: 6px; margin: 18px 0 4px; }
+  .rq-stars button { font-size: 44px; line-height: 1; background: none; border: 0; padding: 4px; color: #e3ddd3; cursor: pointer; transition: transform .12s; touch-action: manipulation; }
+  .rq-stars button.on { color: #f5a623; }
+  .rq-stars button:active { transform: scale(1.2); }
+  .rq-word { text-align: center; min-height: 22px; font-weight: 600; color: var(--brand); }
+  .rq-photo { display: flex; gap: 12px; align-items: center; margin-top: 12px; }
+  .rq-photo img { width: 86px; height: 86px; object-fit: cover; border-radius: 12px; }
+  .rq-pill { display: inline-block; background: var(--brand); color: #fff; font-weight: 700; border-radius: 999px; padding: 4px 14px; font-size: 14px; }
+  .rq-count { text-align: right; font-size: 12px; }
+  textarea#rq-body { min-height: 110px; font-size: 16px; }
+</style>
+</head>
+<body>
+<header class="site-header"><div class="container">
+  <a class="logo" href="index.html"><span class="logo-mark">R</span>Rbooked</a>
+  <nav class="nav"><a href="index.html">Find a table</a></nav>
+</div></header>
+<main class="container" style="max-width:560px;padding-top:24px;padding-bottom:64px">
+  <div class="card" id="box"><p class="muted">Loading…</p></div>
+</main>
+<footer class="footer"><div class="container row"><span>© Rbooked</span><span class="spacer"></span><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a></div></footer>
+<script src="js/matcher.js"></script>
+<script src="js/places.js"></script>
+<script src="js/samples.js"></script>
+<script src="mock-api.js"></script>
+<script src="js/common.js"></script>
+<script>
+(function () {
+  const { api, esc } = TB;
+  const token = TB.qs('t');
+  const box = document.getElementById('box');
+  const WORDS = ['', 'Not great', 'It was okay', 'Good', 'Really good', 'Loved it!'];
+  let st = null; let stars = Number(TB.qs('s')) || 0; let photo; // undefined = keep, null = remove, string = new
+
+  async function load() {
+    if (!token) { box.innerHTML = '<div class="alert error">This review link is missing a code. Open it again from your email.</div>'; return; }
+    try { st = await api(`/api/public/review/${encodeURIComponent(token)}`); render(); }
+    catch (e) { box.innerHTML = `<div class="alert error">${esc(e.message)}</div>`; }
+  }
+
+  const back = () => `<a class="btn secondary block" href="/r/${encodeURIComponent(st.restaurant.slug)}" style="margin-top:14px">See ${esc(st.restaurant.name)}</a>`;
+  const head = (sub) => `<div class="rq-head"><span class="rq-pill">You Rbooked!</span><h1 class="serif">${esc(st.restaurant.name)}</h1><div class="muted small">${sub}</div></div>`;
+
+  function render() {
+    const when = `${esc(TB.date(st.date))}${st.party_size ? ` · party of ${st.party_size}` : ''}`;
+    if (!st.canReview) {
+      const msg = st.review ? 'Thanks for your review! It can no longer be changed.'
+        : st.why === 'not_visited' ? 'You can leave a review once your visit is finished. Enjoy your meal!'
+          : 'This review link has expired (reviews are open for 30 days after a visit).';
+      box.innerHTML = `${head(when)}<p style="text-align:center;margin-top:16px">${msg}</p>${back()}`;
+      return;
+    }
+    const v = st.review;
+    if (v && !stars) stars = v.stars;
+    box.innerHTML = `${head(`How was your visit on ${when}?`)}
+      <div class="rq-stars" role="radiogroup" aria-label="Your rating">${[1, 2, 3, 4, 5].map((n) => `<button type="button" role="radio" aria-label="${n} star${n > 1 ? 's' : ''}" data-n="${n}">★</button>`).join('')}</div>
+      <div class="rq-word" id="rq-word"></div>
+      <form id="rq-form">
+        <label class="field"><span>Tell everyone about it <span class="muted">(optional)</span></span>
+          <textarea id="rq-body" maxlength="600" placeholder="The dish you'd order again, the vibe, the service…">${esc(v ? v.body : '')}</textarea></label>
+        <div class="rq-count muted" id="rq-count"></div>
+        <div class="rq-photo"><span id="rq-thumb">${v && v.photo ? `<img src="${esc(v.photo)}" alt="">` : ''}</span>
+          <label class="btn secondary" style="margin:0">📷 ${v && v.photo ? 'Change photo' : 'Add a photo'}<input type="file" accept="image/*" id="rq-file" hidden></label>
+          ${v && v.photo ? '<button type="button" class="btn ghost" id="rq-nophoto">Remove</button>' : ''}</div>
+        <p class="muted small" style="margin:12px 0">Posted as <b>${esc(st.name)}</b> with a <span class="rb-guest">✓ Rbooked guest</span> badge. ${v ? 'You can edit it for 7 days after posting.' : ''}</p>
+        <div id="rq-msg"></div>
+        <button class="btn block" type="submit" id="rq-go">${v ? 'Update my review' : 'Post my review'}</button>
+      </form>${v && v.reply ? `<div class="rvw-reply" style="margin-top:14px"><b>Reply from ${esc(st.restaurant.name)}</b><p>${esc(v.reply)}</p></div>` : ''}`;
+    const paint = () => {
+      box.querySelectorAll('.rq-stars button').forEach((b) => { const on = Number(b.dataset.n) <= stars; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(Number(b.dataset.n) === stars)); });
+      box.querySelector('#rq-word').textContent = WORDS[stars] || 'Tap the stars';
+    };
+    box.querySelectorAll('.rq-stars button').forEach((b) => { b.onclick = () => { stars = Number(b.dataset.n); paint(); }; });
+    paint();
+    const ta = box.querySelector('#rq-body'); const cnt = box.querySelector('#rq-count');
+    const count = () => { cnt.textContent = `${ta.value.length}/600`; }; ta.oninput = count; count();
+    box.querySelector('#rq-file').onchange = async (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      try { photo = await shrink(f); box.querySelector('#rq-thumb').innerHTML = `<img src="${photo}" alt="">`; }
+      catch { box.querySelector('#rq-msg').innerHTML = '<div class="alert error">Couldn’t read that photo. Try another one.</div>'; }
+    };
+    const rm = box.querySelector('#rq-nophoto');
+    if (rm) rm.onclick = () => { photo = null; box.querySelector('#rq-thumb').innerHTML = ''; rm.remove(); };
+    box.querySelector('#rq-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const msg = box.querySelector('#rq-msg'); const go = box.querySelector('#rq-go');
+      if (!stars) { msg.innerHTML = '<div class="alert error">Tap the stars to rate your visit.</div>'; return; }
+      go.disabled = true; go.textContent = 'Posting…';
+      try {
+        const body = { stars, body: ta.value };
+        if (photo !== undefined) body.photo = photo;
+        const was = !!st.review;
+        st = await api(`/api/public/review/${encodeURIComponent(token)}`, { method: 'POST', body });
+        photo = undefined;
+        box.innerHTML = `${head('')}<div style="text-align:center;margin-top:14px"><div style="font-size:40px">${stars >= 4 ? '🎉' : '🙏'}</div>
+          <h2 class="serif" style="margin:6px 0">${was ? 'Review updated!' : 'Thanks for sharing!'}</h2>
+          <p class="muted">Your review is live on ${esc(st.restaurant.name)}'s page with your ✓ Rbooked guest badge.</p></div>
+          ${back()}<button type="button" class="btn ghost block" id="rq-edit" style="margin-top:8px">Edit my review</button>`;
+        box.querySelector('#rq-edit').onclick = render;
+      } catch (err) {
+        msg.innerHTML = `<div class="alert error">${esc(err.message)}</div>`;
+        go.disabled = false; go.textContent = st.review ? 'Update my review' : 'Post my review';
+      }
+    };
+  }
+
+  // Phone photos are huge: shrink to about 1200px JPEG before sending.
+  function shrink(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file); const img = new Image();
+      img.onload = () => {
+        const k = Math.min(1, 1200 / Math.max(img.width, img.height));
+        const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+        resolve(c.toDataURL('image/jpeg', 0.82));
+      };
+      img.onerror = reject; img.src = url;
+    });
+  }
+  load();
+})();
+</script>
+</body>
+</html>

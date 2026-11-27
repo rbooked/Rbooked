@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="robots" content="noindex"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%229%22 fill=%22%23c2410c%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2218%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Georgia%22%3ER%3C/text%3E%3C/svg%3E">
+<title>Book a table · Rbooked</title>
+<meta name="description" content="Book a table online with Rbooked.">
+</head>
+<body>
+<header class="site-header"><div class="container">
+  <a class="logo" href="index.html"><span class="logo-mark">R</span>Rbooked</a>
+  <nav class="nav"><a href="index.html" class="hide-sm">Find a table</a><a href="for-restaurants.html">For restaurants</a><a href="login.html" id="nav-login"><span class="hide-xs">Restaurant login</span><span class="show-xs">Log in</span></a></nav>
+</div></header>
+<main class="container">
+  <section class="r-hero" id="banner">
+    <div class="r-hero-logo" id="r-logo" hidden></div>
+    <div class="r-hero-text"><h1 id="r-name">Loading…</h1><div class="r-hero-meta" id="r-meta"></div></div>
+    <div class="r-hero-actions" id="r-actions"></div>
+  </section>
+  <div class="booking">
+    <div>
+      <div class="card" id="about"></div>
+      <div class="card" id="gallery" style="margin-top:16px" hidden></div>
+      <div class="card" id="menu" style="margin-top:16px" hidden></div>
+      <div class="card" id="reviews" style="margin-top:16px" hidden></div>
+    </div>
+    <div><div class="card sticky-book" id="booking"></div></div>
+  </div>
+  <a class="btn mobile-book" id="mobile-book" href="#booking" hidden>Reserve a table</a>
+</main>
+<footer class="footer"><div class="container row"><span>© Rbooked</span><span class="spacer"></span><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="for-restaurants.html">List your restaurant</a><a href="login.html">Restaurant login</a></div></footer>
+<script src="js/matcher.js"></script>
+<script src="js/places.js"></script>
+<script src="js/samples.js"></script>
+<script src="mock-api.js"></script>
+<script src="js/common.js"></script>
+<script src="js/rbmap.js"></script>
+<script src="js/matcher.js"></script>
+<script src="js/booking.js"></script>
+<script>
+(async function () {
+  const { esc } = TB;
+  const slug = TB.qs('slug') || decodeURIComponent((/^\/r\/([^/?#]+)/.exec(location.pathname) || [])[1] || '');
+  const state = await TB.mountBooking(document.getElementById('booking'), {
+    slug, date: TB.qs('date'), party: TB.qs('party'), time: TB.qs('time'), source: 'online',
+  });
+  if (!state) { document.getElementById('r-name').textContent = 'Restaurant not available'; return; }
+  const r = state.restaurant;
+  document.title = `${r.name} · Book a table · Rbooked`;
+  document.getElementById('r-name').textContent = r.name;
+  document.getElementById('banner').setAttribute('style', TB.thumbStyle(r));
+  if (r.accent_color) document.documentElement.style.setProperty('--brand', r.accent_color);
+  const logo = document.getElementById('r-logo');
+  logo.hidden = false;
+  if (r.logo_url) logo.style.backgroundImage = `url("${r.logo_url.replace(/"/g, '%22')}")`;
+  else { logo.textContent = TB.initials(r.name); logo.style.background = r.accent_color; }
+
+  // Opening hours and "open now", in the restaurant's own time zone.
+  const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const hours = TBMatch.parseHours(r.hours);
+  let wd = new Date().getDay(); let mins = new Date().getHours() * 60 + new Date().getMinutes();
+  try {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: r.timezone, weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+      .formatToParts(new Date()).map((x) => [x.type, x.value]));
+    wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday); mins = +p.hour * 60 + +p.minute;
+  } catch { /* fall back to the browser's time */ }
+  let open = hours ? TBMatch.openAt(hours, wd, mins) : null;
+  // Special hours or a closed day override the usual hours for that date only.
+  const special = state.special || [];
+  const todaySp = special.find((s) => s.date === state.today);
+  const hm = (t) => { const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
+  if (todaySp) open = todaySp.open_time ? mins >= hm(todaySp.open_time) && mins <= hm(todaySp.close_time) + 60 : false;
+  const web = r.website_url && /^https?:\/\//i.test(r.website_url) ? r.website_url : '';
+  document.getElementById('r-meta').innerHTML = `${esc(r.cuisine)} · ${TB.price(r.price_level)} · ${esc(r.city)}, ${esc(r.state)}
+    ${state.reviews && state.reviews.count ? `<a class="rv-mini" href="#reviews">★ ${state.reviews.avg} <span>(${state.reviews.count})</span></a>` : ''}${open === null ? '' : `<span class="open-badge ${open ? 'yes' : 'no'}">${open ? 'Open now' : 'Closed now'}</span>`}${r.featured ? ' <span class="feat-badge">Featured</span>' : ''}`;
+  const tag = TBMatch.hashtag(r.name);
+  document.getElementById('r-meta').insertAdjacentHTML('beforeend', tag ? `<div class="r-tagline"><button type="button" class="r-hashtag" id="r-tag" title="Copy hashtag">${esc(tag)}</button><span>Tag your photos ${esc(tag)} and share the love</span></div>` : '');
+  document.getElementById('r-actions').innerHTML = `${web ? `<a class="btn light" href="${esc(web)}" target="_blank" rel="noopener nofollow">🌐 Website</a>` : ''}
+    <a class="btn light" href="tel:${esc(r.phone)}">📞 Call</a>${state.menu.length ? '<a class="btn light" href="#menu" id="to-menu">🍽️ Menu</a>' : ''}${TB.heart('restaurant', r.id, r.likes, r.liked, 'light')}<button type="button" class="btn light" id="r-share">↗ Share</button>`;
+  TB.bindHearts(document.getElementById('r-actions'));
+  // Share the restaurant (with its hashtag) using the phone's share sheet, or copy the link.
+  const pageUrl = `${location.origin}${TB.rlink(r.slug)}`;
+  const copy = async (text, msg) => { try { await navigator.clipboard.writeText(text); TB.toast(msg); } catch { TB.toast(text); } };
+  document.getElementById('r-share').onclick = async () => {
+    const text = `Book a table at ${r.name} ${tag} on Rbooked`;
+    if (navigator.share) { try { await navigator.share({ title: r.name, text, url: pageUrl }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
+    copy(`${text} ${pageUrl}`, 'Link copied. Paste it anywhere to share.');
+  };
+  const tagBtn = document.getElementById('r-tag'); if (tagBtn) tagBtn.onclick = () => copy(tag, `${tag} copied`);
+
+  // Phones: a floating "Reserve a table" button until the booking card is on screen.
+  const mb = document.getElementById('mobile-book');
+  mb.hidden = false; document.body.classList.add('has-mobile-book');
+  mb.onclick = (e) => { e.preventDefault(); document.getElementById('booking').scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(([en]) => { mb.style.display = en.isIntersecting ? 'none' : ''; }, { threshold: 0.15 }).observe(document.getElementById('booking'));
+  }
+
+  const map = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${r.address}, ${r.city}, ${r.state} ${r.zip}`)}`;
+  const webLabel = web.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '');
+  document.getElementById('about').innerHTML = `
+    <div class="tagchips" style="margin:0 0 10px">${TBMatch.parseTags(r.tags).map((t) => `<span class="tagchip">${esc(TBMatch.label(t))}</span>`).join('')}</div>
+    <p style="font-size:17px">${esc(r.description || '')}</p>
+    <div class="about-grid">
+      <div><b>Address</b><br>${esc(r.address)}<br>${esc(r.city)}, ${esc(r.state)} ${esc(r.zip)}<br><a href="${map}" target="_blank" rel="noopener">Map & directions</a>
+        <p style="margin:12px 0 0"><b>Phone</b><br><a href="tel:${esc(r.phone)}">${esc(String(r.phone || '').replace(/^\+?1?(\d{3})(\d{3})(\d{4})$/, '($1) $2-$3'))}</a></p>
+        ${web ? `<p style="margin:12px 0 0"><b>Website</b><br><a href="${esc(web)}" target="_blank" rel="noopener nofollow">${esc(webLabel)}</a></p>` : ''}</div>
+      ${hours || special.length ? `<div>${hours ? `<b>Hours</b><table class="hours">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<tr class="${d === wd ? 'today' : ''}"><td>${DAYS[d]}</td><td>${hours[d].closed ? 'Closed' : `${TB.time(hours[d].open)} – ${TB.time(hours[d].close)}`}</td></tr>`).join('')}</table>` : ''}
+        ${special.length ? `<p style="margin:12px 0 4px"><b>Special hours</b></p><table class="hours">${special.map((s) => `<tr class="${s.date === state.today ? 'today' : ''}"><td>${esc(TB.date(s.date, { weekday: 'short', month: 'short' }))}${s.reason ? `<div class="muted small">${esc(s.reason)}</div>` : ''}</td><td>${s.open_time ? `${TB.time(s.open_time)} – ${TB.time(s.close_time)}` : 'Closed'}</td></tr>`).join('')}</table>` : ''}</div>` : ''}
+    </div>
+    ${r.lat != null && r.lng != null ? `<div class="map-card"><div class="rb-map small" id="r-map" role="img" aria-label="Map showing ${esc(r.name)}"></div>
+      <div class="map-foot"><span class="muted">${esc(r.address)}, ${esc(r.city)}</span><span class="spacer"></span><a href="${map}" target="_blank" rel="noopener">Directions</a></div></div>` : ''}
+    <p class="muted small" style="margin-top:14px">${esc(r.cancellation_policy || '')}</p>`;
+  if (r.lat != null && r.lng != null) TBMap.draw(document.getElementById('r-map'), [{ lat: r.lat, lng: r.lng, name: r.name }], { single: true });
+
+  // Menu with dietary filters. Pick several to combine them (for example vegan + gluten-free).
+  const menu = state.menu;
+  if (!menu.length) return;
+  const box = document.getElementById('menu'); box.hidden = false;
+  const want = new Set(); let q = '';
+  const counts = {};
+  menu.forEach((m) => m.tags.split(',').filter(Boolean).forEach((t) => { counts[t] = (counts[t] || 0) + 1; }));
+  const money = (c) => (c === null || c === undefined ? '' : `$${(c / 100).toFixed(c % 100 ? 2 : 0)}`);
+  box.innerHTML = `<div class="row"><h2 class="serif" style="margin:0">Menu</h2><span class="spacer"></span><input type="search" id="m-q" placeholder="Search dishes" aria-label="Search the menu" style="max-width:220px"></div>
+    <div class="chips menu-chips" role="group" aria-label="Dietary filters">${TBMatch.MENU_TAGS.filter((t) => counts[t.id]).map((t) => `<button class="chip" data-t="${t.id}" aria-pressed="false">${t.icon} ${esc(t.label)} <span class="cnt">${counts[t.id]}</span></button>`).join('')}</div>
+    <div id="m-list"></div>`;
+  // Sizes and add-ons, stored as JSON [{ name, choices: [{ name, price }] }]
+  function dishOptions(raw) {
+    let groups = []; try { groups = raw ? JSON.parse(raw) : []; } catch { groups = []; }
+    if (!Array.isArray(groups) || !groups.length) return '';
+    const m$ = (p) => { if (!p) return ''; const plus = String(p).startsWith('+'); const n = Number(String(p).replace('+', '')); return ` ${plus ? '+' : ''}$${n % 1 ? n.toFixed(2) : n}`; };
+    return `<div class="dish-opts">${groups.map((g) => `<div class="small"><span class="muted">${esc(g.name)}:</span> ${(g.choices || []).map((c) => `${esc(c.name)}${esc(m$(c.price))}`).join(' · ')}</div>`).join('')}</div>`;
+  }
+  const draw = () => {
+    const list = menu.filter((m) => [...want].every((t) => m.tags.split(',').includes(t)) && (!q || `${m.name} ${m.description}`.toLowerCase().includes(q)));
+    const secs = [...new Set(menu.map((m) => m.section))].filter((s) => list.some((m) => m.section === s));
+    box.querySelector('#m-list').innerHTML = secs.length
+      ? secs.map((s) => `<h3 class="menu-h">${esc(s)}</h3>${list.filter((m) => m.section === s).map((m) => `<div class="dish">
+          <div><b>${esc(m.name)}</b>${m.description ? `<div class="muted small">${esc(m.description)}</div>` : ''}
+          ${dishOptions(m.options)}
+          <div class="dish-tags">${TBMatch.sortMenuTags(m.tags).map((t) => { const x = TBMatch.menuTag(t); return `<span class="dtag">${x.icon} ${esc(x.label)}</span>`; }).join('')}</div></div>
+          <div class="dish-price">${money(m.price_cents)}${TB.heart('dish', m.id, m.likes, m.liked, 'sm')}</div></div>`).join('')}`).join('')
+      : `<p class="muted">No dishes match ${want.size ? 'those filters' : 'your search'}. <button class="btn ghost sm" id="m-reset">Clear filters</button></p>`;
+    TB.bindHearts(box);
+    const reset = box.querySelector('#m-reset');
+    if (reset) {
+      reset.onclick = () => {
+        want.clear(); q = ''; box.querySelector('#m-q').value = '';
+        box.querySelectorAll('[data-t]').forEach((b) => { b.classList.remove('on'); b.setAttribute('aria-pressed', 'false'); });
+        draw();
+      };
+    }
+  };
+  box.querySelectorAll('[data-t]').forEach((b) => {
+    b.onclick = () => {
+      const t = b.dataset.t;
+      if (want.has(t)) want.delete(t); else want.add(t);
+      b.classList.toggle('on', want.has(t)); b.setAttribute('aria-pressed', String(want.has(t)));
+      draw();
+    };
+  });
+  box.querySelector('#m-q').oninput = (e) => { q = e.target.value.trim().toLowerCase(); draw(); };
+  draw();
+  // Food gallery: photos from the restaurant that diners can heart.
+  const gal = document.getElementById('gallery');
+  if (state.gallery.length) {
+    gal.hidden = false;
+    gal.innerHTML = `<div class="row"><h2 class="serif" style="margin:0">Gallery</h2>${tag ? `<span class="r-hashtag sm">${esc(tag)}</span>` : ''}<span class="muted small">${state.gallery.length} photo${state.gallery.length > 1 ? 's' : ''} · tap ♡ on the ones you love</span></div>
+      <div class="gal-grid">${state.gallery.map((g, i) => `<figure class="gal-item" data-i="${i}"><img src="${esc(g.url)}" alt="${esc(g.caption || g.dish || r.name)}" loading="lazy">
+        ${TB.heart('photo', g.id, g.likes, g.liked, 'on-photo')}${g.dish || g.caption ? `<figcaption>${esc(g.dish || g.caption)}</figcaption>` : ''}</figure>`).join('')}</div>`;
+    TB.bindHearts(gal);
+    gal.querySelectorAll('.gal-item').forEach((f) => {
+      f.onclick = () => {
+        const g = state.gallery[Number(f.dataset.i)];
+        const live = gal.querySelector(`[data-like="photo:${g.id}"]`);
+        const close = TB.modal(`<figure class="gal-big"><img src="${esc(g.url)}" alt="${esc(g.caption || g.dish || '')}">
+          <figcaption><div>${g.dish ? `<b>${esc(g.dish)}</b>` : ''}${g.caption ? `<div class="muted small">${esc(g.caption)}</div>` : ''}</div>${TB.heart('photo', g.id, Number(live.querySelector('span').textContent) || 0, live.classList.contains('on'))}</figcaption></figure>
+          <button class="btn secondary block" data-close>Close</button>`, (root) => {
+          TB.bindHearts(root);
+        });
+        void close;
+      };
+    });
+  }
+
+  // Verified reviews: only guests who booked on Rbooked and dined can post them.
+  const rvBox = document.getElementById('reviews'); const rv = state.reviews;
+  if (rv && rv.count) {
+    rvBox.hidden = false;
+    const starRow = (n) => `<span class="stars" aria-label="${n} of 5 stars">${'★'.repeat(n)}<i>${'★'.repeat(5 - n)}</i></span>`;
+    const first = (s) => String(s || '').trim().charAt(0).toUpperCase() || 'R';
+    const card = (x) => `<article class="rvw">
+      <div class="rvw-top"><span class="rvw-av">${esc(first(x.name))}</span><div><b>${esc(x.name)}</b> <span class="rb-guest">✓ Rbooked guest</span>
+        <div class="muted small">${starRow(x.stars)} · ${x.date ? esc(TB.date(x.date, { weekday: undefined, year: 'numeric' })) : ''}${x.party ? ` · party of ${x.party}` : ''}</div></div></div>
+      ${x.body ? `<p class="rvw-body">${esc(x.body)}</p>` : ''}
+      ${x.photo ? `<img class="rvw-photo" src="${esc(x.photo)}" alt="Photo from ${esc(x.name)}" loading="lazy">` : ''}
+      ${x.reply ? `<div class="rvw-reply"><b>Reply from ${esc(r.name)}</b><p>${esc(x.reply)}</p></div>` : ''}</article>`;
+    const SHOW = 4;
+    rvBox.innerHTML = `<div class="row"><h2 class="serif" style="margin:0">Reviews</h2><span class="muted small">from guests who Rbooked and dined here</span></div>
+      <div class="rvs-sum"><div class="rv-avg"><b>${rv.avg}</b>${starRow(Math.round(rv.avg))}<span class="muted small">${rv.count} review${rv.count > 1 ? 's' : ''}</span></div>
+        <div class="rv-dist">${[5, 4, 3, 2, 1].map((k) => `<div><span>${k}★</span><i><b style="width:${Math.round(((rv.dist[k] || 0) / rv.count) * 100)}%"></b></i></div>`).join('')}</div></div>
+      <div class="rvw-list">${rv.list.slice(0, SHOW).map(card).join('')}</div>
+      ${rv.list.length > SHOW ? `<button type="button" class="btn secondary block" id="rv-more">Show all ${rv.list.length} reviews</button>` : ''}`;
+    const more = rvBox.querySelector('#rv-more');
+    if (more) more.onclick = () => { rvBox.querySelector('.rvw-list').innerHTML = rv.list.map(card).join(''); more.remove(); };
+    rvBox.querySelectorAll('.rvw-photo').forEach((im) => { im.onclick = () => TB.modal(`<figure class="gal-big"><img src="${esc(im.src)}" alt=""></figure><button class="btn secondary block" data-close>Close</button>`); });
+  }
+
+  const toMenu = document.getElementById('to-menu');
+  if (toMenu) toMenu.onclick = (e) => { e.preventDefault(); box.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  if (location.hash === '#menu') setTimeout(() => box.scrollIntoView({ block: 'start' }), 50);
+})();
+</script>
+</body>
+</html>

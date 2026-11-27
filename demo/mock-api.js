@@ -6,8 +6,8 @@ window.RBOOKED_DEMO = true;
   const KEY = 'rbooked_demo_v5';
   const mem = {};
   const store = {
-    get() { try { return JSON.parse(localStorage.getItem(KEY)); } catch { return mem.db || null; } },
-    set(v) { mem.db = v; try { localStorage.setItem(KEY, JSON.stringify(v)); } catch { /* memory only */ } },
+    get() { try { return JSON.parse(sessionStorage.getItem(KEY)); } catch { return mem.db || null; } },
+    set(v) { mem.db = v; try { sessionStorage.setItem(KEY, JSON.stringify(v)); } catch { /* memory only */ } },
   };
 
   // ---------- time helpers (same logic as src/time.js) ----------
@@ -794,8 +794,11 @@ window.RBOOKED_DEMO = true;
     document.head.appendChild(style);
     const bar = document.createElement('div');
     bar.className = 'demo-bar';
-    bar.innerHTML = `<span><b>Live demo.</b> Everything works, but bookings stay in your browser and emails go to the demo inbox instead of being sent.</span><span class="sp"></span>
-      ${/admin\.html/.test(location.pathname) ? `<a href="index.html" style="color:#f5e6d8">← Guest site</a>` : `<a href="admin.html" id="demo-dash" style="background:#fff;color:#1f1b16;border-radius:7px;padding:5px 10px;font-weight:700;text-decoration:none">🍽️ Open my restaurant dashboard →</a>`}
+    const onSite = /^\/demo\//.test(location.pathname);
+    const trial = onSite ? '/for-restaurants#signup' : 'for-restaurants.html#signup';
+    bar.innerHTML = `<span><b>DEMO</b> · Try everything. Nothing here is real, no emails go out, and it starts fresh every visit.</span><span class="sp"></span>
+      <a href="${trial}" target="_top" style="background:#16a34a;color:#fff;border-radius:7px;padding:5px 10px;font-weight:700;text-decoration:none">Start free trial</a>
+      ${/admin\.html/.test(location.pathname) ? `<a href="index.html" style="color:#f5e6d8">👀 See it as a diner</a>` : `<a href="admin.html" id="demo-dash" style="background:#fff;color:#1f1b16;border-radius:7px;padding:5px 10px;font-weight:700;text-decoration:none">🍽️ Open my restaurant dashboard →</a>`}
       <button type="button" id="demo-inbox">Demo inbox (<span id="demo-count">0</span>)</button><button type="button" class="alt" id="demo-reset">Reset demo</button>`;
     document.body.prepend(bar);
     const count = () => { const n = (store.get() || db).emails.length; const el = document.getElementById('demo-count'); if (el) el.textContent = n; };

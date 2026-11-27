@@ -9,7 +9,8 @@
     "seed": "node --no-warnings src/seed.js",
     "test": "node --no-warnings --test test/*.test.js",
     "cf:dev": "wrangler dev",
-    "cf:deploy": "wrangler deploy"
+    "cf:deploy": "wrangler deploy",
+    "build:demo": "python3 demo/build.py --site"
   },
   "dependencies": {
     "express": "^4.22.3",

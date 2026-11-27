@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="robots" content="noindex"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%229%22 fill=%22%23c2410c%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2218%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Georgia%22%3ER%3C/text%3E%3C/svg%3E">
+<title>Your reservation · Rbooked</title>
+<meta name="robots" content="noindex">
+</head>
+<body>
+<header class="site-header"><div class="container">
+  <a class="logo" href="index.html"><span class="logo-mark">R</span>Rbooked</a>
+  <nav class="nav"><a href="index.html" class="hide-sm">Find a table</a><a href="for-restaurants.html">For restaurants</a><a href="login.html" id="nav-login"><span class="hide-xs">Restaurant login</span><span class="show-xs">Log in</span></a></nav>
+</div></header>
+<main class="container" style="max-width:640px;padding-top:32px;padding-bottom:64px">
+  <div class="card" id="box"><p class="muted">Loading your reservation…</p></div>
+</main>
+<footer class="footer"><div class="container row"><span>© Rbooked</span><span class="spacer"></span><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="for-restaurants.html">List your restaurant</a><a href="login.html">Restaurant login</a></div></footer>
+<script src="js/matcher.js"></script>
+<script src="js/places.js"></script>
+<script src="js/samples.js"></script>
+<script src="mock-api.js"></script>
+<script src="js/common.js"></script>
+<script>
+(function () {
+  const { api, esc } = TB;
+  const token = TB.qs('t');
+  const box = document.getElementById('box');
+  const labels = { confirmed: 'Confirmed', seated: 'Seated', completed: 'Completed', cancelled: 'Cancelled', no_show: 'No-show' };
+
+  async function load() {
+    try { render(await api(`/api/public/reservations/${token}`)); }
+    catch (e) { box.innerHTML = `<div class="alert error">${esc(e.message)}</div>`; }
+  }
+
+  function render(v) {
+    const r = v.restaurant;
+    box.innerHTML = `
+      <div class="row"><h1 style="font-size:28px;margin:0">${esc(r.name)}</h1><span class="spacer"></span><span class="badge ${v.status}">${labels[v.status]}</span></div>
+      <p class="muted">${esc(r.address)}, ${esc(r.city)} ${esc(r.state)} · <a href="tel:${esc(r.phone)}">${esc(r.phone)}</a></p>
+      <table class="data" style="margin:12px 0 18px">
+        <tr><td class="muted">Date</td><td><b>${TB.date(v.date, { weekday: 'long', month: 'long', year: 'numeric' })}</b></td></tr>
+        <tr><td class="muted">Time</td><td><b>${TB.time(v.time)}</b></td></tr>
+        <tr><td class="muted">Party</td><td>${v.party_size}</td></tr>
+        <tr><td class="muted">Name</td><td>${esc(v.guest_name)}</td></tr>
+        <tr><td class="muted">Contact</td><td>${esc(v.guest_email)} · ${esc(v.guest_phone)}</td></tr>
+        <tr><td class="muted">Confirmation</td><td><b>${esc(v.code)}</b></td></tr>
+        ${v.notes ? `<tr><td class="muted">Requests</td><td>${esc(v.notes)}</td></tr>` : ''}
+      </table>
+      ${v.canChange ? `<div class="row"><button class="btn" id="change">Change date, time or party</button><button class="btn secondary" id="cancel">Cancel reservation</button></div>
+        <p class="muted small" style="margin-top:12px">${esc(r.cancellation_policy || '')}</p>`
+      : v.status === 'cancelled' ? `<a class="btn" href="${TB.rlink(r.slug)}">Book again</a>` : ''}`;
+    if (!v.canChange) return;
+    document.getElementById('cancel').onclick = () => TB.modal(`
+      <h2>Cancel this reservation?</h2><p>${TB.date(v.date)} at ${TB.time(v.time)} for ${v.party_size}. This can't be undone.</p>
+      <div class="row"><button class="btn danger" id="yes">Yes, cancel it</button><button class="btn secondary" data-close>Keep it</button></div>`,
+    (m, close) => {
+      m.querySelector('#yes').onclick = async () => {
+        try { render(await api(`/api/public/reservations/${token}/cancel`, { method: 'POST', body: {} })); close(); TB.toast('Reservation cancelled. A confirmation email is on its way.'); }
+        catch (e) { TB.toast(e.message, true); }
+      };
+    });
+    document.getElementById('change').onclick = () => changeModal(v);
+  }
+
+  function changeModal(v) {
+    TB.modal(`<h2>Change reservation</h2>
+      <div class="picker"><div><label>Party size</label><select id="m-party">${TB.partyOptions(v.party_size, v.restaurant.max_party_size)}</select></div>
+      <div><label>Date</label><input id="m-date" type="date" min="${TB.today()}" value="${v.date}"></div></div>
+      <div id="m-slots" style="margin:12px 0"></div>
+      <div class="row"><button class="btn" id="m-save" disabled>Save change</button><button class="btn secondary" data-close>Close</button></div>`,
+    (m, close) => {
+      let time = null;
+      const load = async () => {
+        time = null; m.querySelector('#m-save').disabled = true;
+        const av = await api(`/api/public/reservations/${token}/availability?date=${m.querySelector('#m-date').value}&party=${m.querySelector('#m-party').value}`);
+        const open = av.slots.filter((s) => s.available);
+        m.querySelector('#m-slots').innerHTML = open.length ? `<div class="slots">${open.map((s) => `<button class="slot" data-t="${s.time}">${TB.time(s.time)}</button>`).join('')}</div>` : '<div class="alert">No open times on this date.</div>';
+        m.querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => { m.querySelectorAll('.slot').forEach((x) => x.classList.remove('selected')); b.classList.add('selected'); time = b.dataset.t; m.querySelector('#m-save').disabled = false; }; });
+      };
+      m.querySelector('#m-date').onchange = load; m.querySelector('#m-party').onchange = load; load();
+      m.querySelector('#m-save').onclick = async () => {
+        try {
+          render(await api(`/api/public/reservations/${token}/modify`, { body: { date: m.querySelector('#m-date').value, time, party_size: Number(m.querySelector('#m-party').value) } }));
+          close(); TB.toast('Updated! We emailed you the new details.');
+        } catch (e) { TB.toast(e.message, true); }
+      };
+    });
+  }
+  load();
+})();
+</script>
+</body>
+</html>

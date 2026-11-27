@@ -8,6 +8,7 @@ Disallow: /forgot
 Disallow: /reset-password
 Disallow: /reservation
 Disallow: /review
+Disallow: /demo/
 Disallow: /embed
 Disallow: /restaurant
 

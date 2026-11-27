@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="robots" content="noindex"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%229%22 fill=%22%23c2410c%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2218%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Georgia%22%3ER%3C/text%3E%3C/svg%3E">
+<title>Rbooked · Book a table near you</title>
+<meta name="description" content="You Rbooked! Find food you'll love near you. Heart dishes, follow restaurants by their #hashtag, and book a table in seconds.">
+<link rel="canonical" href="https://rbooked.com/">
+<meta property="og:type" content="website"><meta property="og:site_name" content="Rbooked"><meta property="og:url" content="https://rbooked.com/">
+<meta property="og:title" content="You Rbooked! · Book a table near you"><meta property="og:image" content="https://rbooked.com/img/og-rbooked.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><meta property="og:description" content="Find food you'll love, follow restaurants by their #hashtag, and book a table in seconds.">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Rbooked","url":"https://rbooked.com/"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Rbooked","url":"https://rbooked.com/","email":"rbookedsupport@gmail.com"}</script>
+</head>
+<body class="home">
+<header class="site-header"><div class="container">
+  <a class="logo" href="index.html"><span class="logo-mark">R</span>Rbooked</a>
+  <nav class="nav"><a href="index.html" class="hide-sm">Find a table</a><a href="for-restaurants.html">For restaurants</a><a href="login.html" id="nav-login"><span class="hide-xs">Restaurant login</span><span class="show-xs">Log in</span></a></nav>
+</div></header>
+<section class="hero">
+  <div class="container">
+    <p class="slogan" aria-hidden="true">You Rbooked!</p>
+    <h1>Find food you'll love. Book it in seconds.</h1>
+    <p>Heart the dishes you crave, follow your favorite spots by their <b>#hashtag</b>, and grab a table near you.</p>
+    <form class="tag-find" id="tag-find" role="search"><span aria-hidden="true">#</span><input id="tag-in" placeholder="Got a restaurant's hashtag? e.g. QueenMamasKitchen" aria-label="Find a restaurant by its hashtag" autocapitalize="off" autocorrect="off" spellcheck="false"><button class="btn sm" type="submit">Go</button></form>
+    <p class="tag-miss" id="tag-miss" hidden></p>
+    <div class="mode-tabs" role="tablist" aria-label="How do you want to find a table?">
+      <button type="button" role="tab" id="tab-search" aria-selected="true" data-mode="search">Search restaurants</button>
+      <button type="button" role="tab" id="tab-pick" aria-selected="false" data-mode="pick">✨ Pick for me</button>
+    </div>
+    <form class="search-bar" id="search">
+      <div><label for="zip" class="hidden">ZIP code</label><input id="zip" name="zip" inputmode="numeric" maxlength="5" placeholder="ZIP code" required pattern="\d{5}" aria-label="ZIP code"></div>
+      <input id="date" name="date" type="date" aria-label="Date">
+      <select id="time" name="time" aria-label="Time"></select>
+      <select id="party" name="party" aria-label="Party size"></select>
+      <select id="cuisine" name="cuisine" aria-label="Cuisine"></select>
+      <button class="btn lg" type="submit" id="go">Find a table</button>
+      <div class="prefs hidden" id="prefs">
+        <div class="pref-group"><span class="pref-label">Food</span><div class="chips" data-group="diet"></div></div>
+        <div class="pref-group"><span class="pref-label">Vibe</span><div class="chips" data-group="vibe"></div></div>
+        <div class="pref-group"><span class="pref-label">Extras</span><div class="chips" data-group="extra"></div></div>
+        <div class="pref-group"><span class="pref-label">Price</span><div class="chips" id="price-chips">
+          <button type="button" class="chip on" data-price="0">Any</button><button type="button" class="chip" data-price="1">$</button><button type="button" class="chip" data-price="2">$$</button><button type="button" class="chip" data-price="3">$$$</button><button type="button" class="chip" data-price="4">$$$$</button>
+        </div></div>
+      </div>
+    </form>
+  </div>
+</section>
+<main class="container results">
+  <div class="results-head" id="results-head"></div>
+  <div id="pick-result"></div>
+  <div id="results"></div>
+  <div id="empty" class="card hidden"></div>
+  <section class="section spin hidden" id="spin-wrap" aria-labelledby="spin-h">
+    <div class="spin-head">
+      <div><h2 class="serif" id="spin-h">Can't decide? Spin it.</h2><p class="muted">We'll land you on a spot worth trying tonight.</p></div>
+      <button class="btn spin-btn" id="spin-go" type="button"><span aria-hidden="true">🎰</span> Spin</button>
+    </div>
+    <div class="reel" id="reel"><div class="reel-track" id="reel-track"></div><span class="reel-mark" aria-hidden="true"></span></div>
+    <div class="spin-out" id="spin-out" aria-live="polite"></div>
+  </section>
+  <section class="section hidden" id="map-wrap">
+    <div class="row" style="align-items:baseline"><h2 class="serif" style="font-size:26px;margin:0">On the map</h2><span class="muted small" id="map-where"></span></div>
+    <div class="map-card"><div class="rb-map" id="home-map" role="region" aria-label="Map of restaurants"></div></div>
+  </section>
+  <section class="section hidden" id="featured-wrap">
+    <div class="row" style="align-items:baseline"><h2 class="serif" style="font-size:26px;margin:0">Featured restaurants</h2><span class="muted small" id="featured-where"></span></div>
+    <div class="featured" id="featured"><p class="muted">Loading…</p></div>
+  </section>
+  <section class="section hidden" id="trend-wrap">
+    <div class="row" style="align-items:baseline"><h2 class="serif" style="font-size:26px;margin:0">Dishes diners love</h2><span class="muted small" id="trend-where"></span></div>
+    <div class="trend-grid" id="trend"></div>
+  </section>
+  <section class="section" id="recommend">
+    <details class="card rec-card" id="rec-box">
+      <summary><span class="rec-ic" aria-hidden="true">💌</span><span><b>Recommend your fav restaurant to join us!</b><span class="muted small">Your go-to spot isn't on the Rbooked network yet? Bring them in.</span></span><span class="rec-go" aria-hidden="true">＋</span></summary>
+      <form id="rec-form" class="rec-form" novalidate>
+        <div class="field"><label for="rec-name">Restaurant name</label><input id="rec-name" name="name" required maxlength="120" autocomplete="off" placeholder="e.g. Queen Mama's Kitchen"></div>
+        <div class="grid-2">
+          <div class="field"><label for="rec-zip">ZIP code</label><input id="rec-zip" name="zip" inputmode="numeric" maxlength="5" pattern="\d{5}" autocomplete="postal-code"></div>
+          <div class="field"><label for="rec-city">City <span class="muted small">(optional)</span></label><input id="rec-city" name="city" maxlength="80" autocomplete="address-level2"></div>
+        </div>
+        <div class="field"><label for="rec-web">Their website or Instagram <span class="muted small">(optional)</span></label><input id="rec-web" name="website" maxlength="200" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+        <div class="field"><label for="rec-email">Your email <span class="muted small">(optional, we'll tell you when they're on Rbooked)</span></label><input id="rec-email" name="email" type="email" maxlength="120" autocomplete="email"></div>
+        <input type="text" name="company" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true">
+        <div id="rec-msg" role="status"></div>
+        <button class="btn block" type="submit">Get them Rbooked! 💌</button>
+      </form>
+    </details>
+  </section>
+  <section class="section steps" id="how">
+    <div class="step"><span class="step-n">1</span><div><h3>Search by ZIP</h3><p>Real open times at places near you.</p></div></div>
+    <div class="step"><span class="step-n">2</span><div><h3>Tap a time</h3><p>Your table is held live. No account needed.</p></div></div>
+    <div class="step"><span class="step-n">3</span><div><h3>Get it by email</h3><p>Confirmation, calendar invite and a reminder.</p></div></div>
+  </section>
+
+</main>
+<footer class="footer"><div class="container row"><span>© Rbooked</span><span class="spacer"></span><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="for-restaurants.html">For restaurants</a><a href="login.html">Restaurant login</a></div></footer>
+<script src="js/matcher.js"></script>
+<script src="js/places.js"></script>
+<script src="js/samples.js"></script>
+<script src="mock-api.js"></script>
+<script src="js/common.js"></script>
+<script src="js/rbmap.js"></script>
+<script src="js/matcher.js"></script>
+<script src="js/places.js"></script>
+<script>
+(function () {
+  const { api, esc } = TB;
+  const f = document.getElementById('search');
+  const params = new URLSearchParams(location.search);
+  const ls = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { /* ignore */ } } };
+  f.date.value = params.get('date') || TB.today();
+  f.date.min = TB.today();
+  f.time.innerHTML = TB.timeOptions(params.get('time') || '19:00');
+  f.party.innerHTML = TB.partyOptions(params.get('party') || 2, 20);
+  f.cuisine.innerHTML = `<option value="">Any cuisine</option>${TBPlaces.CUISINES.filter((c) => c !== 'Other').map((c) => `<option${c === params.get('cuisine') ? ' selected' : ''}>${esc(c)}</option>`).join('')}`;
+  f.zip.value = params.get('zip') || ls.get('tb_zip') || '';
+
+  // ----- mode: search vs pick for me -----
+  let mode = params.get('mode') === 'pick' ? 'pick' : 'search';
+  const prefs = new Set((params.get('prefs') || '').split(',').filter(Boolean));
+  let price = Number(params.get('price')) || 0;
+  document.querySelectorAll('#prefs .chips[data-group]').forEach((box) => {
+    box.innerHTML = TBMatch.TAGS.filter((t) => t.group === box.dataset.group)
+      .map((t) => `<button type="button" class="chip${prefs.has(t.id) ? ' on' : ''}" data-tag="${t.id}" aria-pressed="${prefs.has(t.id)}">${esc(t.label)}</button>`).join('');
+  });
+  document.querySelectorAll('[data-tag]').forEach((b) => {
+    b.onclick = () => { const on = !prefs.has(b.dataset.tag); on ? prefs.add(b.dataset.tag) : prefs.delete(b.dataset.tag); b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); };
+  });
+  document.querySelectorAll('[data-price]').forEach((b) => {
+    b.classList.toggle('on', Number(b.dataset.price) === price);
+    b.onclick = () => { price = Number(b.dataset.price); document.querySelectorAll('[data-price]').forEach((x) => x.classList.toggle('on', x === b)); };
+  });
+  function setMode(m) {
+    mode = m;
+    document.querySelectorAll('.mode-tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === m)));
+    document.getElementById('prefs').classList.toggle('hidden', m !== 'pick');
+    document.getElementById('go').textContent = m === 'pick' ? 'Pick for me' : 'Find a table';
+  }
+  document.querySelectorAll('.mode-tabs button').forEach((b) => { b.onclick = () => setMode(b.dataset.mode); });
+  setMode(mode);
+
+  f.onsubmit = (e) => { e.preventDefault(); mode === 'pick' ? pick(true) : search(true); };
+
+  const head = document.getElementById('results-head');
+  const list = document.getElementById('results');
+  const empty = document.getElementById('empty');
+  const pickBox = document.getElementById('pick-result');
+  const bookLink = (r, party, t) => TB.rlink(r.slug, `date=${r.date}&party=${party}${t ? `&time=${t}` : ''}`);
+  const tagChips = (r, highlight = [], limit = 99) => TBMatch.parseTags(r.tags).slice(0, limit).map((t) => `<span class="tagchip${highlight.includes(t) ? ' hit' : ''}">${esc(TBMatch.label(t))}</span>`).join('');
+
+  function readForm() {
+    const zip = f.zip.value.trim();
+    if (!/^\d{5}$/.test(zip)) { TB.toast('Please enter a 5-digit ZIP code.', true); return null; }
+    ls.set('tb_zip', zip);
+    return { zip, date: f.date.value, time: f.time.value, party: f.party.value, ...(f.cuisine.value ? { cuisine: f.cuisine.value } : {}) };
+  }
+  function clear() { head.textContent = ''; list.innerHTML = ''; pickBox.innerHTML = ''; empty.classList.add('hidden'); }
+  function noneNear(zip, cuisine) {
+    empty.classList.remove('hidden');
+    empty.innerHTML = `<h3>No ${cuisine ? `${esc(cuisine)} ` : ''}restaurants on Rbooked near ${esc(zip)} yet.</h3>
+      <p class="muted">${cuisine ? 'Try "Any cuisine", or a' : 'Try a'} nearby ZIP code. New restaurants join every week.</p>
+      <p style="margin:10px 0 0"><button class="btn secondary" type="button" id="rec-open">💌 Get your fav spot near ${esc(zip)} Rbooked</button></p>`;
+    document.getElementById('rec-open').onclick = () => openRecommend(zip);
+  }
+
+  // "Recommend your fav restaurant": a small form, opened from its card or from an empty search.
+  function openRecommend(zip) {
+    const box = document.getElementById('rec-box'); box.open = true;
+    if (zip && !document.getElementById('rec-zip').value) document.getElementById('rec-zip').value = zip;
+    box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(() => document.getElementById('rec-name').focus({ preventScroll: true }), 400);
+  }
+  document.getElementById('rec-box').addEventListener('toggle', (e) => {
+    const z = f.zip.value.trim(); if (e.target.open && /^\d{5}$/.test(z) && !document.getElementById('rec-zip').value) document.getElementById('rec-zip').value = z;
+  });
+  document.getElementById('rec-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const form = e.target; const msg = document.getElementById('rec-msg'); const btn = form.querySelector('button[type=submit]');
+    if (form.name.value.trim().length < 2) { msg.innerHTML = '<div class="alert error">Tell us the restaurant\'s name.</div>'; form.name.focus(); return; }
+    btn.disabled = true;
+    try {
+      await api('/api/public/suggest', { body: TB.formData(form) });
+      const n = form.name.value.trim();
+      form.reset(); msg.innerHTML = `<div class="alert ok-box">🎉 Nice pick! We're inviting <b>${esc(n)}</b> to the Rbooked network. Soon you can heart their dishes, follow their #hashtag and book a table here.</div>`;
+    } catch (err) { msg.innerHTML = `<div class="alert error">${esc(err.message)}</div>`; }
+    btn.disabled = false;
+  };
+
+  async function search(push) {
+    const v = readForm(); if (!v) return;
+    const q = new URLSearchParams(v);
+    if (push) history.replaceState(null, '', '?' + q);
+    clear(); head.textContent = 'Searching…';
+    try {
+      const data = await api('/api/public/search?' + q);
+      const where = data.origin ? `${data.origin.city}, ${data.origin.state}` : v.zip;
+      head.innerHTML = `<b>${data.results.length}</b> restaurant${data.results.length === 1 ? '' : 's'} near ${esc(where)} · ${TB.date(v.date)} · ${data.party} ${data.party === 1 ? 'person' : 'people'}`;
+      if (!data.results.length) noneNear(v.zip, v.cuisine);
+      list.innerHTML = data.results.map((r) => card(r, data.party)).join('');
+    } catch (err) { head.textContent = ''; empty.classList.remove('hidden'); empty.innerHTML = `<div class="alert error">${esc(err.message)}</div>`; }
+  }
+
+  function card(r, party) {
+    const link = (t) => bookLink(r, party, t);
+    return `<article class="card r-card">
+      <a href="${link()}" class="r-thumb" style="${TB.thumbStyle(r)}" aria-hidden="true" tabindex="-1">${r.image_url ? '' : esc(TB.initials(r.name))}</a>
+      <div>
+        <h3><a href="${link()}">${esc(r.name)}</a>${r.featured ? ' <span class="feat-badge">Featured</span>' : ''}</h3>
+        <a class="r-card-tag" href="/tag/${esc(TBMatch.hashtag(r.name).slice(1))}">${esc(TBMatch.hashtag(r.name))}</a>
+        <div class="r-meta">${esc(r.cuisine)} · ${TB.price(r.price_level)} · ${esc(r.city)}${r.miles != null ? ` · ${r.miles} mi` : ''}</div>
+        <div class="r-meta">${esc(r.address)}, ${esc(r.zip)} · <a href="tel:${esc(r.phone)}">${esc(r.phone)}</a></div>
+        <div class="tagchips">${tagChips(r)}</div>
+        <div class="slots">${r.closed ? '<span class="muted small">Closed this day</span>'
+          : r.slots.length ? r.slots.map((t) => `<a class="slot" style="background:${esc(r.accent_color)}" href="${link(t)}">${TB.time(t)}</a>`).join('')
+          : `<span class="muted small">No tables near this time. <a href="${link()}">See all times</a></span>`}</div>
+      </div></article>`;
+  }
+
+  let picks = []; let pickIdx = 0; let pickParty = 2;
+  async function pick(push) {
+    const v = readForm(); if (!v) return;
+    const q = new URLSearchParams({ ...v, mode: 'pick', prefs: [...prefs].join(','), price });
+    if (push) history.replaceState(null, '', '?' + q);
+    clear(); head.textContent = 'Finding your table…';
+    try {
+      const data = await api('/api/public/pick?' + q);
+      picks = data.picks; pickIdx = 0; pickParty = data.party;
+      const where = data.origin ? `${data.origin.city}, ${data.origin.state}` : v.zip;
+      const wanted = [...prefs].map(TBMatch.label).concat(price ? ['$'.repeat(price)] : []);
+      head.innerHTML = `Picked for you near ${esc(where)} · ${TB.date(v.date)} around ${TB.time(v.time)} · ${data.party} ${data.party === 1 ? 'person' : 'people'}${wanted.length ? ` · ${esc(wanted.join(', '))}` : ''}`;
+      if (!picks.length) {
+        empty.classList.remove('hidden');
+        empty.innerHTML = `<h3>No match with a table open around ${TB.time(v.time)}.</h3><p class="muted">Try fewer choices, a different time, or another date.</p>`;
+        return;
+      }
+      renderPick();
+    } catch (err) { head.textContent = ''; empty.classList.remove('hidden'); empty.innerHTML = `<div class="alert error">${esc(err.message)}</div>`; }
+  }
+
+  function renderPick() {
+    const m = picks[pickIdx]; const r = m.restaurant;
+    const others = picks.filter((_, i) => i !== pickIdx).slice(0, 3);
+    pickBox.innerHTML = `<article class="card pick-card">
+      <div class="pick-top"><span class="pick-eyebrow">${pickIdx === 0 ? 'Our top pick' : `Pick ${pickIdx + 1} of ${picks.length}`}</span><span class="match">${m.score}% match</span></div>
+      <div class="pick-body">
+        <a href="${bookLink(r, pickParty)}" class="r-thumb big" style="${TB.thumbStyle(r)}" aria-hidden="true" tabindex="-1">${r.image_url ? '' : esc(TB.initials(r.name))}</a>
+        <div style="min-width:0">
+          <h2 class="serif" style="font-size:30px;margin:0 0 4px"><a href="${bookLink(r, pickParty)}" style="color:inherit;text-decoration:none">${esc(r.name)}</a></h2>
+          <div class="r-meta">${esc(r.cuisine)} · ${TB.price(r.price_level)} · ${esc(r.address)}, ${esc(r.city)}</div>
+          <p style="margin:8px 0">${esc(r.description || '')}</p>
+          <div class="tagchips">${tagChips(r, m.matched)}</div>
+          <ul class="reasons">${m.reasons.map((x) => `<li>✓ ${esc(x)}</li>`).join('')}</ul>
+          ${m.missed.length ? `<p class="muted small">Doesn't list: ${esc(m.missed.map(TBMatch.label).join(', '))}</p>` : ''}
+          <div class="slots">${m.times.map((t) => `<a class="slot${t === m.time ? ' best' : ''}" style="background:${esc(r.accent_color)}" href="${bookLink(r, pickParty, t)}">${TB.time(t)}</a>`).join('')}</div>
+          <div class="row" style="margin-top:14px">${picks.length > 1 ? '<button class="btn secondary" type="button" id="next-pick">Show me another</button>' : ''}<a class="btn ghost" href="${bookLink(r, pickParty)}">See all times →</a></div>
+        </div>
+      </div></article>
+      ${others.length ? `<h3 style="margin:22px 0 10px;color:var(--ink)">Other good matches</h3>
+        <div class="featured">${others.map((o) => mini(o.restaurant, pickParty, o.times.slice(0, 3), `${o.score}% match`)).join('')}</div>` : ''}`;
+    const nb = document.getElementById('next-pick');
+    if (nb) nb.onclick = () => { pickIdx = (pickIdx + 1) % picks.length; renderPick(); pickBox.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  }
+
+  function mini(r, party, slots, badge) {
+    return `<article class="card mini">
+      <a href="${bookLink(r, party)}" class="mini-img" style="${TB.thumbStyle(r)}" aria-hidden="true" tabindex="-1">${r.image_url ? '' : esc(TB.initials(r.name))}</a>
+      <div class="mini-body">
+        <div class="row" style="gap:6px"><h3 style="margin:0;font-size:17px"><a href="${bookLink(r, party)}" style="color:inherit;text-decoration:none">${esc(r.name)}</a></h3><span class="spacer"></span>${badge ? `<span class="feat-badge">${esc(badge)}</span>` : ''}</div>
+        <div class="r-meta">${esc(r.cuisine)} · ${TB.price(r.price_level)} · ${esc(r.city)}${r.miles != null ? ` · ${r.miles} mi` : ''}${r.likes ? ` · <span class="loves">♥ ${r.likes}</span>` : ''}</div>
+        <div class="tagchips">${tagChips(r, [], 3)}</div>
+        <div class="slots">${slots.length ? slots.map((t) => `<a class="slot sm" style="background:${esc(r.accent_color)}" href="${bookLink(r, party, t)}">${TB.time(t)}</a>`).join('') : `<a class="small" href="${bookLink(r, party)}">See times</a>`}</div>
+      </div></article>`;
+  }
+
+  async function loadFeatured() {
+    const zip = f.zip.value.trim();
+    const q = new URLSearchParams({ date: f.date.value, time: f.time.value, party: f.party.value });
+    if (/^\d{5}$/.test(zip)) q.set('zip', zip);
+    try {
+      let rows = await api('/api/public/featured?' + q);
+      let where = /^\d{5}$/.test(zip) ? `near ${zip}` : '';
+      if (!rows.length && q.has('zip')) { q.delete('zip'); rows = await api('/api/public/featured?' + q); where = 'across Rbooked'; }
+      document.getElementById('featured-where').textContent = where ? `· ${where}` : '';
+      document.getElementById('featured').innerHTML = rows.map((r) => mini(r, f.party.value, r.slots, r.featured ? 'Featured' : 'New')).join('');
+      document.getElementById('featured-wrap').classList.toggle('hidden', !rows.length);
+    } catch { document.getElementById('featured-wrap').classList.add('hidden'); }
+  }
+
+  async function loadTrending() {
+    const zip = f.zip.value.trim();
+    try {
+      let rows = await getOnce('/api/public/trending' + (/^\d{5}$/.test(zip) ? `?zip=${zip}` : ''));
+      let where = /^\d{5}$/.test(zip) ? `· near ${zip}` : '';
+      if (!rows.length && where) { rows = await getOnce('/api/public/trending'); where = ''; }
+      document.getElementById('trend-where').textContent = where;
+      const box = document.getElementById('trend');
+      box.innerHTML = rows.map((g) => `<a class="trend" href="${TB.rlink(g.restaurant.slug)}"><div class="ph"><img src="${esc(g.url)}" alt="${esc(g.dish || g.caption || g.restaurant.name)}" loading="lazy">${TB.heart('photo', g.id, g.likes, g.liked, 'on-photo')}</div>
+        <div class="tx"><b>${esc(g.dish || g.caption || g.restaurant.name)}</b><span>${esc(g.restaurant.name)}${g.restaurant.city ? ` · ${esc(g.restaurant.city)}` : ''}</span></div></a>`).join('');
+      TB.bindHearts(box);
+      document.getElementById('trend-wrap').classList.toggle('hidden', !rows.length);
+    } catch { document.getElementById('trend-wrap').classList.add('hidden'); }
+  }
+
+  // Several sections use the same data: fetch each address once and share it (fewer requests on phones).
+  const cache = new Map();
+  const getOnce = (url) => { if (!cache.has(url)) cache.set(url, api(url).catch((e) => { cache.delete(url); throw e; })); return cache.get(url); };
+  const mapUrl = () => { const z = f.zip.value.trim(); return '/api/public/map' + (/^\d{5}$/.test(z) ? `?zip=${z}` : ''); };
+  async function loadMap() {
+    const zip = f.zip.value.trim();
+    try {
+      const data = await getOnce(mapUrl());
+      const wrap = document.getElementById('map-wrap');
+      wrap.classList.toggle('hidden', !data.pins.length);
+      if (!data.pins.length) return;
+      document.getElementById('map-where').textContent = `· ${data.pins.length} restaurant${data.pins.length === 1 ? '' : 's'} on Rbooked`;
+      TBMap.draw(document.getElementById('home-map'), data.pins, { center: data.center, link: (p) => bookLink({ slug: p.slug, date: f.date.value }, f.party.value) });
+    } catch { document.getElementById('map-wrap').classList.add('hidden'); }
+  }
+  // "Spin it": a reel of restaurants (and their dishes) that whizzes past and stops on one to book.
+  const spin = { pool: [], busy: false, idx: 0 };
+  const CARD_W = 220; const GAP = 12;
+  const reelCard = (it) => `<div class="reel-card"${it.img ? '' : ` style="background:linear-gradient(135deg, ${esc(it.accent || '#c2410c')}, #2b1a10)"`}>
+    ${it.img ? `<img src="${esc(it.img)}" alt="" loading="lazy" decoding="async" draggable="false">` : `<span class="reel-ini">${esc(TB.initials(it.name))}</span>`}
+    <div class="reel-tx"><b>${esc(it.title)}</b><span>${esc(it.sub)}</span></div></div>`;
+  async function loadSpin() {
+    try {
+      const zip = f.zip.value.trim();
+      const [m, t] = await Promise.all([getOnce(mapUrl()), getOnce('/api/public/trending').catch(() => [])]);
+      const pool = m.pins.map((p) => ({ slug: p.slug, name: p.name, tag: p.tag, img: p.image_url, title: p.name, sub: [p.cuisine, p.city].filter(Boolean).join(' · '), city: p.city, cuisine: p.cuisine }));
+      // Few restaurants so far: add their food photos so the reel still has plenty to spin through.
+      for (const g of t) {
+        const r = pool.find((x) => x.slug === g.restaurant.slug);
+        if (r) pool.push({ ...r, img: g.url, title: g.dish || g.caption || r.name, sub: r.name });
+      }
+      spin.pool = pool;
+      document.getElementById('spin-wrap').classList.toggle('hidden', !pool.length);
+      if (!pool.length) return;
+      // Build the reel only when it's about to scroll into view, so the top of the page stays quick.
+      const reelEl = document.getElementById('reel');
+      if (spin.items) fillReel(0);
+      else if ('IntersectionObserver' in window) {
+        const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { io.disconnect(); if (!spin.items) fillReel(0); } }, { rootMargin: '300px' });
+        io.observe(reelEl);
+      } else fillReel(0);
+    } catch { document.getElementById('spin-wrap').classList.add('hidden'); }
+  }
+  function fillReel(offset) {
+    const track = document.getElementById('reel-track'); const p = spin.pool;
+    const n = Math.max(24, Math.min(60, p.length * 3));
+    spin.items = Array.from({ length: n }, (_, i) => p[(i + offset) % p.length]);
+    track.style.transition = 'none'; track.style.transform = 'translateX(0)';
+    track.innerHTML = spin.items.map(reelCard).join('');
+    centerOn(2, false);
+  }
+  let reelW = 0;
+  function centerOn(i, animate, ms = 3200) {
+    const reel = document.getElementById('reel'); const track = document.getElementById('reel-track');
+    if (!reelW || !animate) reelW = reel.clientWidth;
+    const x = i * (CARD_W + GAP) + CARD_W / 2 - reelW / 2;
+    track.style.transition = animate ? `transform ${ms}ms cubic-bezier(.12,.75,.12,1)` : 'none';
+    track.style.transform = `translateX(${-x}px)`;
+  }
+  function doSpin() {
+    if (spin.busy || !spin.pool.length) return;
+    spin.busy = true;
+    const btn = document.getElementById('spin-go'); btn.disabled = true;
+    const out = document.getElementById('spin-out'); out.classList.remove('show');
+    fillReel(Math.floor(Math.random() * spin.pool.length));
+    const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const target = spin.items.length - 4 - Math.floor(Math.random() * Math.min(4, spin.pool.length));
+    document.getElementById('reel').offsetWidth; // apply the reset before animating
+    const phone = window.matchMedia && matchMedia('(max-width: 560px)').matches;
+    requestAnimationFrame(() => centerOn(target, true, reduce ? 300 : phone ? 2200 : 3200));
+    setTimeout(() => {
+      const cards = document.querySelectorAll('#reel-track .reel-card');
+      cards[target] && cards[target].classList.add('won');
+      showWinner(spin.items[target]);
+      spin.busy = false; btn.disabled = false; btn.innerHTML = '<span aria-hidden="true">🎰</span> Spin again';
+    }, reduce ? 350 : (window.matchMedia && matchMedia('(max-width: 560px)').matches) ? 2300 : 3300);
+  }
+  async function showWinner(it) {
+    const out = document.getElementById('spin-out'); const party = f.party.value; const date = f.date.value;
+    const link = (t) => bookLink({ slug: it.slug, date }, party, t);
+    out.innerHTML = `<div class="spin-win"><div><div class="muted small">You landed on</div><h3 class="serif">${esc(it.name)}</h3>
+      <div class="r-meta">${esc([it.cuisine, it.city].filter(Boolean).join(' · '))} <a class="r-card-tag" href="/tag/${esc(it.tag.slice(1))}">${esc(it.tag)}</a></div>
+      <div class="slots" id="spin-slots"><span class="muted small">Checking tables…</span></div></div>
+      <a class="btn" href="${link()}">Book a table</a></div>`;
+    out.classList.add('show');
+    try {
+      const av = await api(`/api/public/restaurants/${encodeURIComponent(it.slug)}/availability?date=${date}&party=${party}`);
+      const times = (av.slots || []).filter((x) => x.available).map((x) => x.time);
+      const want = f.time.value; const toM = (t) => +t.slice(0, 2) * 60 + +t.slice(3, 5);
+      const near = times.sort((a, b) => Math.abs(toM(a) - toM(want)) - Math.abs(toM(b) - toM(want))).slice(0, 4).sort();
+      document.getElementById('spin-slots').innerHTML = near.length ? near.map((t) => `<a class="slot sm" href="${link(t)}">${TB.time(t)}</a>`).join('')
+        : `<span class="muted small">No tables left ${esc(TB.date(date))}. <a href="${link()}">See other days</a></span>`;
+    } catch { document.getElementById('spin-slots').innerHTML = ''; }
+  }
+  document.getElementById('spin-go').onclick = doSpin;
+  // iPhones fire "resize" whenever the address bar shows or hides while scrolling: only react to real width changes.
+  let lastW = window.innerWidth;
+  window.addEventListener('resize', () => { if (window.innerWidth === lastW) return; lastW = window.innerWidth; if (!spin.busy && spin.items) { reelW = 0; centerOn(2, false); } });
+  // Spin once on its own the first time the reel comes into view.
+  loadSpin().then(() => {
+    const el = document.getElementById('reel');
+    if (!spin.pool.length || !('IntersectionObserver' in window)) return;
+    if (window.matchMedia && matchMedia('(max-width: 560px), (prefers-reduced-motion: reduce)').matches) return; // phones: spin when they tap
+    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { io.disconnect(); setTimeout(doSpin, 400); } }, { threshold: 0.6 });
+    io.observe(el);
+  });
+
+  loadFeatured(); loadTrending(); loadMap();
+  f.zip.addEventListener('change', () => { loadFeatured(); loadTrending(); loadMap(); loadSpin(); });
+  if (f.zip.value && params.get('zip')) (mode === 'pick' ? pick(false) : search(false));
+})();
+  // Find a restaurant by its hashtag.
+  (function () {
+    const f = document.getElementById('tag-find'); if (!f) return;
+    f.onsubmit = (e) => { e.preventDefault(); const t = document.getElementById('tag-in').value.trim().replace(/^#+/, '').replace(/[^A-Za-z0-9]/g, ''); if (t) location.href = `/tag/${encodeURIComponent(t)}`; };
+    const miss = new URLSearchParams(location.search).get('tag');
+    if (miss) { const m = document.getElementById('tag-miss'); m.hidden = false; m.textContent = `We couldn't find #${miss}. Search by ZIP code below.`; }
+  }());
+</script>
+</body>
+</html>
