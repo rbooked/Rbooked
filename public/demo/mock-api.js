@@ -802,9 +802,11 @@ window.RBOOKED_DEMO = true;
     const trial = onSite ? '/for-restaurants#signup' : 'for-restaurants.html#signup';
     bar.innerHTML = `<span><b>DEMO</b> · Try everything. Nothing here is real, no emails go out, and it starts fresh every visit.</span><span class="sp"></span>
       <a href="${trial}" target="_top" style="background:#16a34a;color:#fff;border-radius:7px;padding:5px 10px;font-weight:700;text-decoration:none">Start free trial</a>
-      ${/admin\.html/.test(location.pathname) ? `<a href="index.html" style="color:#f5e6d8">👀 See it as a diner</a>` : `<a href="admin.html" id="demo-dash" style="background:#fff;color:#1f1b16;border-radius:7px;padding:5px 10px;font-weight:700;text-decoration:none">🍽️ Open my restaurant dashboard →</a>`}
+      ${/admin\.html/.test(location.pathname) ? `<a href="index.html" style="background:#fff;color:#1f1b16;border-radius:7px;padding:5px 10px;font-weight:700;text-decoration:none">← Back to main page</a>` : `<a href="admin.html" id="demo-dash" style="background:#fff;color:#1f1b16;border-radius:7px;padding:5px 10px;font-weight:700;text-decoration:none">🍽️ Open my restaurant dashboard →</a>`}
       <button type="button" id="demo-inbox">Demo inbox (<span id="demo-count">0</span>)</button><button type="button" class="alt" id="demo-reset">Reset demo</button>`;
     document.body.prepend(bar);
+    // In the demo dashboard, the Rbooked logo goes back to the main page with all the sample restaurants.
+    if (/admin\.html/.test(location.pathname)) document.querySelectorAll('.sidebar .logo, .topbar .logo').forEach((l) => { l.href = 'index.html'; l.title = 'Back to main page'; });
     const count = () => { const n = (store.get() || db).emails.length; const el = document.getElementById('demo-count'); if (el) el.textContent = n; };
     window.TBDemo = { bump: () => setTimeout(count, 0) };
     count(); window.addEventListener('storage', count);
