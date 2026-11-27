@@ -155,17 +155,17 @@ router.get('/availability', wrap(async (req, res) => {
 }));
 
 router.post('/reservations', wrap(async (req, res) => {
-  const source = ['phone', 'walk_in', 'admin'].includes(req.body.source) ? req.body.source : 'phone';
+  const source = ['phone', 'walk_in', 'admin', 'waitlist'].includes(req.body.source) ? req.body.source : 'phone';
   const body = { ...req.body };
-  if (source === 'walk_in') {
+  if (source === 'walk_in' || source === 'waitlist') {
     const now = nowInZone(req.restaurant.timezone);
     body.date = body.date || now.date;
     body.time = body.time || `${String(Math.floor(now.minutes / 60)).padStart(2, '0')}:${String(now.minutes % 60).padStart(2, '0')}`;
     body.email = body.email || 'walkin@guest.local';
     body.phone = body.phone || '0000000';
-    body.name = body.name || 'Walk-in';
+    body.name = body.name || (source === 'waitlist' ? 'Waitlist guest' : 'Walk-in');
   }
-  body.send_email = req.body.send_email !== false && source !== 'walk_in';
+  body.send_email = req.body.send_email !== false && source !== 'walk_in' && source !== 'waitlist';
   const created = createReservation(req.restaurant, body, { source, admin: true });
   res.status(201).json(created);
 }));
@@ -183,6 +183,8 @@ router.patch('/reservations/:id', wrap(async (req, res) => {
     if (next.combo_id) owned('table_combos', next.combo_id, r.id); else owned('tables', next.table_id, r.id);
     // Staff can always double-seat: no busy-table check here.
   }
+  if (f.status === 'seated' && rv.status !== 'seated') f.seated_at = new Date().toISOString();
+  if (f.status === 'confirmed' && rv.status === 'seated') f.seated_at = null;
   if (f.date || f.time) { f.starts_at_utc = zonedToUtc(next.date, next.time, r.timezone).toISOString(); f.reminder_sent_at = null; }
   // Brought back from no-show by staff: keep it on the list as Late instead of marking it no-show again.
   if (f.status === 'confirmed' && rv.status === 'no_show') f.keep_late = 1;

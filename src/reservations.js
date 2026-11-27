@@ -69,7 +69,10 @@ function createReservation(restaurant, data, opts = {}) {
     let comboId = null;
     let shiftId = null;
     let duration = 90;
-    if (opts.admin && (data.table_id || data.combo_id)) {
+    if (source === 'waitlist') {
+      // Waitlist: no table yet. Staff seat them when one frees up.
+      duration = Number(data.duration_minutes) || turnFor(restaurant.turn_times, party, 90);
+    } else if (opts.admin && (data.table_id || data.combo_id)) {
       // Staff picked a specific table or table combination.
       duration = Number(data.duration_minutes) || turnFor(restaurant.turn_times, party, 90);
       let label;
@@ -109,16 +112,19 @@ function createReservation(restaurant, data, opts = {}) {
     const startsUtc = zonedToUtc(date, time, restaurant.timezone).toISOString();
     const info = run(
       `INSERT INTO reservations (code, manage_token, restaurant_id, table_id, combo_id, guest_id, shift_id, date, time, starts_at_utc,
-        duration_minutes, party_size, guest_name, guest_email, guest_phone, notes, occasion, internal_notes, source, status)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        duration_minutes, party_size, guest_name, guest_email, guest_phone, notes, occasion, internal_notes, source, status, seated_at, quoted_minutes, keep_late)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       code, token, restaurant.id, tableId, comboId, guestId, shiftId, date, time, startsUtc, duration, party,
       guest.guest_name, guest.guest_email, guest.guest_phone, guest.notes, guest.occasion,
       String(data.internal_notes || ''), source, source === 'walk_in' ? 'seated' : 'confirmed',
+      source === 'walk_in' ? new Date().toISOString() : null,
+      source === 'waitlist' ? Math.max(0, Math.min(600, Number(data.quoted_minutes) || 0)) : null,
+      source === 'waitlist' ? 1 : 0,
     );
     return one('SELECT * FROM reservations WHERE id = ?', info.lastInsertRowid);
   });
 
-  if (source !== 'walk_in' && data.send_email !== false) {
+  if (source !== 'walk_in' && source !== 'waitlist' && data.send_email !== false) {
     email.sendReservationEmail('confirmation', restaurant, res).catch(() => {});
   }
   if (!opts.admin) email.sendReservationEmail('staff_new', restaurant, res).catch(() => {});

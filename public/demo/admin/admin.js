@@ -726,13 +726,13 @@
     const chip = (id, label, cls = '') => `<button type="button" class="rv-chip ${cls} ${f === id ? 'on' : ''}" data-rf="${id}" aria-pressed="${f === id}"><b>${counts[id] || 0}</b> ${label}</button>`;
     const covers = R.filter((x) => !['cancelled', 'no_show'].includes(x.status)).reduce((a, x) => a + x.party_size, 0);
     document.getElementById('stats').innerHTML = `<div class="rv-chips" role="group" aria-label="Show reservations">
-      ${chip('all', 'All')}${counts.late ? chip('late', 'Late', 'late') : ''}${chip('upcoming', 'Upcoming')}${chip('seated', 'Seated')}${chip('finished', 'Finished')}${counts.off ? chip('off', 'Cancelled / no-show', 'off') : ''}</div>
+      ${chip('all', 'All')}${counts.waitlist ? chip('waitlist', 'Waitlist') : ''}${counts.late ? chip('late', 'Late', 'late') : ''}${chip('upcoming', 'Upcoming')}${chip('seated', 'Seated')}${chip('finished', 'Finished')}${counts.off ? chip('off', 'Cancelled / no-show', 'off') : ''}</div>
       <span class="rv-sum">${covers} covers · ${stats.seats} seats</span>`;
     document.querySelectorAll('#stats [data-rf]').forEach((b) => { b.onclick = () => { S.resFilter = b.dataset.rf; load(true).catch(fail); }; });
     if (f !== 'all' && !counts[f]) S.resFilter = 'all';
     const live = document.getElementById('live');
     if (live) live.title = `Updated ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
-    if (S.mode === 'list') document.getElementById('upnext').innerHTML = ''; // the list already puts late and next guests first
+    if (S.mode === 'list' || (S.mode === 'floor' && window.innerWidth > 640)) document.getElementById('upnext').innerHTML = ''; // the list already puts late and next guests first
     else renderUpNext(data.reservations);
     const body = document.getElementById('res-body');
     if (S.mode === 'timeline') renderTimeline(body, data.reservations, floor);
@@ -760,7 +760,7 @@
     const box = document.getElementById('upnext');
     const now = nowLocal();
     if (S.date !== now.date) { box.innerHTML = ''; return; }
-    const soon = rows.filter((x) => x.status === 'confirmed' && !lateBy(x) && toMin(x.time) <= now.minutes + 120)
+    const soon = rows.filter((x) => x.status === 'confirmed' && !isWait(x) && !lateBy(x) && toMin(x.time) <= now.minutes + 120)
       .sort((a, b) => a.time.localeCompare(b.time)).slice(0, 6);
     if (!soon.length) { box.innerHTML = ''; return; }
     box.innerHTML = `<div class="upnext"><span class="upnext-title">Arriving next</span>${soon.map((x) => {
@@ -785,12 +785,81 @@
 
   // Reservation sections, in this order: Seated, Upcoming, Finished, then Cancelled / no-show last.
   /** Minutes a booked (not yet seated) guest is past their time, or 0 if they aren't late. */
+  const isWait = (x) => x.source === 'waitlist' && x.status === 'confirmed';
   function lateBy(x) {
-    if (x.status !== 'confirmed') return 0;
+    if (x.status !== 'confirmed' || x.source === 'waitlist') return 0;
     const now = nowLocal();
     if (x.date < now.date) return 24 * 60;
     if (x.date > now.date) return 0;
     return Math.max(0, now.minutes - toMin(x.time));
+  }
+  // Minutes since a time today ("seated 25m", "waiting 12m").
+  const sinceMin = (iso, hhmmStr) => {
+    if (iso) return Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+    return Math.max(0, nowLocal().minutes - toMin(hhmmStr));
+  };
+  const dur = (m) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}` : `${m}m`);
+  // Rough wait for a party of n: how soon a table that fits frees up (seated parties' booked end, upcoming bookings).
+  function quoteFor(n) {
+    const f = S.floor || { tables: [] }; const rows = S.lastRows || []; const now = nowLocal().minutes;
+    const fits = f.tables.filter((t) => t.active && t.max_seats >= n && t.min_seats <= Math.max(n, 1));
+    if (!fits.length) return null;
+    let best = Infinity;
+    for (const t of fits) {
+      const here = rows.filter((x) => x.table_id === t.id);
+      let free = now;
+      for (const x of here.filter((y) => y.status === 'seated')) free = Math.max(free, toMin(x.time) + x.duration_minutes, now + 5);
+      const soon = here.filter((y) => y.status === 'confirmed' && !isWait(y) && toMin(y.time) + y.duration_minutes > free && toMin(y.time) < free + 75)
+        .sort((a, b) => a.time.localeCompare(b.time));
+      for (const x of soon) free = Math.max(free, toMin(x.time) + x.duration_minutes);
+      best = Math.min(best, free - now);
+    }
+    const ahead = rows.filter((x) => isWait(x) && Math.abs(x.party_size - n) <= 1).length;
+    const m = Math.max(0, best) + ahead * 10;
+    return Math.ceil(m / 5) * 5;
+  }
+  const quoteLabel = (m) => (m === null ? '—' : m === 0 ? 'Now' : m > 120 ? '2h+' : dur(m));
+  // One tap to seat: keep their table, or pick the smallest free table that fits.
+  async function seatNow(x) {
+    const f = S.floor || { tables: [] }; const rows = S.lastRows || [];
+    const body = { status: 'seated', force: true };
+    if (!x.table_id && !x.combo_id) {
+      const busy = new Set(rows.filter((y) => y.status === 'seated' && y.table_id).map((y) => y.table_id));
+      const now = nowLocal().minutes;
+      const soon = new Set(rows.filter((y) => y.status === 'confirmed' && y.id !== x.id && y.table_id && Math.abs(toMin(y.time) - now) < 45).map((y) => y.table_id));
+      const t = f.tables.filter((z) => z.active && z.max_seats >= x.party_size && !busy.has(z.id)).sort((a, b) => (soon.has(a.id) - soon.has(b.id)) || ((a.shape === 'bar') - (b.shape === 'bar')) || a.max_seats - b.max_seats)[0];
+      if (t) { body.table_id = t.id; body.combo_id = null; }
+    }
+    if (isWait(x)) { const nl = nowLocal(); body.date = nl.date; body.time = hhmm(nl.minutes); }
+    await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body });
+    const t = body.table_id && f.tables.find((z) => z.id === body.table_id);
+    TB.toast(`${x.guest_name} seated${t ? ` at ${t.label}` : x.table_label ? ` at ${x.table_label}` : ' (tap a table to place them)'}`);
+  }
+  function waitlistModal(done, party = 2) {
+    TB.modal(`<h2>Add to waitlist</h2><form id="wl-form">
+      <div class="grid-2"><div class="field"><label for="wl-party">Party size</label><input id="wl-party" type="number" name="party_size" min="1" value="${party}"></div>
+      <div class="field"><label for="wl-q">Quoted wait (min)</label><input id="wl-q" type="number" name="quoted_minutes" min="0" step="5" value="${quoteFor(party) || 0}"></div></div>
+      <div class="grid-2"><div class="field"><label for="wl-name">Name</label><input id="wl-name" name="name" required></div><div class="field"><label for="wl-phone">Phone (optional)</label><input id="wl-phone" name="phone" type="tel"></div></div>
+      <div class="row"><button class="btn" type="submit">Add to waitlist</button><button class="btn secondary" type="button" data-close>Close</button></div></form>`,
+    (m, close) => {
+      const pi = m.querySelector('#wl-party'); const qi = m.querySelector('#wl-q');
+      pi.oninput = () => { qi.value = quoteFor(Number(pi.value) || 1) || 0; };
+      m.querySelector('#wl-form').onsubmit = async (e) => {
+        e.preventDefault();
+        const d = TB.formData(e.target);
+        try { await api('/api/admin/reservations', { body: { source: 'waitlist', party_size: Number(d.party_size), name: d.name, phone: d.phone, quoted_minutes: Number(d.quoted_minutes) || 0 } }); } catch (err) { return fail(err); }
+        close(); TB.toast(`${d.name} added to the waitlist`); S.date = nowLocal().date; done && done();
+      };
+    });
+  }
+  // Section headers: tap to fold. Finished and Cancelled start folded.
+  S.secClosed = S.secClosed || new Set(['finished', 'off']);
+  const secHead = (g, extra = '') => `<button type="button" class="hs-head${S.secClosed.has(g.id) ? ' closed' : ''}" data-sec="${g.id}" aria-expanded="${!S.secClosed.has(g.id)}">
+      <span class="hs-title">${esc(g.label)}</span><span class="hs-count" title="Parties">👥 ${g.rows.length}</span><span class="hs-count" title="Guests">${g.rows.reduce((a, x) => a + x.party_size, 0)} guests</span><span class="hs-caret" aria-hidden="true">⌃</span></button>${extra}`;
+  const waitQuotes = () => `<div class="hs-quotes">${[[1, '1–2'], [3, '3–4'], [5, '5–6'], [7, '7+']].map(([n, l]) => `<button type="button" class="hs-q" data-wl="${n}"><b>${quoteLabel(quoteFor(n))}</b><span>${l}</span></button>`).join('')}<button type="button" class="hs-q hs-add" data-wl="2" aria-label="Add to waitlist">＋</button></div>`;
+  function bindSections(root, rerender) {
+    root.querySelectorAll('[data-sec]').forEach((b) => { b.onclick = () => { const id = b.dataset.sec; if (S.secClosed.has(id)) S.secClosed.delete(id); else S.secClosed.add(id); rerender(); }; });
+    root.querySelectorAll('[data-wl]').forEach((b) => { b.onclick = () => waitlistModal(load, Number(b.dataset.wl)); });
   }
   const graceMin = () => (S.me.restaurant.auto_no_show ? Number(S.me.restaurant.no_show_grace_minutes) || 30 : 0);
   function lateTag(x) {
@@ -800,9 +869,10 @@
     return `<span class="tag warn late-tag">Late ${dur}</span>${g && !x.keep_late && left > 0 ? `<div class="small muted">No-show in ${left} min</div>` : ''}`;
   }
   const RES_GROUPS = [
+    { id: 'waitlist', label: 'Waitlist', has: isWait, sort: (a, b) => a.id - b.id },
     { id: 'late', label: 'Late', has: (x) => lateBy(x) > 0 },
-    { id: 'seated', label: 'Seated', has: (x) => x.status === 'seated' },
-    { id: 'upcoming', label: 'Upcoming', has: (x) => x.status === 'confirmed' && !lateBy(x) },
+    { id: 'upcoming', label: 'Upcoming', has: (x) => x.status === 'confirmed' && !lateBy(x) && !isWait(x) },
+    { id: 'seated', label: 'Seated', has: (x) => x.status === 'seated', sort: (a, b) => (a.seated_at || a.time).localeCompare(b.seated_at || b.time) },
     { id: 'finished', label: 'Finished', has: (x) => x.status === 'completed' },
     { id: 'off', label: 'Cancelled / no-show', has: (x) => ['cancelled', 'no_show'].includes(x.status) },
   ];
@@ -810,7 +880,7 @@
   function resSections(rows) {
     const f = S.resFilter || 'all';
     return RES_GROUPS.filter((g) => f === 'all' || g.id === f)
-      .map((g) => ({ ...g, rows: rows.filter(g.has).sort((a, b) => a.time.localeCompare(b.time) || a.id - b.id) }))
+      .map((g) => ({ ...g, rows: rows.filter(g.has).sort(g.sort || ((a, b) => a.time.localeCompare(b.time) || a.id - b.id)) }))
       .filter((g) => g.rows.length);
   }
   function resFilterBar() { return { html: '', bind: () => {} }; }
@@ -825,7 +895,7 @@
   // One clean line per reservation: time, guest, party, table and the one next step (Seat / Finished).
   // Tap the line for phone, notes, table change, no-show, cancel and edit. Same layout on phone, iPad and Mac.
   function renderList(body, rows) {
-    if (!rows.length) { body.innerHTML = `<div class="card rl-empty"><div style="font-size:34px">📖</div><p style="margin:6px 0 12px">No reservations for ${TB.date(S.date, { weekday: 'long', month: 'long' })} yet.</p><button class="btn" data-empty-new>+ New reservation</button></div>`; body.querySelector('[data-empty-new]').onclick = () => reservationModal(null, load); return; }
+    if (!rows.length && S.date !== nowLocal().date) { body.innerHTML = `<div class="card rl-empty"><div style="font-size:34px">📖</div><p style="margin:6px 0 12px">No reservations for ${TB.date(S.date, { weekday: 'long', month: 'long' })} yet.</p><button class="btn" data-empty-new>+ New reservation</button></div>`; body.querySelector('[data-empty-new]').onclick = () => reservationModal(null, load); return; }
     S.rlOpen = S.rlOpen || new Set();
     const secs = resSections(rows);
     const flags = (x) => {
@@ -844,14 +914,14 @@
     const line = (x) => {
       const late = lateBy(x) > 0; const open = S.rlOpen.has(x.id);
       const dim = ['cancelled', 'no_show', 'completed'].includes(x.status);
-      const st = late ? 'late' : x.status;
+      const st = isWait(x) ? 'wait' : late ? 'late' : x.status;
       const more = [x.status === 'confirmed' ? ['noshow', 'No-show'] : null, x.status === 'seated' ? ['undo', 'Undo seat'] : null,
         x.status === 'no_show' ? ['undo', lateBy({ ...x, status: 'confirmed' }) ? '⏱ Late' : 'Upcoming'] : null, x.status === 'completed' ? ['undo', 'Undo finished'] : null,
         ['confirmed', 'seated', 'no_show'].includes(x.status) ? ['cancel', 'Cancel'] : null, ['confirmed', 'seated'].includes(x.status) ? ['edit', '✎ Edit'] : null,
         x.guest_email !== 'walkin@guest.local' ? ['resend', '✉️ Resend email'] : null].filter(Boolean);
       return `<li class="rl st-${st}${dim ? ' dim' : ''}${open ? ' open' : ''}" data-id="${x.id}">
         <div class="rl-main" role="button" tabindex="0" aria-expanded="${open}">
-          <div class="rl-time"><b>${TB.time(x.time).replace(' ', '&nbsp;')}</b>${late ? lateTag(x) : ''}</div>
+          <div class="rl-time"><b>${TB.time(x.time).replace(' ', '&nbsp;')}</b>${late ? lateTag(x) : ''}${isWait(x) ? `<div class="small muted">waiting ${dur(sinceMin(null, x.time))}${x.quoted_minutes ? ` / ${dur(x.quoted_minutes)}` : ''}</div>` : x.status === 'seated' ? `<div class="small muted">seated ${dur(sinceMin(x.seated_at, x.time))}</div>` : ''}</div>
           <div class="rl-who"><b class="rl-name">${esc(x.guest_name)}</b>
             <div class="rl-sub"><span class="rl-party">👥 ${x.party_size}</span><span class="rl-table">${esc(x.table_label || 'No table')}</span>${flags(x)}${x.notes || x.guest_notes ? `<span class="rl-wide">📝 ${esc(x.notes || x.guest_notes)}</span>` : ''}</div></div>
           <div class="rl-act">${primary(x)}<span class="rl-caret" aria-hidden="true">⌄</span></div>
@@ -864,8 +934,12 @@
           <div class="rl-btns">${more.map(([a, l]) => `<button class="btn ${a === 'cancel' || a === 'noshow' ? 'secondary danger-text' : 'secondary'} sm" data-act="${a}">${l}</button>`).join('')}</div>
         </div>` : ''}</li>`;
     };
-    body.innerHTML = secs.map((g) => `<section class="rl-sec rl-${g.id}"><h3 class="rl-h">${esc(g.label)} <span>${g.rows.length} · ${g.rows.reduce((a, x) => a + x.party_size, 0)} guests</span></h3>
-      <ul class="rl-list">${g.rows.map(line).join('')}</ul></section>`).join('') || '<div class="card muted">Nothing in this section.</div>';
+    const showWl = (S.resFilter || 'all') === 'all' || S.resFilter === 'waitlist';
+    const wl = secs.find((g) => g.id === 'waitlist') || { id: 'waitlist', label: 'Waitlist', rows: [] };
+    const all_ = [...(showWl ? [wl] : []), ...secs.filter((g) => g.id !== 'waitlist')];
+    body.innerHTML = all_.map((g) => `<section class="rl-sec rl-${g.id}">${secHead(g, g.id === 'waitlist' && !S.secClosed.has(g.id) ? waitQuotes() : '')}
+      ${S.secClosed.has(g.id) ? '' : g.rows.length ? `<ul class="rl-list">${g.rows.map(line).join('')}</ul>` : g.id === 'waitlist' ? '<p class="hs-empty">Nobody waiting. Tap a wait time to add a party.</p>' : ''}</section>`).join('') || '<div class="card muted">Nothing in this section.</div>';
+    bindSections(body, () => renderList(body, rows));
     body.querySelectorAll('li.rl').forEach((li) => {
       const x = rows.find((r) => r.id === Number(li.dataset.id));
       const main = li.querySelector('.rl-main');
@@ -919,16 +993,7 @@
   }
   async function resAction(act, x) {
     try {
-      if (act === 'seat') {
-        // Staff can always seat anyone, anywhere, right away. Just a small note if the table is shared.
-        const rows = S.lastRows || [];
-        const f = S.floor || { tables: [], combos: [] };
-        const combo = x.combo_id && (f.combos || []).find((c) => c.id === x.combo_id);
-        const mine = combo ? comboTables(combo) : x.table_id ? [x.table_id] : [];
-        const others = mine.length ? rows.filter((y) => y.id !== x.id && y.status === 'seated' && (mine.includes(y.table_id) || (y.combo_id && (f.combos || []).some((c) => c.id === y.combo_id && comboTables(c).some((t) => mine.includes(t)))))) : [];
-        await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { status: 'seated', force: true } });
-        TB.toast(`${x.guest_name} seated${others.length ? ` (+${others.length} at ${x.table_label || 'table'})` : ''}`);
-      }
+      if (act === 'seat') await seatNow(x);
       if (act === 'complete') { await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { status: 'completed' } }); TB.toast(`${x.guest_name}'s table is finished`); }
       if (act === 'undo') { await api(`/api/admin/reservations/${x.id}`, { method: 'PATCH', body: { status: 'confirmed' } }); if (x.status === 'no_show') TB.toast(`${x.guest_name} is back on the list`); }
       if (act === 'resend') { await api(`/api/admin/reservations/${x.id}/resend`, { body: {} }); TB.toast('Email sent'); return; }
@@ -1062,15 +1127,15 @@
       <div class="floor-wrap rf-wrap">
         <div><div class="canvas-scroll"><div class="canvas rf" id="rf-canvas">${tables.map((t) => {
           const [w, h] = tableSize(t); const st = state(t);
-          const cls = st.cur ? `busy-${st.cur.status}` : st.next && toMin(st.next.time) - t0 <= 30 ? 'soon' : '';
           const over = st.cur && st.cur.status === 'seated' && isToday && toMin(st.cur.time) + st.cur.duration_minutes < t0;
+          const cls = st.cur ? `busy-${st.cur.status}${over ? ' over' : ''}` : st.next && toMin(st.next.time) - t0 <= 30 ? 'soon' : '';
           const line = st.cur ? `${esc(st.cur.guest_name.split(' ')[0])} · ${st.cur.party_size}${st.seatedN > 1 ? ` <b>+${st.seatedN - 1}</b>` : ''}<br>${over ? '<b>over time</b>' : `until ${until(st.cur)}`}` : st.next ? `Next ${TB.time(st.next.time)}<br>${esc(st.next.guest_name.split(' ')[0])} · ${st.next.party_size}` : 'Free';
           const inCombo = st.cur && st.cur.combo_id ? '<span class="rf-link">⛓</span>' : '';
           return `<div class="ftable ${t.shape} ${cls} ${S.rfTable === t.id ? 'sel' : ''} ${sel.includes(t.id) ? 'combo-hl' : ''}" data-id="${t.id}"
-            style="left:${t.x}px;top:${t.y}px;width:${w}px;height:${h}px;transform:rotate(${t.rotation}deg)">${inCombo}
+            style="left:${t.x}px;top:${t.y}px;width:${w}px;height:${h}px;transform:rotate(${t.rotation}deg)">${inCombo}${st.cur ? `<span class="ft-n">${st.cur.party_size}</span>` : ''}
             <div>${esc(t.label)}<small class="rf-line">${line}</small></div>${chairs(t, w, h)}</div>`;
         }).join('') || '<p class="muted" style="padding:20px">No tables in this room.</p>'}</div></div>
-        <div class="legend"><span><i></i>Free</span><span><i style="background:#fef3c7;border-color:#d97706"></i>Arriving within 30 min</span><span><i style="background:#dbeafe;border-color:#2563eb"></i>Booked</span><span><i style="background:#dcfce7;border-color:#16a34a"></i>Seated</span><span>⛓ Combined tables</span></div></div>
+        <div class="legend"><span><i></i>Free</span><span><i style="background:#fef3c7;border-color:#d97706"></i>Arriving within 30 min</span><span><i style="background:#dbeafe;border-color:#2563eb"></i>Booked</span><span><i style="background:#dcfce7;border-color:#16a34a"></i>Seated</span><span><i style="background:#fee2e2;border-color:#dc2626"></i>Over time</span><span>⛓ Combined tables</span></div></div>
         <div class="card" id="rf-panel"></div>
       </div>`;
 
@@ -1082,19 +1147,42 @@
         const movable = (x) => ['confirmed', 'seated'].includes(x.status);
         const fb = resFilterBar(rows, () => renderResFloor(body, rows, floor));
         const seatLabel = (x) => (x.combo_id ? (combos.get(x.combo_id) || {}).name : (floor.tables.find((z) => z.id === x.table_id) || {}).label) || '';
-        p.innerHTML = `<div class="row"><h2 style="margin:0">All reservations</h2><span class="spacer"></span><span class="muted small">${today.length} · ${today.filter(movable).reduce((a, x) => a + x.party_size, 0)} guests</span></div>
-          <p class="muted small rf-hint">Tap a name for options, then tap a table to move it.</p>
-          ${fb.html}<div class="rf-list">${resSections(today).map((g) => `<div class="rf-sec">${esc(g.label)} <span>${g.rows.length}</span></div>${g.rows.map((x) => `<button type="button" class="rf-item ${x.status}${lateBy(x) ? ' is-late' : ''} ${S.rfMove === x.id ? 'moving' : ''} ${movable(x) ? '' : 'done'}" data-x="${x.id}" aria-pressed="${S.rfMove === x.id}">
-            <span class="rf-at">${TB.time(x.time)}</span>
-            <span class="rf-item-main"><b>${esc(x.guest_name)}</b><span class="small muted">${x.party_size} ${x.party_size === 1 ? 'guest' : 'guests'}${lateBy(x) ? ' · <b class="late-txt">Late</b>' : x.status === 'confirmed' ? '' : ` · ${STATUS_LABEL[x.status]}`}</span></span>
-            <span class="rf-tbl ${seatLabel(x) ? '' : 'none'}">${seatLabel(x) ? esc(seatLabel(x)) : 'No table'}</span></button>${S.rfPick === x.id ? `<div class="rf-acts">${lateBy(x) ? lateTag(x) : ''}${movable(x) ? '<div class="small muted">Tap a table to move them, or:</div>' : ''}<div class="res-actions">${statusButtons(x, 'data-a', `data-x="${x.id}"`)}</div></div>` : ''}`).join('')}`).join('') || '<p class="muted small">No reservations here.</p>'}</div>
-          <div class="rf-len"><h3 class="rf-h">Reservation length</h3><p class="small muted" style="margin:0">${turnSummary()} <a href="#services">Change</a></p></div>`;
+        const row = (x) => {
+          const late = lateBy(x); const w = isWait(x); const st = w ? 'wait' : late ? 'late' : x.status;
+          const meta = w ? `waiting ${dur(sinceMin(null, x.time))}${x.quoted_minutes ? ` · quoted ${dur(x.quoted_minutes)}` : ''}`
+            : x.status === 'seated' ? `${TB.time(x.time)} · seated ${dur(sinceMin(x.seated_at, x.time))}`
+              : `${TB.time(x.time)}${late ? ` · <b class="hs-late">late ${dur(late)}</b>` : ''}${['confirmed', 'seated'].includes(x.status) ? '' : ` · ${STATUS_LABEL[x.status]}`}`;
+          const go = x.status === 'seated' ? '<button type="button" class="hs-go done" data-go="complete">Done</button>'
+            : x.status === 'confirmed' ? '<button type="button" class="hs-go" data-go="seat">Seat</button>' : '';
+          return `<div role="button" tabindex="0" class="rf-item hs-row st-${st} ${S.rfMove === x.id ? 'moving' : ''} ${movable(x) ? '' : 'done'}" data-x="${x.id}" aria-pressed="${S.rfMove === x.id}">
+            <span class="hs-n">${x.party_size}</span>
+            <span class="hs-mid"><span class="hs-meta">${meta}</span><b class="hs-name">${esc(x.guest_name)}</b></span>
+            ${seatLabel(x) ? `<span class="hs-tbl">${esc(seatLabel(x))}</span>` : '<span></span>'}${go}</div>${S.rfPick === x.id ? `<div class="rf-acts">${late ? lateTag(x) : ''}${movable(x) ? '<div class="small muted">Tap a table to move them, or:</div>' : ''}<div class="res-actions">${statusButtons(x, 'data-a', `data-x="${x.id}"`)}</div></div>` : ''}`;
+        };
+        const secs = resSections(today);
+        const wl = secs.find((g) => g.id === 'waitlist') || { id: 'waitlist', label: 'Waitlist', rows: [] };
+        const rest = secs.filter((g) => g.id !== 'waitlist');
+        const showWl = (S.resFilter || 'all') === 'all' || S.resFilter === 'waitlist';
+        p.innerHTML = `<div class="rf-list hs-list">
+          ${showWl ? `<section class="hs-sec hs-waitlist">${secHead(wl, S.secClosed.has('waitlist') ? '' : waitQuotes())}${S.secClosed.has('waitlist') ? '' : wl.rows.map(row).join('') || '<p class="hs-empty">Nobody waiting. Tap a wait time to add a party.</p>'}</section>` : ''}
+          ${rest.map((g) => `<section class="hs-sec">${secHead(g)}${S.secClosed.has(g.id) ? '' : g.rows.map(row).join('')}</section>`).join('')}
+          ${!rest.length && !showWl ? '<p class="muted small">No reservations here.</p>' : ''}</div>`;
+        bindSections(p, () => renderResFloor(body, rows, floor));
+        p.querySelectorAll('[data-go]').forEach((b) => {
+          b.onclick = async (e) => {
+            e.stopPropagation(); b.disabled = true;
+            const x = rows.find((r) => r.id === Number(b.closest('[data-x]').dataset.x));
+            try { if (b.dataset.go === 'seat') await seatNow(x); else await resAction('complete', x); } catch (err) { fail(err); }
+            S.rfPick = null; S.rfMove = null; load(true).catch(fail);
+          };
+        });
         fb.bind(p);
         p.querySelectorAll('.rf-item').forEach((el) => {
           const x = rows.find((r) => r.id === Number(el.dataset.x));
           const pick = () => { const on = S.rfPick !== x.id; S.rfPick = on ? x.id : null; S.rfMove = on && movable(x) ? x.id : null; renderResFloor(body, rows, floor); };
           if (!movable(x)) { el.onclick = pick; return; }
-          el.onclick = () => { if (el.dataset.dragged) return; pick(); };
+          el.onclick = (e) => { if (el.dataset.dragged || e.target.closest('[data-go]')) return; pick(); };
+          el.onkeydown = (e) => { if (e.key === 'Enter') pick(); };
           el.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') dragRes(e, x, el); });
           longPressDrag(el, x);
         });

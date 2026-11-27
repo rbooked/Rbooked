@@ -549,13 +549,16 @@ window.RBOOKED_DEMO = true;
   });
   on('GET', '/api/admin/availability', (q) => { const { r } = me(); return getAvailability(r, q.date || nowInZone(r.timezone).date, Number(q.party) || 2, { admin: true, ignore: Number(q.ignore) || 0 }); });
   on('POST', '/api/admin/reservations', (q, b) => {
-    const { r } = me(); const source = ['phone', 'walk_in', 'admin'].includes(b.source) ? b.source : 'phone'; const d = { ...b };
-    if (source === 'walk_in') {
+    const { r } = me(); const source = ['phone', 'walk_in', 'admin', 'waitlist'].includes(b.source) ? b.source : 'phone'; const d = { ...b };
+    if (source === 'walk_in' || source === 'waitlist') {
       const n = nowInZone(r.timezone); d.date = d.date || n.date; d.time = d.time || hhmm(Math.floor(n.minutes / 5) * 5);
       d.email = d.email || 'walkin@guest.local'; d.phone = d.phone || '0000000'; d.name = d.name || 'Walk-in';
     }
-    d.send_email = b.send_email !== false && source !== 'walk_in';
-    return createReservation(r, d, { source, admin: true });
+    d.send_email = b.send_email !== false && source !== 'walk_in' && source !== 'waitlist';
+    const made = createReservation(r, d, { source, admin: true });
+    if (source === 'waitlist') Object.assign(made, { table_id: null, combo_id: null, quoted_minutes: Number(b.quoted_minutes) || 0, keep_late: 1 });
+    if (source === 'walk_in') made.seated_at = new Date().toISOString();
+    return made;
   });
   on('PATCH', '/api/admin/reservations/:id', (q, b, p) => {
     const { r } = me(); const x = owned('reservations', p.id, r.id);

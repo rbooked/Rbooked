@@ -323,6 +323,8 @@ function migrate(d) {
   if (!cols.has('tags')) d.exec("ALTER TABLE restaurants ADD COLUMN tags TEXT DEFAULT ''");
   if (!rcols.has('combo_id')) d.exec('ALTER TABLE reservations ADD COLUMN combo_id INTEGER');
   if (!rcols.has('guest_id')) d.exec('ALTER TABLE reservations ADD COLUMN guest_id INTEGER');
+  if (!rcols.has('seated_at')) d.exec('ALTER TABLE reservations ADD COLUMN seated_at TEXT'); // when staff sat them (for "seated 25m")
+  if (!rcols.has('quoted_minutes')) d.exec('ALTER TABLE reservations ADD COLUMN quoted_minutes INTEGER'); // waitlist: wait time quoted to the guest
   if (!rcols.has('keep_late')) {
     d.exec('ALTER TABLE reservations ADD COLUMN keep_late INTEGER DEFAULT 0');
     // Late guests now show as "Late" for 30 minutes, then turn into no-shows (person's request, 2026-11-26).

@@ -869,3 +869,16 @@ test('pause online bookings: diners see no times, staff still book, resume bring
   assert.strictEqual((await call('PUT', '/api/admin/pause', { mode: 'off' })).data.online_paused, false);
   assert.ok(await times() > 0);
 });
+
+test('waitlist: parties wait without a table, never auto no-show, and seating records the time', async () => {
+  const w = await call('POST', '/api/admin/reservations', { source: 'waitlist', party_size: 3, name: 'Wait Lee', phone: '5554443333', quoted_minutes: 25 });
+  assert.strictEqual(w.status, 201, JSON.stringify(w.data));
+  assert.strictEqual(w.data.status, 'confirmed');
+  assert.strictEqual(w.data.table_id, null);
+  assert.strictEqual(w.data.quoted_minutes, 25);
+  jobs.autoNoShows(new Date(Date.now() + 5 * 3600000));
+  assert.strictEqual(one('SELECT status FROM reservations WHERE id = ?', w.data.id).status, 'confirmed');
+  const s = await call('PATCH', `/api/admin/reservations/${w.data.id}`, { status: 'seated' });
+  assert.strictEqual(s.status, 200);
+  assert.ok(one('SELECT seated_at FROM reservations WHERE id = ?', w.data.id).seated_at);
+});
