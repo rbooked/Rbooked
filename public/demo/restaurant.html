@@ -74,6 +74,9 @@
   const web = r.website_url && /^https?:\/\//i.test(r.website_url) ? r.website_url : '';
   document.getElementById('r-meta').innerHTML = `${esc(r.cuisine)} · ${TB.price(r.price_level)} · ${esc(r.city)}, ${esc(r.state)}
     ${state.exposure ? '<span class="walkin-badge">Walk-ins welcome</span> ' : ''}${state.reviews && state.reviews.count ? `<a class="rv-mini" href="#reviews">★ ${state.reviews.avg} <span>(${state.reviews.count})</span></a>` : ''}${open === null ? '' : `<span class="open-badge ${open ? 'yes' : 'no'}">${open ? 'Open now' : 'Closed now'}</span>`}${r.featured ? ' <span class="feat-badge">Featured</span>' : ''}`;
+  // Social proof: "Rbooked N times today" once a few bookings have come in.
+  const bt = Number(state.booked_today) || 0;
+  if (bt >= 2) document.getElementById('r-meta').insertAdjacentHTML('beforeend', `<div class="booked-today" role="status">🔥 <b>Rbooked ${bt} times today</b></div>`);
   const tag = TBMatch.hashtag(r.name);
   document.getElementById('r-meta').insertAdjacentHTML('beforeend', tag ? `<div class="r-tagline"><button type="button" class="r-hashtag" id="r-tag" title="Copy hashtag">${esc(tag)}</button><span>Tag your photos ${esc(tag)} and share the love</span></div>` : '');
   document.getElementById('r-actions').innerHTML = `${web ? `<a class="btn light" href="${esc(web)}" target="_blank" rel="noopener nofollow">🌐 Website</a>` : ''}

@@ -184,6 +184,10 @@ table.data tr:hover td { background: #fcfaf7; }
 .open-badge { font-size: 12px; font-weight: 800; padding: 3px 10px; border-radius: 999px; text-shadow: none; }
 .open-badge.yes { background: #dcfce7; color: #166534; }
 .open-badge.no { background: #fee2e2; color: #991b1b; }
+.booked-today { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; padding: 5px 12px; border-radius: 999px; background: rgba(255, 255, 255, .95); color: #9a3412; font-size: 13px; text-shadow: none; box-shadow: 0 2px 8px rgba(0, 0, 0, .15); animation: bt-pop .5s ease-out; }
+.booked-today b { font-weight: 800; }
+@keyframes bt-pop { from { transform: scale(.85); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .booked-today { animation: none; } }
 @media (max-width: 600px) { .r-hero { min-height: 260px; padding: 18px; } .r-hero-logo { width: 72px; height: 72px; font-size: 26px; } .r-hero h1 { font-size: 30px; } }
 .booking { padding-top: 20px; }
 .sticky-book { position: sticky; top: 16px; }

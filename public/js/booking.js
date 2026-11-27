@@ -13,7 +13,7 @@
     }
     const r = info.restaurant;
     state.restaurant = r;
-    state.today = info.today;
+    state.today = info.today; state.booked_today = info.booked_today || 0;
     state.menu = info.menu || [];
     state.gallery = info.gallery || [];
     state.reviews = info.reviews || null;

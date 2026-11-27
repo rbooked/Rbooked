@@ -293,7 +293,7 @@ window.RBOOKED_DEMO = true;
     const x = {
       id: nextId(), code: rand(6), manage_token: token(), restaurant_id: r.id, table_id: slot.tableId, combo_id: slot.comboId || null, guest_id: upsertGuestIn(db, r.id, g, nextId), shift_id: slot.shiftId, date, time,
       starts_at_utc: zonedToUtc(date, time, r.timezone).toISOString(), duration_minutes: slot.duration, party_size: party, ...g,
-      internal_notes: String(d.internal_notes || ''), source, status: source === 'walk_in' ? 'seated' : 'confirmed', created_at: nowSql(), updated_at: nowSql(),
+      internal_notes: String(d.internal_notes || ''), source, status: source === 'walk_in' ? 'seated' : 'confirmed', created_at: nowSql(), updated_at: nowSql(), demo_new: 1,
     };
     db.reservations.push(x);
     if (source !== 'walk_in' && d.send_email !== false) sendEmail('confirmation', r, x);
@@ -404,8 +404,14 @@ window.RBOOKED_DEMO = true;
     const r = bookable(p.slug);
     const menu = db.menu.filter((m) => m.restaurant_id === r.id && m.available).sort((a, c) => a.sort_order - c.sort_order || a.id - c.id)
       .map(({ id, section, name, description, price_cents, tags, options }) => ({ id, section, name, description, price_cents, tags, options: options || '' }));
-    return { restaurant: pub(r), shifts: db.shifts.filter((s) => s.restaurant_id === r.id && s.active), menu, today: nowInZone(r.timezone).date, reviews: demoReviews(r.id, true) };
+    return { restaurant: pub(r), shifts: db.shifts.filter((s) => s.restaurant_id === r.id && s.active), menu, today: nowInZone(r.timezone).date, booked_today: bookedToday(r), reviews: demoReviews(r.id, true) };
   });
+  // A lively sample count for the "Rbooked N times today" banner: a steady base per restaurant that grows through the day, plus any demo bookings made today.
+  const bookedToday = (r) => {
+    const base = 9 + ((r.id * 7) % 23); const hr = new Date().getHours();
+    const made = db.reservations.filter((x) => x.restaurant_id === r.id && x.source !== 'walk_in' && x.source !== 'waitlist' && String(x.created_at).slice(0, 10) === nowSql().slice(0, 10) && x.demo_new).length;
+    return Math.max(3, Math.round(base * Math.min(1, 0.35 + hr / 30))) + made;
+  };
   // Sample verified reviews so the demo shows how they look.
   const REVIEWS = {};
   const demoReviews = (rid, publicOnly) => {

@@ -263,7 +263,10 @@ router.get('/restaurants/:slug', wrap(async (req, res) => {
   const rl = counts('restaurant', [r.id])[r.id] || { likes: 0, liked: false };
   const today = nowInZone(r.timezone).date;
   const special = all("SELECT date, reason, open_time, close_time FROM closures WHERE restaurant_id = ? AND date >= ? ORDER BY date LIMIT 8", r.id, today);
-  res.json({ restaurant: { ...publicRestaurant(r), likes: rl.likes, liked: rl.liked }, shifts, menu, gallery, special, today, reviews: require('../reviews').forRestaurant(r.id), exposure, paused: !exposure && onlinePaused(r), waitlist: waitlistOpen(r) });
+  // How many times this restaurant was booked today (its local day), for the "Rbooked N times today" banner.
+  const dayStart = zonedToUtc(today, '00:00', r.timezone).toISOString().slice(0, 19).replace('T', ' ');
+  const bookedToday = one("SELECT COUNT(*) AS n FROM reservations WHERE restaurant_id = ? AND created_at >= ? AND source NOT IN ('waitlist', 'walk_in')", r.id, dayStart).n;
+  res.json({ restaurant: { ...publicRestaurant(r), likes: rl.likes, liked: rl.liked }, shifts, menu, gallery, special, today, booked_today: exposure ? 0 : bookedToday, reviews: require('../reviews').forRestaurant(r.id), exposure, paused: !exposure && onlinePaused(r), waitlist: waitlistOpen(r) });
 }));
 
 // ---------- Likes ("hearts") from diners. No account needed: an anonymous id in a cookie. ----------
