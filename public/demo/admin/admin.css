@@ -766,3 +766,19 @@ html[data-theme="dark"] .ftable.busy-seated.over .ft-n { background: #dc2626; co
 html[data-theme="dark"] .rv-bar { background: #121110; }
 html[data-theme="dark"] .rv-actions { background: rgba(23, 21, 19, .96); }
 html[data-theme="dark"] .rl-wide, html[data-theme="dark"] .rl-flag { filter: brightness(.9); }
+
+/* Floor tables use the same colors as the list: upcoming blue, seated green, late red */
+.ftable.soon { background: #eff6ff; border-color: #2563eb; border-style: dashed; }
+.ftable.soon .rf-line { color: #1e40af; }
+.ftable.busy-confirmed.late { background: #fee2e2; border-color: #dc2626; }
+.ftable.busy-confirmed.late .rf-line { color: #991b1b; } .ftable.busy-confirmed.late .ft-n { background: #dc2626; }
+.legend i.lg-soon { background: #eff6ff; border: 2px dashed #2563eb; }
+.legend i.lg-up { background: #dbeafe; border-color: #2563eb; }
+.legend i.lg-seat { background: #dcfce7; border-color: #16a34a; }
+.legend i.lg-late { background: #fee2e2; border-color: #dc2626; }
+html[data-theme="dark"] .ftable.soon { background: #131c30; border-color: #60a5fa; }
+html[data-theme="dark"] .ftable.soon .rf-line { color: #93c5fd; }
+html[data-theme="dark"] .ftable.busy-confirmed.late { background: #3a1717; border-color: #ef4444; }
+html[data-theme="dark"] .ftable.busy-confirmed.late .rf-line { color: #fca5a5; } html[data-theme="dark"] .ftable.busy-confirmed.late .ft-n { background: #dc2626; color: #fff; }
+html[data-theme="dark"] .legend i.lg-soon { background: #131c30; border-color: #60a5fa; } html[data-theme="dark"] .legend i.lg-up { background: #172544; border-color: #3b82f6; }
+html[data-theme="dark"] .legend i.lg-seat { background: #12321f; border-color: #22c55e; } html[data-theme="dark"] .legend i.lg-late { background: #3a1717; border-color: #ef4444; }

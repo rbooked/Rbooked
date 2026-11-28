@@ -1175,14 +1175,15 @@
         <div><div class="canvas-scroll"><div class="canvas rf" id="rf-canvas">${tables.map((t) => {
           const [w, h] = tableSize(t); const st = state(t);
           const over = st.cur && st.cur.status === 'seated' && isToday && toMin(st.cur.time) + st.cur.duration_minutes < t0;
-          const cls = st.cur ? `busy-${st.cur.status}${over ? ' over' : ''}` : st.next && toMin(st.next.time) - t0 <= 30 ? 'soon' : '';
+          const lateT = st.cur && st.cur.status === 'confirmed' && lateBy(st.cur) > 0;
+          const cls = st.cur ? `busy-${st.cur.status}${over ? ' over' : ''}${lateT ? ' late' : ''}` : st.next && toMin(st.next.time) - t0 <= 30 ? 'soon' : '';
           const line = st.cur ? `${esc(st.cur.guest_name.split(' ')[0])} · ${pp(st.cur.party_size)}${st.seatedN > 1 ? ` <b>+${st.seatedN - 1}</b>` : ''}<br>${over ? '<b>over time</b>' : `until ${until(st.cur)}`}` : st.next ? `Next ${TB.time(st.next.time)}<br>${esc(st.next.guest_name.split(' ')[0])} · ${pp(st.next.party_size)}` : 'Free';
           const inCombo = st.cur && st.cur.combo_id ? '<span class="rf-link">⛓</span>' : '';
           return `<div class="ftable ${t.shape} ${cls} ${S.rfTable === t.id ? 'sel' : ''} ${sel.includes(t.id) ? 'combo-hl' : ''}" data-id="${t.id}"
             style="left:${t.x}px;top:${t.y}px;width:${w}px;height:${h}px;transform:rotate(${t.rotation}deg)">${inCombo}${st.cur ? `<span class="ft-n">${pp(st.cur.party_size)}</span>` : ''}
             <div>${esc(t.label)}<small class="rf-line">${line}</small></div>${chairs(t, w, h)}</div>`;
         }).join('') || '<p class="muted" style="padding:20px">No tables in this room.</p>'}</div></div>
-        <div class="legend"><span><i></i>Free</span><span><i style="background:#fef3c7;border-color:#d97706"></i>Arriving within 30 min</span><span><i style="background:#dbeafe;border-color:#2563eb"></i>Booked</span><span><i style="background:#dcfce7;border-color:#16a34a"></i>Seated</span><span><i style="background:#fee2e2;border-color:#dc2626"></i>Over time</span><span>⛓ Combined tables</span></div></div>
+        <div class="legend"><span><i></i>Free</span><span><i class="lg-soon"></i>Arriving within 30 min</span><span><i class="lg-up"></i>Upcoming</span><span><i class="lg-seat"></i>Seated</span><span><i class="lg-late"></i>Late / over time</span><span>⛓ Combined tables</span></div></div>
         <div class="card" id="rf-panel"></div>
       </div>`;
 
