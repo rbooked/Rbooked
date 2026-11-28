@@ -766,7 +766,7 @@
     box.innerHTML = `<div class="upnext"><span class="upnext-title">Arriving next</span>${soon.map((x) => {
       const d = toMin(x.time) - now.minutes;
       const when = d > 0 ? `in ${d} min` : d === 0 ? 'now' : `${-d} min late`;
-      return `<div class="arrival${d < -10 ? ' late' : ''}"><b>${TB.time(x.time)}</b> ${esc(x.guest_name)} · ${x.party_size}
+      return `<div class="arrival${d < -10 ? ' late' : ''}"><b>${TB.time(x.time)}</b> ${esc(x.guest_name)} · ${pp(x.party_size)}
         <span class="small muted">${esc(x.table_label || 'No table')} · ${when}</span><button class="btn ok sm" data-seat="${x.id}">Seat</button></div>`;
     }).join('')}</div>`;
     box.querySelectorAll('[data-seat]').forEach((b) => { b.onclick = () => resAction('seat', rows.find((x) => x.id === Number(b.dataset.seat))); });
@@ -786,6 +786,9 @@
   // Reservation sections, in this order: Seated, Upcoming, Finished, then Cancelled / no-show last.
   /** Minutes a booked (not yet seated) guest is past their time, or 0 if they aren't late. */
   const isWait = (x) => x.source === 'waitlist' && x.status === 'confirmed';
+  // A small person icon beside every party size, so guest counts never read as table numbers.
+  const PERSON = '<svg class="pp-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="4.6" r="3"/><path d="M2.2 15c.3-3.6 2.7-5.6 5.8-5.6s5.5 2 5.8 5.6z"/></svg>';
+  const pp = (n) => `<span class="pp" title="${n} ${n === 1 ? 'guest' : 'guests'}">${PERSON}${n}</span>`;
   function lateBy(x) {
     if (x.status !== 'confirmed' || x.source === 'waitlist') return 0;
     const now = nowLocal();
@@ -855,8 +858,8 @@
   // Section headers: tap to fold. Finished and Cancelled start folded.
   S.secClosed = S.secClosed || new Set(['finished', 'off']);
   const secHead = (g, extra = '') => `<button type="button" class="hs-head${S.secClosed.has(g.id) ? ' closed' : ''}" data-sec="${g.id}" aria-expanded="${!S.secClosed.has(g.id)}">
-      <span class="hs-title">${esc(g.label)}</span><span class="hs-count" title="Parties">👥 ${g.rows.length}</span><span class="hs-count" title="Guests">${g.rows.reduce((a, x) => a + x.party_size, 0)} guests</span><span class="hs-caret" aria-hidden="true">⌃</span></button>${extra}`;
-  const waitQuotes = () => `<div class="hs-quotes">${[[1, '1–2'], [3, '3–4'], [5, '5–6'], [7, '7+']].map(([n, l]) => `<button type="button" class="hs-q" data-wl="${n}"><b>${quoteLabel(quoteFor(n))}</b><span>${l}</span></button>`).join('')}<button type="button" class="hs-q hs-add" data-wl="2" aria-label="Add to waitlist">＋</button></div>`;
+      <span class="hs-title">${esc(g.label)}</span><span class="hs-count" title="Parties">${g.rows.length} ${g.rows.length === 1 ? 'party' : 'parties'}</span><span class="hs-count" title="Guests">${pp(g.rows.reduce((a, x) => a + x.party_size, 0))}</span><span class="hs-caret" aria-hidden="true">⌃</span></button>${extra}`;
+  const waitQuotes = () => `<div class="hs-quotes">${[[1, '1–2'], [3, '3–4'], [5, '5–6'], [7, '7+']].map(([n, l]) => `<button type="button" class="hs-q" data-wl="${n}"><b>${quoteLabel(quoteFor(n))}</b><span>${PERSON}${l}</span></button>`).join('')}<button type="button" class="hs-q hs-add" data-wl="2" aria-label="Add to waitlist">＋</button></div>`;
   function bindSections(root, rerender) {
     root.querySelectorAll('[data-sec]').forEach((b) => { b.onclick = () => { const id = b.dataset.sec; if (S.secClosed.has(id)) S.secClosed.delete(id); else S.secClosed.add(id); rerender(); }; });
     root.querySelectorAll('[data-wl]').forEach((b) => { b.onclick = () => waitlistModal(load, Number(b.dataset.wl)); });
@@ -868,9 +871,37 @@
     const dur = m >= 24 * 60 ? '' : m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m} min`;
     return `<span class="tag warn late-tag">Late ${dur}</span>${g && !x.keep_late && left > 0 ? `<div class="small muted">No-show in ${left} min</div>` : ''}`;
   }
+  // Late guests: one tap to call, text "on your way?" or mark a no-show. After 15 min it asks; it never cancels on its own.
+  const LATE_ASK = 15;
+  function lateActs(x) {
+    const m = lateBy(x); if (!m) return '';
+    const ph = String(x.guest_phone || '').replace(/[^\d+]/g, '');
+    const msg = `Hi ${String(x.guest_name || '').split(' ')[0]}, this is ${S.me.restaurant.name}. Are you on your way? We're holding your table for ${x.party_size}.`;
+    const ask = m >= LATE_ASK;
+    return `<div class="hs-lateacts${ask ? ' ask' : ''}">${ask ? '<span class="hs-ask">Still coming?</span>' : ''}
+      ${ph ? `<a class="hs-la" href="tel:${esc(ph)}" data-late>📞 Call</a><a class="hs-la" href="sms:${esc(ph)}?&body=${encodeURIComponent(msg)}" data-late>💬 Text</a>` : ''}
+      <button type="button" class="hs-la ns" data-late="noshow" data-x="${x.id}">No-show</button></div>`;
+  }
+  function bindLate(root, rows) {
+    root.querySelectorAll('[data-late]').forEach((b) => {
+      b.addEventListener('click', (e) => { e.stopPropagation(); if (b.dataset.late === 'noshow') resAction('noshow', rows.find((r) => r.id === Number(b.dataset.x))); });
+      ['pointerdown', 'touchstart'].forEach((ev) => b.addEventListener(ev, (e) => e.stopPropagation(), { passive: true }));
+    });
+  }
+  // "Next 30 min" at a glance: who's arriving, plus anyone late and who's in the house.
+  function nextBar(rows) {
+    const now = nowLocal(); if (S.date !== now.date) return '';
+    const up = rows.filter((x) => x.status === 'confirmed' && !isWait(x));
+    const soon = up.filter((x) => !lateBy(x) && toMin(x.time) <= now.minutes + 30);
+    const late = up.filter((x) => lateBy(x) > 0); const seated = rows.filter((x) => x.status === 'seated');
+    const g = (l) => l.reduce((a, x) => a + x.party_size, 0);
+    const pl = (n) => `${n} ${n === 1 ? 'party' : 'parties'}`;
+    return `<div class="hs-next" role="status"><div class="hs-next-main"><span class="hs-next-k">Next 30 min</span><b>${pl(soon.length)}</b><span>${pp(g(soon))}</span></div>
+      <div class="hs-next-side">${late.length ? `<span class="hs-pill red">${late.length} late</span>` : ''}<span class="hs-pill">${seated.length} seated · ${pp(g(seated))}</span></div></div>`;
+  }
   const RES_GROUPS = [
     { id: 'waitlist', label: 'Waitlist', has: isWait, sort: (a, b) => a.id - b.id },
-    { id: 'upcoming', label: 'Upcoming', has: (x) => x.status === 'confirmed' && !isWait(x) }, // late guests stay here, in time order, marked red
+    { id: 'upcoming', label: 'Upcoming', has: (x) => x.status === 'confirmed' && !isWait(x), sort: (a, b) => (lateBy(b) > 0) - (lateBy(a) > 0) || a.time.localeCompare(b.time) || a.id - b.id }, // late guests pinned on top, marked red
     { id: 'seated', label: 'Seated', has: (x) => x.status === 'seated', sort: (a, b) => (a.seated_at || a.time).localeCompare(b.seated_at || b.time) },
     { id: 'finished', label: 'Finished', has: (x) => x.status === 'completed' },
     { id: 'off', label: 'Cancelled / no-show', has: (x) => ['cancelled', 'no_show'].includes(x.status) },
@@ -922,8 +953,9 @@
         <div class="rl-main" role="button" tabindex="0" aria-expanded="${open}">
           <div class="rl-time"><b>${TB.time(x.time).replace(' ', '&nbsp;')}</b>${late ? lateTag(x) : ''}${isWait(x) ? `<div class="small muted">waiting ${dur(sinceMin(null, x.time))}${x.quoted_minutes ? ` / ${dur(x.quoted_minutes)}` : ''}</div>` : x.status === 'seated' ? `<div class="small muted">seated ${dur(sinceMin(x.seated_at, x.time))}</div>` : ''}</div>
           <div class="rl-who"><b class="rl-name">${esc(x.guest_name)}</b>
-            <div class="rl-sub"><span class="rl-party">👥 ${x.party_size}</span><span class="rl-table">${esc(x.table_label || 'No table')}</span>${flags(x)}${x.notes || x.guest_notes ? `<span class="rl-wide">📝 ${esc(x.notes || x.guest_notes)}</span>` : ''}</div></div>
+            <div class="rl-sub"><span class="rl-party">${pp(x.party_size)}</span><span class="rl-table">${esc(x.table_label || 'No table')}</span>${flags(x)}${x.notes || x.guest_notes ? `<span class="rl-wide">📝 ${esc(x.notes || x.guest_notes)}</span>` : ''}</div></div>
           <div class="rl-act">${primary(x)}<span class="rl-caret" aria-hidden="true">⌄</span></div>
+          ${late && !open ? lateActs(x) : ''}
         </div>
         ${open ? `<div class="rl-more">
           <div class="rl-contact"><a class="btn secondary sm" href="tel:${esc(x.guest_phone)}">📞 ${esc(x.guest_phone)}</a>${x.guest_email !== 'walkin@guest.local' ? `<span class="muted small">${esc(x.guest_email)}</span>` : ''}
@@ -936,9 +968,9 @@
     const showWl = (S.resFilter || 'all') === 'all' || S.resFilter === 'waitlist';
     const wl = secs.find((g) => g.id === 'waitlist') || { id: 'waitlist', label: 'Waitlist', rows: [] };
     const all_ = [...(showWl ? [wl] : []), ...secs.filter((g) => g.id !== 'waitlist')];
-    body.innerHTML = all_.map((g) => `<section class="rl-sec rl-${g.id}">${secHead(g, g.id === 'waitlist' && !S.secClosed.has(g.id) ? waitQuotes() : '')}
+    body.innerHTML = nextBar(rows) + all_.map((g) => `<section class="rl-sec rl-${g.id}">${secHead(g, g.id === 'waitlist' && !S.secClosed.has(g.id) ? waitQuotes() : '')}
       ${S.secClosed.has(g.id) ? '' : g.rows.length ? `<ul class="rl-list">${g.rows.map(line).join('')}</ul>` : g.id === 'waitlist' ? '<p class="hs-empty">Nobody waiting. Tap a wait time to add a party.</p>' : ''}</section>`).join('') || '<div class="card muted">Nothing in this section.</div>';
-    bindSections(body, () => renderList(body, rows));
+    bindSections(body, () => renderList(body, rows)); bindLate(body, rows);
     body.querySelectorAll('li.rl').forEach((li) => {
       const x = rows.find((r) => r.id === Number(li.dataset.id));
       const main = li.querySelector('.rl-main');
@@ -1034,7 +1066,7 @@
     const row = (seat, label, sub, items) => `<div class="tl-row" data-seat="${seat}"><div class="tl-label">${esc(label)}<small>${sub}</small></div><div class="tl-track">
       ${lines.map((m) => `<div class="tl-line" style="left:${pct(m)}"></div>`).join('')}${nowLine}
       ${items.map((x) => `<div class="tl-bar ${x.status}${x.combo_id ? ' combo' : ''}" data-id="${x.id}" style="left:${pct(toMin(x.time))};width:calc(${(x.duration_minutes / span) * 100}% - 2px)" title="${esc(x.guest_name)} · ${x.party_size} · ${TB.time(x.time)}${x.combo_id ? ` · ${esc(x.table_label || '')}` : ''}">
-        <b>${esc(x.guest_name)}</b> (${x.party_size})<br>${TB.time(x.time)}${x.combo_id ? ' · ⛓' : ''}</div>`).join('')}</div></div>`;
+        <b>${esc(x.guest_name)}</b> ${pp(x.party_size)}<br>${TB.time(x.time)}${x.combo_id ? ' · ⛓' : ''}</div>`).join('')}</div></div>`;
     body.innerHTML = `<div class="timeline"><div class="tl-grid">
       <div class="tl-hours"><div class="tl-label"></div><div class="tl-track">${lines.map((m) => `<span style="left:${pct(m)}">${TB.time(hhmm(m)).replace(':00', '')}</span>`).join('')}</div></div>
       ${tables.map((t) => row(`t${t.id}`, t.label, `${t.min_seats}-${t.max_seats} seats`, onTable(t))).join('')}
@@ -1128,10 +1160,10 @@
           const [w, h] = tableSize(t); const st = state(t);
           const over = st.cur && st.cur.status === 'seated' && isToday && toMin(st.cur.time) + st.cur.duration_minutes < t0;
           const cls = st.cur ? `busy-${st.cur.status}${over ? ' over' : ''}` : st.next && toMin(st.next.time) - t0 <= 30 ? 'soon' : '';
-          const line = st.cur ? `${esc(st.cur.guest_name.split(' ')[0])} · ${st.cur.party_size}${st.seatedN > 1 ? ` <b>+${st.seatedN - 1}</b>` : ''}<br>${over ? '<b>over time</b>' : `until ${until(st.cur)}`}` : st.next ? `Next ${TB.time(st.next.time)}<br>${esc(st.next.guest_name.split(' ')[0])} · ${st.next.party_size}` : 'Free';
+          const line = st.cur ? `${esc(st.cur.guest_name.split(' ')[0])} · ${pp(st.cur.party_size)}${st.seatedN > 1 ? ` <b>+${st.seatedN - 1}</b>` : ''}<br>${over ? '<b>over time</b>' : `until ${until(st.cur)}`}` : st.next ? `Next ${TB.time(st.next.time)}<br>${esc(st.next.guest_name.split(' ')[0])} · ${pp(st.next.party_size)}` : 'Free';
           const inCombo = st.cur && st.cur.combo_id ? '<span class="rf-link">⛓</span>' : '';
           return `<div class="ftable ${t.shape} ${cls} ${S.rfTable === t.id ? 'sel' : ''} ${sel.includes(t.id) ? 'combo-hl' : ''}" data-id="${t.id}"
-            style="left:${t.x}px;top:${t.y}px;width:${w}px;height:${h}px;transform:rotate(${t.rotation}deg)">${inCombo}${st.cur ? `<span class="ft-n">${st.cur.party_size}</span>` : ''}
+            style="left:${t.x}px;top:${t.y}px;width:${w}px;height:${h}px;transform:rotate(${t.rotation}deg)">${inCombo}${st.cur ? `<span class="ft-n">${pp(st.cur.party_size)}</span>` : ''}
             <div>${esc(t.label)}<small class="rf-line">${line}</small></div>${chairs(t, w, h)}</div>`;
         }).join('') || '<p class="muted" style="padding:20px">No tables in this room.</p>'}</div></div>
         <div class="legend"><span><i></i>Free</span><span><i style="background:#fef3c7;border-color:#d97706"></i>Arriving within 30 min</span><span><i style="background:#dbeafe;border-color:#2563eb"></i>Booked</span><span><i style="background:#dcfce7;border-color:#16a34a"></i>Seated</span><span><i style="background:#fee2e2;border-color:#dc2626"></i>Over time</span><span>⛓ Combined tables</span></div></div>
@@ -1154,19 +1186,19 @@
           const go = x.status === 'seated' ? '<button type="button" class="hs-go done" data-go="complete">Done</button>'
             : x.status === 'confirmed' ? '<button type="button" class="hs-go" data-go="seat">Seat</button>' : '';
           return `<div role="button" tabindex="0" class="rf-item hs-row st-${st} ${S.rfMove === x.id ? 'moving' : ''} ${movable(x) ? '' : 'done'}" data-x="${x.id}" aria-pressed="${S.rfMove === x.id}">
-            <span class="hs-n">${x.party_size}</span>
+            <span class="hs-n">${pp(x.party_size)}</span>
             <span class="hs-mid"><span class="hs-meta">${meta}</span><b class="hs-name">${esc(x.guest_name)}</b></span>
-            ${seatLabel(x) ? `<span class="hs-tbl">${esc(seatLabel(x))}</span>` : '<span></span>'}${go}</div>${S.rfPick === x.id ? `<div class="rf-acts">${late ? lateTag(x) : ''}${movable(x) ? '<div class="small muted">Tap a table to move them, or:</div>' : ''}<div class="res-actions">${statusButtons(x, 'data-a', `data-x="${x.id}"`)}</div></div>` : ''}`;
+            ${seatLabel(x) ? `<span class="hs-tbl">${esc(seatLabel(x))}</span>` : '<span></span>'}${go}${late ? lateActs(x) : ''}</div>${S.rfPick === x.id ? `<div class="rf-acts">${late ? lateTag(x) : ''}${movable(x) ? '<div class="small muted">Tap a table to move them, or:</div>' : ''}<div class="res-actions">${statusButtons(x, 'data-a', `data-x="${x.id}"`)}</div></div>` : ''}`;
         };
         const secs = resSections(today);
         const wl = secs.find((g) => g.id === 'waitlist') || { id: 'waitlist', label: 'Waitlist', rows: [] };
         const rest = secs.filter((g) => g.id !== 'waitlist');
         const showWl = (S.resFilter || 'all') === 'all' || S.resFilter === 'waitlist';
-        p.innerHTML = `<div class="rf-list hs-list">
+        p.innerHTML = `<div class="rf-list hs-list">${nextBar(today)}
           ${showWl ? `<section class="hs-sec hs-waitlist">${secHead(wl, S.secClosed.has('waitlist') ? '' : waitQuotes())}${S.secClosed.has('waitlist') ? '' : wl.rows.map(row).join('') || '<p class="hs-empty">Nobody waiting. Tap a wait time to add a party.</p>'}</section>` : ''}
           ${rest.map((g) => `<section class="hs-sec">${secHead(g)}${S.secClosed.has(g.id) ? '' : g.rows.map(row).join('')}</section>`).join('')}
           ${!rest.length && !showWl ? '<p class="muted small">No reservations here.</p>' : ''}</div>`;
-        bindSections(p, () => renderResFloor(body, rows, floor));
+        bindSections(p, () => renderResFloor(body, rows, floor)); bindLate(p, rows);
         p.querySelectorAll('[data-go]').forEach((b) => {
           b.onclick = async (e) => {
             e.stopPropagation(); b.disabled = true;
@@ -1205,7 +1237,7 @@
         <p class="muted small" style="margin:4px 0 12px">${t.min_seats}-${t.max_seats} seats · ${esc(area)}${t.online_bookable ? '' : ' · staff only'}</p>
         ${isToday ? `<h3 class="rf-h">Right now</h3>${st.cur ? card(st.cur, st.cur.status === 'seated' ? 'Seated' : 'Booked') : '<p class="rf-free">Free</p>'}` : ''}
         <h3 class="rf-h">Next reservation</h3>${st.next ? `<p class="rf-when">${TB.time(st.next.time)} <span class="muted">· in ${inMin(nextIn)}</span></p>${card(st.next, 'Next')}` : '<p class="muted small">Nothing else booked on this table today.</p>'}
-        ${later.length ? `<h3 class="rf-h">Later</h3>${later.map((x) => `<div class="rf-later"><b>${TB.time(x.time)}</b> ${esc(x.guest_name)} · ${x.party_size}</div>`).join('')}` : ''}
+        ${later.length ? `<h3 class="rf-h">Later</h3>${later.map((x) => `<div class="rf-later"><b>${TB.time(x.time)}</b> ${esc(x.guest_name)} · ${pp(x.party_size)}</div>`).join('')}` : ''}
         ${joins.length ? `<h3 class="rf-h">Combines with</h3>${joins.map((c) => `<div class="rf-later">⛓ <b>${esc(c.name)}</b> · ${c.min_seats}-${c.max_seats} seats</div>`).join('')}` : ''}
         <div class="row" style="margin-top:14px"><button class="btn sm" id="rf-book">+ Book this table</button><button class="btn secondary sm" id="rf-walk">Seat walk-in here</button></div>`;
       p.querySelector('#rf-x').onclick = () => { S.rfTable = null; renderResFloor(body, rows, floor); };
@@ -1315,7 +1347,7 @@
     }
     if (S.rfMove) {
       const mx = rows.find((r) => r.id === S.rfMove);
-      if (mx) body.querySelector('.floor-wrap').insertAdjacentHTML('beforebegin', `<div class="alert rf-move-bar"><span>Tap a table for <b>${esc(mx.guest_name)} · ${mx.party_size}</b></span><span class="spacer"></span><button class="btn ghost sm" id="rf-move-x">Cancel</button></div>`);
+      if (mx) body.querySelector('.floor-wrap').insertAdjacentHTML('beforebegin', `<div class="alert rf-move-bar"><span>Tap a table for <b>${esc(mx.guest_name)} · ${pp(mx.party_size)}</b></span><span class="spacer"></span><button class="btn ghost sm" id="rf-move-x">Cancel</button></div>`);
       const mb = document.getElementById('rf-move-x'); if (mb) mb.onclick = () => { S.rfMove = null; S.rfPick = null; renderResFloor(body, rows, floor); };
 
     }
@@ -1510,7 +1542,7 @@
       return `<div class="ftable ${t.shape} ${t.online_bookable ? '' : 'offline'} ${t.active ? '' : 'inactive'} ${b ? `busy-${b.status}` : ''} ${S.selTable === t.id ? 'sel' : ''}"
         data-id="${t.id}" style="left:${t.x}px;top:${t.y}px;width:${w}px;height:${h}px;transform:rotate(${t.rotation}deg)"
         title="${b ? `${esc(b.guest_name)} (${b.party_size}) ${TB.time(b.time)}` : ''}">
-        <div>${esc(t.label)}<small>${t.min_seats}-${t.max_seats} seats</small>${b ? `<small>${esc(b.guest_name.split(' ')[0])} · ${b.party_size}</small>` : ''}</div>${chairs(t, w, h)}</div>`;
+        <div>${esc(t.label)}<small>${t.min_seats}-${t.max_seats} seats</small>${b ? `<small>${esc(b.guest_name.split(' ')[0])} · ${pp(b.party_size)}</small>` : ''}</div>${chairs(t, w, h)}</div>`;
     }).join('') || '<p class="muted" style="padding:20px">No tables in this room yet. Click “+ Add table”.</p>';
 
     // Drag and drop
