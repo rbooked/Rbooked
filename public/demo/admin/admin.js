@@ -964,7 +964,7 @@
           <div class="rl-contact"><a class="btn secondary sm" href="tel:${esc(x.guest_phone)}">📞 ${esc(x.guest_phone)}</a>${x.guest_email !== 'walkin@guest.local' ? `<span class="muted small">${esc(x.guest_email)}</span>` : ''}
             ${x.guest_id ? `<a href="#guests" class="guest-link small" data-guest="${x.guest_id}">Guest profile ›</a>` : ''}<span class="muted small">#${esc(x.code)}</span></div>
           ${guestTags(x)}${x.notes ? `<div class="small">📝 ${esc(x.notes)}</div>` : ''}${x.guest_notes ? `<div class="small muted">📇 ${esc(x.guest_notes)}</div>` : ''}${x.internal_notes ? `<div class="small muted">🔒 ${esc(x.internal_notes)}</div>` : ''}
-          <div class="rl-row"><label class="small"><b>Table</b> <select data-act="table" ${dim ? 'disabled' : ''} aria-label="Table">${seatOptions(seatVal(x))}</select></label></div>
+          <div class="rl-row"><label class="small rl-tlabel"><b>Table</b> <select data-act="table" ${dim ? 'disabled' : ''} aria-label="Table">${seatOptions(seatVal(x))}</select></label></div>
           <div class="rl-btns">${more.map(([a, l]) => `<button class="btn ${a === 'cancel' || a === 'noshow' ? 'secondary danger-text' : 'secondary'} sm" data-act="${a}">${l}</button>`).join('')}</div>
         </div>` : ''}</li>`;
     };
@@ -1229,14 +1229,14 @@
       const joins = (floor.combos || []).filter((c) => c.active && comboTables(c).includes(t.id));
       const card = (x, kind) => `<div class="rf-res ${x.status}">
         <div class="row" style="gap:6px"><span class="badge ${x.status}">${kind}</span><b>${TB.time(x.time)}–${until(x)}</b><span class="muted small">${len(x.duration_minutes)}</span></div>
-        <div class="rf-guest">${esc(x.guest_name)} · ${x.party_size} ${x.party_size === 1 ? 'guest' : 'guests'}</div>
+        <div class="rf-guest">${esc(x.guest_name)} · ${pp(x.party_size)}</div>
         ${x.combo_id ? `<div class="small">⛓ ${esc(x.table_label || '')}</div>` : ''}
         ${guestTags(x)}${x.notes ? `<div class="small">📝 ${esc(x.notes)}</div>` : ''}${x.guest_notes ? `<div class="small muted">📇 ${esc(x.guest_notes)}</div>` : ''}
         <div class="res-actions" style="margin-top:8px">
           ${statusButtons(x, 'data-a', `data-x="${x.id}"`)}<button class="btn secondary sm" data-mv="${x.id}">Move table</button></div></div>`;
       const nextIn = st.next ? toMin(st.next.time) - t0 : null;
       const later = st.list.filter((x) => x !== st.cur && x !== st.next && toMin(x.time) > t0);
-      p.innerHTML = `<div class="row"><h2 style="margin:0">Table ${esc(t.label)}</h2><span class="spacer"></span><button class="btn ghost sm" id="rf-x" aria-label="Close">✕</button></div>
+      p.innerHTML = `<div class="row"><h2 style="margin:0" class="tb-h">${TABLE}Table ${esc(t.label)}</h2><span class="spacer"></span><button class="btn ghost sm" id="rf-x" aria-label="Close">✕</button></div>
         <p class="muted small" style="margin:4px 0 12px">${t.min_seats}-${t.max_seats} seats · ${esc(area)}${t.online_bookable ? '' : ' · staff only'}</p>
         ${isToday ? `<h3 class="rf-h">Right now</h3>${st.cur ? card(st.cur, st.cur.status === 'seated' ? 'Seated' : 'Booked') : '<p class="rf-free">Free</p>'}` : ''}
         <h3 class="rf-h">Next reservation</h3>${st.next ? `<p class="rf-when">${TB.time(st.next.time)} <span class="muted">· in ${inMin(nextIn)}</span></p>${card(st.next, 'Next')}` : '<p class="muted small">Nothing else booked on this table today.</p>'}
@@ -1399,7 +1399,7 @@
           <div class="field"><label for="m-dur">Length (min) <span class="muted small" id="m-durhint"></span></label><input id="m-dur" type="number" name="duration_minutes" min="15" step="15" value="${v.duration_minutes}"></div>
         </div>
         <div class="field"><label>Time</label><div id="m-slots" class="slots"></div><input type="hidden" name="time" value="${v.time}"></div>
-        <div class="field"><label for="m-seat">Table</label><select id="m-seat" name="seat">${seatOptions(seatVal(v), 'Auto-assign best table')}</select></div>
+        <div class="field"><label for="m-seat" class="tb-l">${TABLE}Table</label><select id="m-seat" name="seat">${seatOptions(seatVal(v), 'Auto-assign best table')}</select></div>
         <div class="field"><label for="m-name">Guest name ${isNew ? '<span class="muted small">(type to search your address book)</span>' : ''}</label><input id="m-name" name="name" list="m-guests" autocomplete="off" value="${esc(v.guest_name)}" required><datalist id="m-guests"></datalist></div>
         <div class="grid-2">
           <div class="field"><label for="m-phone">Phone</label><input id="m-phone" name="phone" type="tel" value="${esc(v.guest_phone)}" required></div>
@@ -1471,7 +1471,7 @@
   function walkInModal(done, seat = '') {
     TB.modal(`<h2>Seat a walk-in</h2><form id="w-form">
       <div class="grid-2"><div class="field"><label for="w-party">Party size</label><input id="w-party" type="number" name="party_size" min="1" value="2"></div>
-      <div class="field"><label for="w-seat">Table</label><select id="w-seat" name="seat">${seatOptions(seat, 'Auto-assign')}</select></div></div>
+      <div class="field"><label for="w-seat" class="tb-l">${TABLE}Table</label><select id="w-seat" name="seat">${seatOptions(seat, 'Auto-assign')}</select></div></div>
       <div class="grid-2"><div class="field"><label for="w-name">Name (optional)</label><input id="w-name" name="name"></div><div class="field"><label for="w-phone">Phone (optional)</label><input id="w-phone" name="phone" type="tel"></div></div>
       <div class="row"><button class="btn ok" type="submit">Seat now</button><button class="btn secondary" type="button" data-close>Close</button></div></form>`,
     (m, close) => {
