@@ -767,7 +767,7 @@
       const d = toMin(x.time) - now.minutes;
       const when = d > 0 ? `in ${d} min` : d === 0 ? 'now' : `${-d} min late`;
       return `<div class="arrival${d < -10 ? ' late' : ''}"><b>${TB.time(x.time)}</b> ${esc(x.guest_name)} · ${pp(x.party_size)}
-        <span class="small muted">${esc(x.table_label || 'No table')} · ${when}</span><button class="btn ok sm" data-seat="${x.id}">Seat</button></div>`;
+        <span class="small muted">${x.table_label ? tb(x.table_label) : 'No table'} · ${when}</span><button class="btn ok sm" data-seat="${x.id}">Seat</button></div>`;
     }).join('')}</div>`;
     box.querySelectorAll('[data-seat]').forEach((b) => { b.onclick = () => resAction('seat', rows.find((x) => x.id === Number(b.dataset.seat))); });
   }
@@ -788,6 +788,9 @@
   const isWait = (x) => x.source === 'waitlist' && x.status === 'confirmed';
   // A small person icon beside every party size, so guest counts never read as table numbers.
   const PERSON = '<svg class="pp-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="4.6" r="3"/><path d="M2.2 15c.3-3.6 2.7-5.6 5.8-5.6s5.5 2 5.8 5.6z"/></svg>';
+  // A small table icon beside every table number, the partner of the person icon.
+  const TABLE = '<svg class="tb-ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="4" width="14" height="2.6" rx="1"/><rect x="3" y="6" width="1.8" height="7" rx=".6"/><rect x="11.2" y="6" width="1.8" height="7" rx=".6"/></svg>';
+  const tb = (label) => `<span class="tb">${TABLE}${esc(label)}</span>`;
   const pp = (n) => `<span class="pp" title="${n} ${n === 1 ? 'guest' : 'guests'}">${PERSON}${n}</span>`;
   function lateBy(x) {
     if (x.status !== 'confirmed' || x.source === 'waitlist') return 0;
@@ -953,7 +956,7 @@
         <div class="rl-main" role="button" tabindex="0" aria-expanded="${open}">
           <div class="rl-time"><b>${TB.time(x.time).replace(' ', '&nbsp;')}</b>${late ? lateTag(x) : ''}${isWait(x) ? `<div class="small muted">waiting ${dur(sinceMin(null, x.time))}${x.quoted_minutes ? ` / ${dur(x.quoted_minutes)}` : ''}</div>` : x.status === 'seated' ? `<div class="small muted">seated ${dur(sinceMin(x.seated_at, x.time))}</div>` : ''}</div>
           <div class="rl-who"><b class="rl-name">${esc(x.guest_name)}</b>
-            <div class="rl-sub"><span class="rl-party">${pp(x.party_size)}</span><span class="rl-table">${esc(x.table_label || 'No table')}</span>${flags(x)}${x.notes || x.guest_notes ? `<span class="rl-wide">📝 ${esc(x.notes || x.guest_notes)}</span>` : ''}</div></div>
+            <div class="rl-sub"><span class="rl-party">${pp(x.party_size)}</span><span class="rl-table">${x.table_label ? tb(x.table_label) : 'No table'}</span>${flags(x)}${x.notes || x.guest_notes ? `<span class="rl-wide">📝 ${esc(x.notes || x.guest_notes)}</span>` : ''}</div></div>
           <div class="rl-act">${primary(x)}<span class="rl-caret" aria-hidden="true">⌄</span></div>
           ${late && !open ? lateActs(x) : ''}
         </div>
@@ -1188,7 +1191,7 @@
           return `<div role="button" tabindex="0" class="rf-item hs-row st-${st} ${S.rfMove === x.id ? 'moving' : ''} ${movable(x) ? '' : 'done'}" data-x="${x.id}" aria-pressed="${S.rfMove === x.id}">
             <span class="hs-n">${pp(x.party_size)}</span>
             <span class="hs-mid"><span class="hs-meta">${meta}</span><b class="hs-name">${esc(x.guest_name)}</b></span>
-            ${seatLabel(x) ? `<span class="hs-tbl">${esc(seatLabel(x))}</span>` : '<span></span>'}${go}${late ? lateActs(x) : ''}</div>${S.rfPick === x.id ? `<div class="rf-acts">${late ? lateTag(x) : ''}${movable(x) ? '<div class="small muted">Tap a table to move them, or:</div>' : ''}<div class="res-actions">${statusButtons(x, 'data-a', `data-x="${x.id}"`)}</div></div>` : ''}`;
+            ${seatLabel(x) ? `<span class="hs-tbl">${tb(seatLabel(x))}</span>` : '<span></span>'}${go}${late ? lateActs(x) : ''}</div>${S.rfPick === x.id ? `<div class="rf-acts">${late ? lateTag(x) : ''}${movable(x) ? '<div class="small muted">Tap a table to move them, or:</div>' : ''}<div class="res-actions">${statusButtons(x, 'data-a', `data-x="${x.id}"`)}</div></div>` : ''}`;
         };
         const secs = resSections(today);
         const wl = secs.find((g) => g.id === 'waitlist') || { id: 'waitlist', label: 'Waitlist', rows: [] };
@@ -1866,7 +1869,7 @@
         <div class="stat"><b>${g.no_shows}</b><span>No-shows</span></div><div class="stat"><b>${g.cancellations}</b><span>Cancelled</span></div></div>
       <div class="row"><button class="btn" id="g-book">Book a table</button><button class="btn secondary" id="g-edit">Edit</button><span class="spacer"></span><button class="btn ghost" id="g-del">Delete</button></div>
       <h3 style="margin:18px 0 6px">History</h3>
-      ${reservations.length ? `<table class="data">${reservations.map((x) => `<tr><td>${TB.date(x.date, { year: 'numeric' })}<br><span class="small muted">${TB.time(x.time)}</span></td><td>${x.party_size} ppl · ${esc(x.table_label || 'No table')}${x.notes ? `<div class="small muted">${esc(x.notes)}</div>` : ''}</td><td><span class="badge ${x.status}">${STATUS_LABEL[x.status]}</span></td></tr>`).join('')}</table>` : '<p class="muted">No reservations yet.</p>'}`;
+      ${reservations.length ? `<table class="data">${reservations.map((x) => `<tr><td>${TB.date(x.date, { year: 'numeric' })}<br><span class="small muted">${TB.time(x.time)}</span></td><td>${pp(x.party_size)} · ${x.table_label ? tb(x.table_label) : 'No table'}${x.notes ? `<div class="small muted">${esc(x.notes)}</div>` : ''}</td><td><span class="badge ${x.status}">${STATUS_LABEL[x.status]}</span></td></tr>`).join('')}</table>` : '<p class="muted">No reservations yet.</p>'}`;
     document.getElementById('g-book').onclick = () => reservationModal(null, () => openGuest(id), { guest_name: g.name, guest_phone: g.phone, guest_email: g.email, date: nowLocal().date });
     document.getElementById('g-edit').onclick = () => guestForm(g, () => viewGuests().catch(fail));
     document.getElementById('g-del').onclick = async () => {

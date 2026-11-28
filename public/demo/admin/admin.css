@@ -694,3 +694,7 @@ body.on-res #banner .alert:not(.error) { display: none; } /* trial reminder live
 .hs-ask { flex: 0 0 auto; margin-right: 2px; }
 @media (max-width: 640px) { .hs-ask { flex: 1 1 100%; } }
 @media (min-width: 641px) { .rl-main .hs-la { flex: 0 1 170px; } }
+
+/* Table icon next to table numbers */
+.tb { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.tb-ico { width: .9em; height: .9em; fill: currentColor; opacity: .6; flex: none; }
