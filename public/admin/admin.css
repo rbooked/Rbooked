@@ -702,3 +702,67 @@ body.on-res #banner .alert:not(.error) { display: none; } /* trial reminder live
 .tb-h .tb-ico { width: 18px; height: 18px; margin-right: 6px; vertical-align: -1px; }
 .mv-ico { width: 14px; height: 14px; fill: currentColor; opacity: .75; margin-right: 5px; vertical-align: -2px; flex: none; }
 .btn .mv-ico { margin-right: -2px; }
+
+/* ---- Section accents: each section has its own color; red stays for late ---- */
+.hs-head[data-sec] { border-left: 4px solid var(--sec, var(--line)); padding-left: 10px; border-radius: 6px 6px 0 0; }
+.hs-head[data-sec] .hs-title { color: var(--sec, var(--muted)); }
+.hs-head[data-sec="waitlist"] { --sec: #c2410c; background: #fff7ed; }
+.hs-head[data-sec="upcoming"] { --sec: #2563eb; background: #eff6ff; }
+.hs-head[data-sec="seated"] { --sec: #15803d; background: #f0fdf4; }
+.hs-head[data-sec="finished"] { --sec: #78716c; background: #f5f5f4; }
+.hs-head[data-sec="off"] { --sec: #a8a29e; background: #f5f5f4; }
+.rf-item.hs-row.st-wait, .rl.st-wait { border-color: #fed7aa; border-left-color: #c2410c; }
+.rf-item.hs-row.st-confirmed, .rl.st-confirmed { border-color: #dbeafe; border-left-color: #2563eb; }
+.rf-item.hs-row.st-seated, .rl.st-seated { border-color: #bbf7d0; border-left-color: #16a34a; }
+.rf-item.hs-row.st-completed, .rl.st-completed { border-style: dashed; border-left-style: solid; border-color: #d6d3d1; border-left-color: #a8a29e; }
+.rf-item.hs-row.st-late, .rl.st-late { border-color: #fecaca; border-left-color: #dc2626; }
+
+/* ---- Dark mode (toggle in the top bar, remembered on this device) ---- */
+.theme-btn { min-width: 40px; font-size: 16px; }
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121110; --surface: #1c1a18; --surface-2: #2a2724; --ink: #f2ede6; --muted: #a59a8c; --line: #36312c;
+  --warn: #fbbf24; --bad: #f87171; --info: #60a5fa;
+  --brand-soft: #3b2216; --ok-soft: #12321f; --warn-soft: #3a2a10; --bad-soft: #3a1717; --info-soft: #172544;
+  --shadow: 0 1px 2px rgba(0,0,0,.4);
+}
+html[data-theme="dark"] body.admin { background: #121110; }
+html[data-theme="dark"] .topbar { background: #171513; border-color: var(--line); }
+html[data-theme="dark"] .rv-chip.on { background: var(--ink); color: #121110; border-color: var(--ink); }
+html[data-theme="dark"] .btn.light { background: var(--surface-2); color: var(--ink); }
+html[data-theme="dark"] .canvas { background-image: radial-gradient(#34302b 1px, transparent 1px); }
+html[data-theme="dark"] .ftable { background: #24211e; border-color: #6b6157; }
+html[data-theme="dark"] .ftable.busy-confirmed { background: #172544; border-color: #3b82f6; }
+html[data-theme="dark"] .ftable.busy-seated { background: #12321f; border-color: #22c55e; }
+html[data-theme="dark"] .ftable.soon { background: #3a2a10; border-color: #f59e0b; }
+html[data-theme="dark"] .ftable.busy-seated.over { background: #3a1717; border-color: #ef4444; }
+html[data-theme="dark"] .ftable.busy-seated .rf-line { color: #86efac; } html[data-theme="dark"] .ftable.busy-confirmed .rf-line { color: #93c5fd; }
+html[data-theme="dark"] .ftable.soon .rf-line { color: #fcd34d; } html[data-theme="dark"] .ftable.busy-seated.over .rf-line { color: #fca5a5; }
+html[data-theme="dark"] .hs-head[data-sec="waitlist"] { --sec: #fb923c; background: #2a1d14; }
+html[data-theme="dark"] .hs-head[data-sec="upcoming"] { --sec: #60a5fa; background: #16213a; }
+html[data-theme="dark"] .hs-head[data-sec="seated"] { --sec: #4ade80; background: #132a1c; }
+html[data-theme="dark"] .hs-head[data-sec="finished"], html[data-theme="dark"] .hs-head[data-sec="off"] { --sec: #a8a29e; background: #232120; }
+html[data-theme="dark"] .rf-item.hs-row, html[data-theme="dark"] .rl, html[data-theme="dark"] .rl-main { background: var(--surface); }
+html[data-theme="dark"] .rf-item.hs-row.st-wait, html[data-theme="dark"] .rl.st-wait { border-color: #4a2e1a; border-left-color: #fb923c; }
+html[data-theme="dark"] .rf-item.hs-row.st-confirmed, html[data-theme="dark"] .rl.st-confirmed { border-color: #1e3157; border-left-color: #60a5fa; }
+html[data-theme="dark"] .rf-item.hs-row.st-seated, html[data-theme="dark"] .rl.st-seated { border-color: #1b4029; border-left-color: #4ade80; }
+html[data-theme="dark"] .rf-item.hs-row.st-completed, html[data-theme="dark"] .rl.st-completed { border-color: #3a3632; border-left-color: #78716c; }
+html[data-theme="dark"] .rf-item.hs-row.st-late, html[data-theme="dark"] .rl.st-late, html[data-theme="dark"] .rl.st-late .rl-main { background: #2a1515; border-color: #5c2323; border-left-color: #ef4444; }
+html[data-theme="dark"] .rl.st-late .rl-name, html[data-theme="dark"] .rf-item.st-late .hs-name, html[data-theme="dark"] .hs-ask, html[data-theme="dark"] .hs-late { color: #fca5a5; }
+html[data-theme="dark"] .rf-item.st-late .hs-n { background: #4a1d1d; color: #fecaca; }
+html[data-theme="dark"] .hs-la { background: var(--surface-2); border-color: #5c2323; color: #fca5a5; }
+html[data-theme="dark"] .hs-la.ns { color: var(--ink); border-color: var(--line); }
+html[data-theme="dark"] .hs-lateacts.ask .hs-la.ns { background: #dc2626; border-color: #dc2626; color: #fff; }
+html[data-theme="dark"] .hs-pill.red { background: #4a1d1d; color: #fecaca; }
+html[data-theme="dark"] .hs-go.done { background: var(--surface-2); color: var(--ink); border-color: var(--line); }
+html[data-theme="dark"] .hs-tbl, html[data-theme="dark"] .rl-table { background: var(--surface-2); border-color: var(--line); }
+html[data-theme="dark"] .rf-res, html[data-theme="dark"] .card { background: var(--surface); border-color: var(--line); }
+html[data-theme="dark"] .badge, html[data-theme="dark"] .tag { filter: brightness(.85); }
+html[data-theme="dark"] .modal-back { background: rgba(0,0,0,.6); }
+html[data-theme="dark"] .seg button.on, html[data-theme="dark"] .toast, html[data-theme="dark"] .save-bar, html[data-theme="dark"] .ft-n { background: #f2ede6; color: #121110; }
+html[data-theme="dark"] .rl-flag.vip { background: #3a2f10; color: #fde68a; }
+html[data-theme="dark"] .ftable.busy-seated .ft-n { background: #15803d; color: #fff; } html[data-theme="dark"] .ftable.busy-confirmed .ft-n { background: #1d4ed8; color: #fff; }
+html[data-theme="dark"] .ftable.busy-seated.over .ft-n { background: #dc2626; color: #fff; }
+html[data-theme="dark"] .rv-bar { background: #121110; }
+html[data-theme="dark"] .rv-actions { background: rgba(23, 21, 19, .96); }
+html[data-theme="dark"] .rl-wide, html[data-theme="dark"] .rl-flag { filter: brightness(.9); }

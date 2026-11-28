@@ -785,6 +785,18 @@
 
   // Reservation sections, in this order: Seated, Upcoming, Finished, then Cancelled / no-show last.
   /** Minutes a booked (not yet seated) guest is past their time, or 0 if they aren't late. */
+  // Dark mode for a dim host stand: one tap, remembered on this device.
+  (function themeToggle() {
+    const b = document.getElementById('theme-btn'); if (!b) return;
+    const paint = () => { const d = document.documentElement.dataset.theme === 'dark'; b.textContent = d ? '☀️' : '🌙'; b.title = d ? 'Light mode' : 'Dark mode'; b.setAttribute('aria-label', b.title); };
+    b.onclick = () => {
+      const d = document.documentElement.dataset.theme !== 'dark';
+      if (d) document.documentElement.dataset.theme = 'dark'; else delete document.documentElement.dataset.theme;
+      try { localStorage.setItem('rb_theme', d ? 'dark' : 'light'); } catch { /* private mode */ }
+      paint();
+    };
+    paint();
+  })();
   const isWait = (x) => x.source === 'waitlist' && x.status === 'confirmed';
   // A small person icon beside every party size, so guest counts never read as table numbers.
   const PERSON = '<svg class="pp-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="4.6" r="3"/><path d="M2.2 15c.3-3.6 2.7-5.6 5.8-5.6s5.5 2 5.8 5.6z"/></svg>';

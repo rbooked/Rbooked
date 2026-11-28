@@ -6,6 +6,7 @@
 <link rel="stylesheet" href="/css/app.css">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%229%22 fill=%22%23c2410c%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2218%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Georgia%22%3ER%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="/admin/admin.css">
+<script>try { if (localStorage.getItem('rb_theme') === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) {}</script>
 <title>Dashboard · Rbooked</title>
 <meta name="robots" content="noindex">
 </head>
@@ -39,6 +40,7 @@
       <h1 id="view-title">Reservations</h1>
       <span class="spacer"></span>
       <span id="user-name" class="muted small"></span>
+      <button type="button" class="btn secondary sm theme-btn" id="theme-btn" aria-label="Dark mode" title="Dark mode">🌙</button>
     </div>
     <div id="banner"></div>
     <div id="view" class="view"></div>
