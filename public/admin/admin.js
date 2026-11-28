@@ -726,7 +726,7 @@
     const chip = (id, label, cls = '') => `<button type="button" class="rv-chip ${cls} ${f === id ? 'on' : ''}" data-rf="${id}" aria-pressed="${f === id}"><b>${counts[id] || 0}</b> ${label}</button>`;
     const covers = R.filter((x) => !['cancelled', 'no_show'].includes(x.status)).reduce((a, x) => a + x.party_size, 0);
     document.getElementById('stats').innerHTML = `<div class="rv-chips" role="group" aria-label="Show reservations">
-      ${chip('all', 'All')}${counts.waitlist ? chip('waitlist', 'Waitlist') : ''}${counts.late ? chip('late', 'Late', 'late') : ''}${chip('upcoming', 'Upcoming')}${chip('seated', 'Seated')}${chip('finished', 'Finished')}${counts.off ? chip('off', 'Cancelled / no-show', 'off') : ''}</div>
+      ${chip('all', 'All')}${counts.waitlist ? chip('waitlist', 'Waitlist') : ''}${chip('upcoming', 'Upcoming')}${chip('seated', 'Seated')}${chip('finished', 'Finished')}${counts.off ? chip('off', 'Cancelled / no-show', 'off') : ''}</div>
       <span class="rv-sum">${covers} covers · ${stats.seats} seats</span>`;
     document.querySelectorAll('#stats [data-rf]').forEach((b) => { b.onclick = () => { S.resFilter = b.dataset.rf; load(true).catch(fail); }; });
     if (f !== 'all' && !counts[f]) S.resFilter = 'all';
@@ -870,8 +870,7 @@
   }
   const RES_GROUPS = [
     { id: 'waitlist', label: 'Waitlist', has: isWait, sort: (a, b) => a.id - b.id },
-    { id: 'late', label: 'Late', has: (x) => lateBy(x) > 0 },
-    { id: 'upcoming', label: 'Upcoming', has: (x) => x.status === 'confirmed' && !lateBy(x) && !isWait(x) },
+    { id: 'upcoming', label: 'Upcoming', has: (x) => x.status === 'confirmed' && !isWait(x) }, // late guests stay here, in time order, marked red
     { id: 'seated', label: 'Seated', has: (x) => x.status === 'seated', sort: (a, b) => (a.seated_at || a.time).localeCompare(b.seated_at || b.time) },
     { id: 'finished', label: 'Finished', has: (x) => x.status === 'completed' },
     { id: 'off', label: 'Cancelled / no-show', has: (x) => ['cancelled', 'no_show'].includes(x.status) },
