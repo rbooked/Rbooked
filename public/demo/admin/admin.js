@@ -790,6 +790,7 @@
   const PERSON = '<svg class="pp-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="4.6" r="3"/><path d="M2.2 15c.3-3.6 2.7-5.6 5.8-5.6s5.5 2 5.8 5.6z"/></svg>';
   // A small table icon beside every table number, the partner of the person icon.
   const TABLE = '<svg class="tb-ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="4" width="14" height="2.6" rx="1"/><rect x="3" y="6" width="1.8" height="7" rx=".6"/><rect x="11.2" y="6" width="1.8" height="7" rx=".6"/></svg>';
+  const MOVE = '<svg class="mv-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 5.6 3.4h1.6v3.8H3.4V5.6L1 8l2.4 2.4V8.8h3.8v3.8H5.6L8 15l2.4-2.4H8.8V8.8h3.8v1.6L15 8l-2.4-2.4v1.6H8.8V3.4h1.6z"/></svg>';
   const tb = (label) => `<span class="tb">${TABLE}${esc(label)}</span>`;
   const pp = (n) => `<span class="pp" title="${n} ${n === 1 ? 'guest' : 'guests'}">${PERSON}${n}</span>`;
   function lateBy(x) {
@@ -1191,7 +1192,7 @@
           return `<div role="button" tabindex="0" class="rf-item hs-row st-${st} ${S.rfMove === x.id ? 'moving' : ''} ${movable(x) ? '' : 'done'}" data-x="${x.id}" aria-pressed="${S.rfMove === x.id}">
             <span class="hs-n">${pp(x.party_size)}</span>
             <span class="hs-mid"><span class="hs-meta">${meta}</span><b class="hs-name">${esc(x.guest_name)}</b></span>
-            ${seatLabel(x) ? `<span class="hs-tbl">${tb(seatLabel(x))}</span>` : '<span></span>'}${go}${late ? lateActs(x) : ''}</div>${S.rfPick === x.id ? `<div class="rf-acts">${late ? lateTag(x) : ''}${movable(x) ? '<div class="small muted">Tap a table to move them, or:</div>' : ''}<div class="res-actions">${statusButtons(x, 'data-a', `data-x="${x.id}"`)}</div></div>` : ''}`;
+            ${seatLabel(x) ? `<span class="hs-tbl">${tb(seatLabel(x))}</span>` : '<span></span>'}${go}${late ? lateActs(x) : ''}</div>${S.rfPick === x.id ? `<div class="rf-acts">${late ? lateTag(x) : ''}${movable(x) ? `<div class="small muted">${MOVE}Tap a table to move them, or:</div>` : ''}<div class="res-actions">${statusButtons(x, 'data-a', `data-x="${x.id}"`)}</div></div>` : ''}`;
         };
         const secs = resSections(today);
         const wl = secs.find((g) => g.id === 'waitlist') || { id: 'waitlist', label: 'Waitlist', rows: [] };
@@ -1233,7 +1234,7 @@
         ${x.combo_id ? `<div class="small">⛓ ${esc(x.table_label || '')}</div>` : ''}
         ${guestTags(x)}${x.notes ? `<div class="small">📝 ${esc(x.notes)}</div>` : ''}${x.guest_notes ? `<div class="small muted">📇 ${esc(x.guest_notes)}</div>` : ''}
         <div class="res-actions" style="margin-top:8px">
-          ${statusButtons(x, 'data-a', `data-x="${x.id}"`)}<button class="btn secondary sm" data-mv="${x.id}">Move table</button></div></div>`;
+          ${statusButtons(x, 'data-a', `data-x="${x.id}"`)}<button class="btn secondary sm" data-mv="${x.id}">${MOVE}Move table</button></div></div>`;
       const nextIn = st.next ? toMin(st.next.time) - t0 : null;
       const later = st.list.filter((x) => x !== st.cur && x !== st.next && toMin(x.time) > t0);
       p.innerHTML = `<div class="row"><h2 style="margin:0" class="tb-h">${TABLE}Table ${esc(t.label)}</h2><span class="spacer"></span><button class="btn ghost sm" id="rf-x" aria-label="Close">✕</button></div>
@@ -1350,7 +1351,7 @@
     }
     if (S.rfMove) {
       const mx = rows.find((r) => r.id === S.rfMove);
-      if (mx) body.querySelector('.floor-wrap').insertAdjacentHTML('beforebegin', `<div class="alert rf-move-bar"><span>Tap a table for <b>${esc(mx.guest_name)} · ${pp(mx.party_size)}</b></span><span class="spacer"></span><button class="btn ghost sm" id="rf-move-x">Cancel</button></div>`);
+      if (mx) body.querySelector('.floor-wrap').insertAdjacentHTML('beforebegin', `<div class="alert rf-move-bar"><span>${MOVE}Tap a table for <b>${esc(mx.guest_name)} · ${pp(mx.party_size)}</b></span><span class="spacer"></span><button class="btn ghost sm" id="rf-move-x">Cancel</button></div>`);
       const mb = document.getElementById('rf-move-x'); if (mb) mb.onclick = () => { S.rfMove = null; S.rfPick = null; renderResFloor(body, rows, floor); };
 
     }

@@ -700,3 +700,5 @@ body.on-res #banner .alert:not(.error) { display: none; } /* trial reminder live
 .tb-ico { width: .9em; height: .9em; fill: currentColor; opacity: .6; flex: none; }
 .rl-tlabel .tb-ico, .tb-l .tb-ico { width: 13px; height: 13px; margin-right: 4px; vertical-align: -1px; fill: currentColor; opacity: .6; }
 .tb-h .tb-ico { width: 18px; height: 18px; margin-right: 6px; vertical-align: -1px; }
+.mv-ico { width: 14px; height: 14px; fill: currentColor; opacity: .75; margin-right: 5px; vertical-align: -2px; flex: none; }
+.btn .mv-ico { margin-right: -2px; }
